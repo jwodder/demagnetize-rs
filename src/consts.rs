@@ -12,3 +12,6 @@ pub(crate) const TRACKER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 /// "left" value to use when announcing to a tracker for a torrent we have only
 /// the magnet link of
 pub(crate) const LEFT: u64 = 65535;
+
+/// Prefix for generated peer IDs
+pub(crate) static PEER_ID_PREFIX: &str = "-DM-0010-";

@@ -1,3 +1,4 @@
+use crate::consts::PEER_ID_PREFIX;
 use crate::tracker::{Tracker, TrackerUrlError};
 use bytes::{BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
@@ -91,6 +92,15 @@ pub(crate) struct LocalPeer {
     pub id: PeerId,
     pub key: Key,
     pub port: u16,
+}
+
+impl LocalPeer {
+    pub(crate) fn generate<R: Rng>(mut rng: R) -> LocalPeer {
+        let id = PeerId::generate(PEER_ID_PREFIX, &mut rng);
+        let key = rng.gen::<Key>();
+        let port = rng.gen_range::<u16, _>(1025..=65535);
+        LocalPeer { id, key, port }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
