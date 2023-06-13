@@ -1,6 +1,6 @@
 use bytes::{Buf, Bytes};
 use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use thiserror::Error;
 
 pub(crate) fn comma_list<T>(values: &[T]) -> CommaList<'_, T> {
@@ -92,6 +92,22 @@ impl_tryfrombuf!(u64, 8, buf, buf.get_u64());
 impl_tryfrombuf!(Ipv4Addr, 4, buf, buf.get_u32().into());
 impl_tryfrombuf!(Ipv6Addr, 16, buf, buf.get_u128().into());
 
+impl TryFromBuf for SocketAddrV4 {
+    fn try_from_buf(buf: &mut Bytes) -> Result<Self, PacketError> {
+        let ip = Ipv4Addr::try_from_buf(buf)?;
+        let port = u16::try_from_buf(buf)?;
+        Ok(SocketAddrV4::new(ip, port))
+    }
+}
+
+impl TryFromBuf for SocketAddrV6 {
+    fn try_from_buf(buf: &mut Bytes) -> Result<Self, PacketError> {
+        let ip = Ipv6Addr::try_from_buf(buf)?;
+        let port = u16::try_from_buf(buf)?;
+        Ok(SocketAddrV6::new(ip, port, 0, 0))
+    }
+}
+
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 pub(crate) enum PacketError {
     #[error("unexpected end of packet")]
@@ -169,5 +185,27 @@ mod tests {
                 .unwrap())
         );
         assert_eq!(buf.try_get::<Ipv6Addr>(), Err(PacketError::Short));
+    }
+
+    #[test]
+    fn test_try_get_socketaddrv4() {
+        let mut buf = TryBytes::from(Bytes::from(b"iiiipp0123".as_slice()));
+        assert_eq!(
+            buf.try_get::<SocketAddrV4>(),
+            Ok(SocketAddrV4::new(Ipv4Addr::new(105, 105, 105, 105), 28784))
+        );
+        assert_eq!(buf.try_get::<SocketAddrV4>(), Err(PacketError::Short));
+    }
+
+    #[test]
+    fn test_try_get_socketaddrv6() {
+        let mut buf = TryBytes::from(Bytes::from(b"iiiiiiiiiiiiiiiipp012345678".as_slice()));
+        assert_eq!(
+            buf.try_get::<SocketAddrV6>(),
+            Ok("[6969:6969:6969:6969:6969:6969:6969:6969]:28784"
+                .parse::<SocketAddrV6>()
+                .unwrap())
+        );
+        assert_eq!(buf.try_get::<SocketAddrV6>(), Err(PacketError::Short));
     }
 }
