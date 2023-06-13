@@ -1,6 +1,8 @@
 use crate::tracker::{Tracker, TrackerUrlError};
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
+use rand::Rng;
+use rand_distr::{Alphanumeric, Distribution};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -93,6 +95,56 @@ pub(crate) struct LocalPeer {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PeerId(Bytes);
+
+impl PeerId {
+    const LENGTH: usize = 20;
+
+    pub(crate) fn generate<R: Rng>(prefix: &str, rng: R) -> PeerId {
+        let mut bs = prefix.as_bytes();
+        if bs.len() > PeerId::LENGTH {
+            bs = &bs[..PeerId::LENGTH];
+        }
+        let mut buf = BytesMut::with_capacity(PeerId::LENGTH);
+        buf.extend_from_slice(bs);
+        let needed = PeerId::LENGTH.saturating_sub(buf.len());
+        if needed > 0 {
+            for b in Alphanumeric.sample_iter(rng).take(needed) {
+                buf.put_u8(b);
+            }
+        }
+        debug_assert_eq!(buf.len(), PeerId::LENGTH);
+        PeerId(buf.freeze())
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl fmt::Display for PeerId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl TryFrom<Bytes> for PeerId {
+    type Error = PeerIdError;
+
+    fn try_from(bs: Bytes) -> Result<PeerId, PeerIdError> {
+        if bs.len() == PeerId::LENGTH {
+            Ok(PeerId(bs))
+        } else {
+            Err(PeerIdError(bs.len()))
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+#[error(
+    "invalid length for peer id: expected {} bytes, got {0}",
+    PeerId::LENGTH
+)]
+pub(crate) struct PeerIdError(usize);
 
 /// Key used by client to identify itself to a tracker across requests
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -259,5 +311,24 @@ mod tests {
                 .parse::<Tracker>()
                 .unwrap()]
         );
+    }
+
+    #[test]
+    fn test_generate_peer_id() {
+        let peer_id = PeerId::generate("-PRE-123-", rand::thread_rng());
+        assert_eq!(peer_id.as_bytes().len(), 20);
+        let s = std::str::from_utf8(peer_id.as_bytes()).unwrap();
+        let suffix = s.strip_prefix("-PRE-123-").unwrap();
+        for ch in suffix.chars() {
+            assert!(ch.is_ascii_alphanumeric());
+        }
+        assert_eq!(peer_id.to_string(), format!("b{s:?}"));
+    }
+
+    #[test]
+    fn test_generate_peer_id_long_prefix() {
+        let peer_id = PeerId::generate("-PRE-123-abcdefghijé-", rand::thread_rng());
+        assert_eq!(peer_id.as_bytes(), b"-PRE-123-abcdefghij\xC3");
+        assert_eq!(peer_id.to_string(), "b\"-PRE-123-abcdefghij\\xc3\"");
     }
 }
