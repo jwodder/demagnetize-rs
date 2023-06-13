@@ -1,12 +1,13 @@
 pub(crate) mod http;
+mod packets;
 pub(crate) mod udp;
 use self::http::*;
+use self::packets::*;
 use self::udp::*;
 use crate::consts::{LEFT, NUMWANT, TRACKER_STOP_TIMEOUT, TRACKER_TIMEOUT};
 use crate::peer::Peer;
-use crate::types::{InfoHash, Key, LocalPeer, PeerId};
+use crate::types::{InfoHash, LocalPeer};
 use crate::util::comma_list;
-use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
@@ -153,50 +154,6 @@ impl<'a> TrackerSession<'a> {
             InnerTrackerSession::Http(s) => s.announce(announcement).await,
             InnerTrackerSession::Udp(s) => s.announce(announcement).await,
         }
-    }
-}
-enum AnnounceEvent {
-    Announce,
-    Completed,
-    Started,
-    Stopped,
-}
-
-struct Announcement<'a> {
-    info_hash: &'a InfoHash,
-    peer_id: &'a PeerId,
-    downloaded: u64,
-    left: u64,
-    uploaded: u64,
-    event: AnnounceEvent,
-    key: Key,
-    numwant: u32,
-    port: u16,
-}
-
-struct AnnounceResponse {
-    interval: u32,
-    peers: Option<Vec<Peer>>,
-    peers6: Option<Vec<Peer>>,
-    warning_message: Option<String>,
-    min_interval: Option<u32>,
-    tracker_id: Option<Bytes>,
-    complete: Option<u32>,
-    incomplete: Option<u32>,
-    leechers: Option<u32>,
-    seeders: Option<u32>,
-}
-
-impl AnnounceResponse {
-    fn into_peers(self) -> Vec<Peer> {
-        let mut peers = Vec::new();
-        if let Some(p) = self.peers {
-            peers.extend(p);
-        }
-        if let Some(p) = self.peers6 {
-            peers.extend(p);
-        }
-        peers
     }
 }
 
