@@ -2,7 +2,7 @@ use crate::tracker::{Tracker, TrackerUrlError};
 use bytes::{BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use rand::Rng;
-use rand_distr::{Alphanumeric, Distribution};
+use rand_distr::{Alphanumeric, Distribution, Standard};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -147,8 +147,16 @@ impl TryFrom<Bytes> for PeerId {
 pub(crate) struct PeerIdError(usize);
 
 /// Key used by client to identify itself to a tracker across requests
+///
+/// Generate a random Key with `rng.gen::<Key>()`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Key(u32);
+
+impl Distribution<Key> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Key {
+        Key(Standard.sample(rng))
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Magnet {
