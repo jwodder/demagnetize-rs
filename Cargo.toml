@@ -1,0 +1,19 @@
+[package]
+name = "demagnetize"
+version = "0.1.0-dev"
+edition = "2021"
+rust-version = "1.70"
+description = "Convert magnet links to .torrent files"
+authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
+repository = "https://github.com/jwodder/demagnetize-rs"
+documentation = "https://github.com/jwodder/demagnetize-rs"
+license = "MIT"
+keywords = []
+# See <https://crates.io/category_slugs> for a list of categories
+categories = []
+exclude = ["/.*"]
+
+[dependencies]
+bytes = "1.4.0"
+data-encoding = "2.4.0"
+thiserror = "1.0.40"
