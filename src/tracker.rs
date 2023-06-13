@@ -71,6 +71,7 @@ impl Tracker {
             async move {
                 match timeout(TRACKER_STOP_TIMEOUT, s.stop()).await {
                     Ok(Ok(_)) => (),
+                    // TODO: Display source errors for `e`:
                     Ok(Err(e)) => log::warn!("failure sending \"stopped\" announcement to {self} for {info_hash}: {e}"),
                     Err(_) => log::warn!("{self} did not response to \"stopped\" announcement for {info_hash} in time"),
                 }

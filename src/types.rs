@@ -1,3 +1,4 @@
+use crate::tracker::{Tracker, TrackerUrlError};
 use bytes::Bytes;
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use std::borrow::Cow;
@@ -97,6 +98,106 @@ pub(crate) struct PeerId(Bytes);
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Key(u32);
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Magnet {
+    info_hash: InfoHash,
+    display_name: Option<String>,
+    trackers: Vec<Tracker>,
+}
+
+impl Magnet {
+    fn info_hash(&self) -> &InfoHash {
+        &self.info_hash
+    }
+
+    fn display_name(&self) -> Option<&str> {
+        self.display_name.as_deref()
+    }
+
+    fn trackers(&self) -> &[Tracker] {
+        &self.trackers
+    }
+}
+
+impl FromStr for Magnet {
+    type Err = MagnetError;
+
+    fn from_str(s: &str) -> Result<Magnet, MagnetError> {
+        let url = Url::parse(s)?;
+        if url.scheme() != "magnet" {
+            return Err(MagnetError::NotMagnet);
+        }
+        let mut info_hash = None;
+        let mut dn = None;
+        let mut trackers = Vec::new();
+        for (k, v) in url.query_pairs() {
+            match k.as_ref() {
+                "xt" => {
+                    if info_hash.is_none() {
+                        info_hash = Some(parse_xt(&v)?);
+                    } else {
+                        return Err(MagnetError::MultipleXt);
+                    }
+                }
+                "dn" => {
+                    let _ = dn.insert(v);
+                }
+                "tr" => trackers.push(v.parse::<Tracker>()?),
+                _ => (),
+            }
+        }
+        let Some(info_hash) = info_hash else {
+            return Err(MagnetError::NoXt);
+        };
+        if trackers.is_empty() {
+            return Err(MagnetError::NoTrackers);
+        }
+        Ok(Magnet {
+            info_hash,
+            display_name: dn.map(String::from),
+            trackers,
+        })
+    }
+}
+
+#[derive(Debug, Eq, Error, PartialEq)]
+pub(crate) enum MagnetError {
+    #[error("invalid magnet URI")]
+    Url(#[from] url::ParseError),
+    #[error("not a magnet URI")]
+    NotMagnet,
+    #[error("magnet URI lacks \"xt\" parameter")]
+    NoXt,
+    #[error("invalid \"xt\" parameter")]
+    InvalidXt(#[from] XtError),
+    #[error("magnet URI has multiple \"xt\" parameters")]
+    MultipleXt,
+    #[error("no trackers given in magnet URI")]
+    NoTrackers,
+    #[error("invalid \"tr\" parameter")]
+    InvalidTracker(#[from] TrackerUrlError),
+}
+
+fn parse_xt(xt: &str) -> Result<InfoHash, XtError> {
+    let Some(s) = xt.strip_prefix("urn:") else {
+        return Err(XtError::NotUrn);
+    };
+    let Some(s) = s.strip_prefix("btih:") else {
+        return Err(XtError::NotBtih);
+    };
+    Ok(s.parse::<InfoHash>()?)
+}
+
+#[derive(Debug, Eq, Error, PartialEq)]
+pub(crate) enum XtError {
+    #[error("\"xt\" parameter is not a URN")]
+    NotUrn,
+    #[error("\"xt\" parameter is not in the \"btih\" namespace")]
+    NotBtih,
+    #[error("\"xt\" parameter contains invalid info hash")]
+    InfoHash(#[from] InfoHashError),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +240,24 @@ mod tests {
         let mut url = Url::parse("http://tracker.example.com:8080/announce?here=there").unwrap();
         info_hash.add_query_param(&mut url);
         assert_eq!(url.as_str(), "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB")
+    }
+
+    #[test]
+    fn test_parse_magnet() {
+        let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb&dn=debian-11.2.0-amd64-netinst.iso&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce".parse::<Magnet>().unwrap();
+        assert_eq!(
+            magnet.info_hash().as_bytes(),
+            b"\x28\xC5\x51\x96\xF5\x77\x53\xC4\x0A\xCE\xB6\xFB\x58\x61\x7E\x69\x95\xA7\xED\xDB"
+        );
+        assert_eq!(
+            magnet.display_name(),
+            Some("debian-11.2.0-amd64-netinst.iso")
+        );
+        assert_eq!(
+            magnet.trackers(),
+            ["http://bttracker.debian.org:6969/announce"
+                .parse::<Tracker>()
+                .unwrap()]
+        );
     }
 }
