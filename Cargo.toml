@@ -17,3 +17,4 @@ exclude = ["/.*"]
 bytes = "1.4.0"
 data-encoding = "2.4.0"
 thiserror = "1.0.40"
+url = "2.4.0"

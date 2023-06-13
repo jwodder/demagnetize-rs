@@ -1,8 +1,10 @@
 use bytes::Bytes;
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
+use url::Url;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct InfoHash(Bytes);
@@ -24,6 +26,20 @@ impl InfoHash {
 
     pub(crate) fn as_bytes(&self) -> &[u8] {
         self.0.as_ref()
+    }
+
+    pub(crate) fn add_query_param(&self, url: &mut Url) {
+        static SENTINEL: &str = "DUMMY";
+        url.query_pairs_mut()
+            .encoding_override(Some(&|s| {
+                if s == SENTINEL {
+                    Cow::from(self.as_bytes().to_vec())
+                } else {
+                    Cow::from(s.as_bytes())
+                }
+            }))
+            .append_pair("info_hash", SENTINEL)
+            .encoding_override(None);
     }
 }
 
@@ -99,5 +115,15 @@ mod tests {
             info_hash.to_string(),
             "b851474b74f65cd19f981c723590e3e520242b97"
         );
+    }
+
+    #[test]
+    fn test_add_query_param() {
+        let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
+            .parse::<InfoHash>()
+            .unwrap();
+        let mut url = Url::parse("http://tracker.example.com:8080/announce?here=there").unwrap();
+        info_hash.add_query_param(&mut url);
+        assert_eq!(url.as_str(), "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB")
     }
 }
