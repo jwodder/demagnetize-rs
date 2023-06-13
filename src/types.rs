@@ -162,6 +162,18 @@ pub(crate) struct PeerIdError(usize);
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Key(u32);
 
+impl From<u32> for Key {
+    fn from(key: u32) -> Key {
+        Key(key)
+    }
+}
+
+impl From<Key> for u32 {
+    fn from(key: Key) -> u32 {
+        key.0
+    }
+}
+
 impl Distribution<Key> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Key {
         Key(Standard.sample(rng))

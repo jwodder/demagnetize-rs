@@ -1,13 +1,12 @@
 pub(crate) mod http;
-mod packets;
 pub(crate) mod udp;
 use self::http::*;
-use self::packets::*;
 use self::udp::*;
 use crate::consts::{LEFT, NUMWANT, TRACKER_STOP_TIMEOUT, TRACKER_TIMEOUT};
 use crate::peer::Peer;
-use crate::types::{InfoHash, LocalPeer};
-use crate::util::comma_list;
+use crate::types::{InfoHash, Key, LocalPeer, PeerId};
+use crate::util::{comma_list, PacketError};
+use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
@@ -58,7 +57,7 @@ impl Tracker {
     ) -> Result<(), TrackerError> {
         let s = self.connect(info_hash, local).await?;
         log::trace!("Sending 'started' announcement to {self} for {info_hash}");
-        let peers = s.start().await?.into_peers();
+        let peers = s.start().await?.peers;
         log::info!("{self} returned {} peers", peers.len());
         log::debug!("{self} returned peers: {}", comma_list(&peers));
         tokio::join!(
@@ -173,7 +172,56 @@ pub(crate) enum TrackerUrlError {
 pub(crate) enum TrackerError {
     #[error("interactions with tracker did not complete in time")]
     Timeout,
-    #[error("tracker replied with error: {0}")]
-    FailureResponse(String),
+    #[error("tracker replied with error message {0:?}")]
+    Failure(String),
+    #[error("UDP tracker sent response with invalid length")]
+    UdpPacketLen(#[from] PacketError),
+    #[error("UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}")]
+    BadUdpAction { expected: u32, got: u32 },
     // ???
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum AnnounceEvent {
+    Announce,
+    Completed,
+    Started,
+    Stopped,
+}
+
+impl AnnounceEvent {
+    fn for_udp(&self) -> u32 {
+        match self {
+            AnnounceEvent::Announce => 0,
+            AnnounceEvent::Completed => 1,
+            AnnounceEvent::Started => 2,
+            AnnounceEvent::Stopped => 3,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct Announcement<'a> {
+    info_hash: &'a InfoHash,
+    peer_id: &'a PeerId,
+    downloaded: u64,
+    left: u64,
+    uploaded: u64,
+    event: AnnounceEvent,
+    key: Key,
+    numwant: u32,
+    port: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AnnounceResponse {
+    interval: u32,
+    peers: Vec<Peer>,
+    warning_message: Option<String>,
+    min_interval: Option<u32>,
+    tracker_id: Option<Bytes>,
+    complete: Option<u32>,
+    incomplete: Option<u32>,
+    leechers: Option<u32>,
+    seeders: Option<u32>,
 }
