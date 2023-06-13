@@ -16,5 +16,7 @@ exclude = ["/.*"]
 [dependencies]
 bytes = "1.4.0"
 data-encoding = "2.4.0"
+log = "0.4.19"
 thiserror = "1.0.40"
+tokio = { version = "1.28.2", features = ["macros", "sync", "rt", "rt-multi-thread", "time"] }
 url = "2.4.0"
