@@ -39,7 +39,7 @@ impl TryFrom<Url> for UdpTracker {
 }
 
 pub(super) struct UdpTrackerSession<'a> {
-    tracker: &'a UdpTracker,
+    pub(super) tracker: &'a UdpTracker,
     // ???
 }
 

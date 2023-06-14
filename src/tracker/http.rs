@@ -33,7 +33,7 @@ impl TryFrom<Url> for HttpTracker {
 }
 
 pub(super) struct HttpTrackerSession<'a> {
-    tracker: &'a HttpTracker,
+    pub(super) tracker: &'a HttpTracker,
     // ???
 }
 

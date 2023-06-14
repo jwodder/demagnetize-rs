@@ -56,7 +56,6 @@ impl Tracker {
         sender: Sender<Peer>,
     ) -> Result<(), TrackerError> {
         let s = self.connect(info_hash, local).await?;
-        log::trace!("Sending 'started' announcement to {self} for {info_hash}");
         let peers = s.start().await?.peers;
         log::info!("{self} returned {} peers", peers.len());
         log::debug!("{self} returned peers: {}", comma_list(&peers));
@@ -115,7 +114,19 @@ enum InnerTrackerSession<'a> {
 }
 
 impl<'a> TrackerSession<'a> {
+    fn tracker_display(&self) -> String {
+        match &self.inner {
+            InnerTrackerSession::Http(s) => s.tracker.to_string(),
+            InnerTrackerSession::Udp(s) => s.tracker.to_string(),
+        }
+    }
+
     async fn start(&self) -> Result<AnnounceResponse, TrackerError> {
+        log::trace!(
+            "Sending 'started' announcement to {} for {}",
+            self.tracker_display(),
+            self.info_hash
+        );
         self.announce(Announcement {
             info_hash: self.info_hash,
             peer_id: &self.local.id,
@@ -131,6 +142,11 @@ impl<'a> TrackerSession<'a> {
     }
 
     async fn stop(&self) -> Result<AnnounceResponse, TrackerError> {
+        log::trace!(
+            "Sending 'stopped' announcement to {} for {}",
+            self.tracker_display(),
+            self.info_hash
+        );
         self.announce(Announcement {
             info_hash: self.info_hash,
             peer_id: &self.local.id,
