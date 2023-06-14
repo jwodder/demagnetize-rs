@@ -14,6 +14,7 @@ categories = []
 exclude = ["/.*"]
 
 [dependencies]
+bendy = "0.3.3"
 bytes = "1.4.0"
 data-encoding = "2.4.0"
 log = "0.4.19"

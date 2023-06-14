@@ -1,3 +1,4 @@
+use bendy::decoding::{Decoder, FromBencode};
 use bytes::{Buf, Bytes};
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
@@ -123,6 +124,47 @@ pub(crate) enum PacketError {
     #[error("packet had trailing bytes")]
     Long,
 }
+
+// Like `FromBencode::from_bencode()`, but it checks that there are no trailing
+// bytes afterwards
+pub(crate) fn decode_bencode<T: FromBencode>(buf: &[u8]) -> Result<T, UnbencodeError> {
+    let mut decoder = Decoder::new(buf).with_max_depth(T::EXPECTED_RECURSION_DEPTH);
+    let value = match decoder.next_object()? {
+        Some(obj) => T::decode_bencode_object(obj)?,
+        None => return Err(UnbencodeError::NoData),
+    };
+    if !matches!(decoder.next_object(), Ok(None)) {
+        return Err(UnbencodeError::TrailingData);
+    }
+    Ok(value)
+}
+
+// We can't derive `thiserror::Error` on this, as bendy's Error is not a
+// standard Error.
+#[derive(Clone, Debug)]
+pub(crate) enum UnbencodeError {
+    Bendy(bendy::decoding::Error),
+    NoData,
+    TrailingData,
+}
+
+impl fmt::Display for UnbencodeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnbencodeError::Bendy(e) => write!(f, "{e}"),
+            UnbencodeError::NoData => write!(f, "no data in bencode packet"),
+            UnbencodeError::TrailingData => write!(f, "trailing bytes after bencode structure"),
+        }
+    }
+}
+
+impl From<bendy::decoding::Error> for UnbencodeError {
+    fn from(e: bendy::decoding::Error) -> UnbencodeError {
+        UnbencodeError::Bendy(e)
+    }
+}
+
+impl std::error::Error for UnbencodeError {}
 
 #[cfg(test)]
 mod tests {
