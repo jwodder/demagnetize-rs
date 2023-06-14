@@ -1,7 +1,8 @@
 use super::{Extension, ExtensionSet};
 use crate::types::{InfoHash, PeerId};
-use crate::util::{PacketError, TryBytes};
+use crate::util::{PacketError, TryBytes, UnbencodeError};
 use bytes::{BufMut, Bytes, BytesMut};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 static HANDSHAKE_HEADER: &[u8; 20] = b"\x13BitTorrent protocol";
@@ -63,7 +64,83 @@ pub(super) enum HandshakeError {
     InvalidHeader,
     #[error("peer sent handshake with invalid length")]
     Length(#[from] PacketError),
-    // TO ADD: wrong info hash
+    // TODO: Add "wrong info hash"
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum AnyMessage {
+    Core(CoreMessage),
+    Extended(ExtendedMessage),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum CoreMessage {
+    // BEP 3:
+    Keepalive,
+    Choke,
+    Unchoke,
+    Interested,
+    NotInterested,
+    Have { piece: u32 },
+    Bitfield(Bytes),
+    Request { index: u32, begin: u32, length: u32 },
+    Piece { index: u32, begin: u32, data: Bytes },
+    Cancel { index: u32, begin: u32, length: u32 },
+    // BEP 5 (DHT):
+    Port { port: u16 },
+    // BEP 6:
+    Suggest { index: u32 },
+    HaveAll,
+    HaveNone,
+    Reject { index: u32, begin: u32, length: u32 },
+    AllowedFast { index: u32 },
+    // BEP 10:
+    Extended { msg_id: u8, payload: Bytes },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum ExtendedMessage {
+    Handshake(ExtendedHandshake),
+    Metadata(MetadataMessage),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ExtendedHandshake {
+    m: Option<BTreeMap<String, u8>>,
+    v: Option<String>,
+    metadata_size: Option<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum MetadataMessage {
+    Request {
+        piece: u32,
+    },
+    Data {
+        piece: u32,
+        total_size: u32,
+        payload: Bytes,
+    },
+    Reject {
+        piece: u32,
+    },
+}
+
+#[derive(Clone, Debug, Error)]
+pub(super) enum MessageError {
+    #[error("unknown message type: {0}")]
+    Unknown(u8),
+    #[error("message had invalid length")]
+    // TODO: Should this include information on the kind of message?
+    Length(#[from] PacketError),
+    #[error("unknown extended message ID: {0}")]
+    UnknownExtended(u8),
+    #[error("unknown metadata message type: {0}")]
+    UnknownMetadata(u32),
+    #[error("failed to decode extended handshake payload")]
+    ExtendedHandshake(#[source] UnbencodeError),
+    #[error("failed to decode metadata message")]
+    Metadata(#[source] UnbencodeError),
 }
 
 #[cfg(test)]
