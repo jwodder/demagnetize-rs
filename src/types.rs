@@ -33,17 +33,7 @@ impl InfoHash {
     }
 
     pub(crate) fn add_query_param(&self, url: &mut Url) {
-        static SENTINEL: &str = "DUMMY";
-        url.query_pairs_mut()
-            .encoding_override(Some(&|s| {
-                if s == SENTINEL {
-                    Cow::from(self.as_bytes().to_vec())
-                } else {
-                    Cow::from(s.as_bytes())
-                }
-            }))
-            .append_pair("info_hash", SENTINEL)
-            .encoding_override(None);
+        add_bytes_query_param(url, "info_hash", &self.0);
     }
 }
 
@@ -129,6 +119,10 @@ impl PeerId {
     pub(crate) fn as_bytes(&self) -> &[u8] {
         self.0.as_ref()
     }
+
+    pub(crate) fn add_query_param(&self, url: &mut Url) {
+        add_bytes_query_param(url, "peer_id", &self.0);
+    }
 }
 
 impl fmt::Display for PeerId {
@@ -161,6 +155,12 @@ pub(crate) struct PeerIdError(usize);
 /// Generate a random Key with `rng.gen::<Key>()`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Key(u32);
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl From<u32> for Key {
     fn from(key: u32) -> Key {
@@ -278,6 +278,20 @@ pub(crate) enum XtError {
     NotBtih,
     #[error("\"xt\" parameter contains invalid info hash")]
     InfoHash(#[from] InfoHashError),
+}
+
+fn add_bytes_query_param(url: &mut Url, key: &str, value: &Bytes) {
+    static SENTINEL: &str = "ADD_BYTES_QUERY_PARAM";
+    url.query_pairs_mut()
+        .encoding_override(Some(&|s| {
+            if s == SENTINEL {
+                Cow::from(Vec::<u8>::from(value.clone()))
+            } else {
+                Cow::from(s.as_bytes())
+            }
+        }))
+        .append_pair(key, SENTINEL)
+        .encoding_override(None);
 }
 
 #[cfg(test)]

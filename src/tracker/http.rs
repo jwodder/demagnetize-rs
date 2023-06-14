@@ -1,16 +1,34 @@
 use super::*;
-use crate::util::TryBytes;
+use crate::util::{decode_bencode, TryBytes, UnbencodeError};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
+use reqwest::Client;
 use std::fmt;
 use std::net::{SocketAddrV4, SocketAddrV6};
+use thiserror::Error;
 use url::Url;
+
+static USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    "/",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("CARGO_PKG_REPOSITORY"),
+    ")",
+);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct HttpTracker(Url);
 
 impl HttpTracker {
     pub(super) async fn connect(&self) -> Result<HttpTrackerSession<'_>, TrackerError> {
-        todo!()
+        let client = Client::builder()
+            .user_agent(USER_AGENT)
+            .build()
+            .map_err(HttpTrackerError::BuildClient)?;
+        Ok(HttpTrackerSession {
+            tracker: self,
+            client,
+        })
     }
 }
 
@@ -37,15 +55,41 @@ impl TryFrom<Url> for HttpTracker {
 
 pub(super) struct HttpTrackerSession<'a> {
     pub(super) tracker: &'a HttpTracker,
-    // ???
+    client: Client,
 }
 
 impl<'a> HttpTrackerSession<'a> {
     pub(super) async fn announce<'b>(
         &self,
-        _announcement: Announcement<'b>,
+        announcement: Announcement<'b>,
     ) -> Result<AnnounceResponse, TrackerError> {
-        todo!()
+        let mut url = self.tracker.0.clone();
+        url.set_fragment(None);
+        announcement.event.add_query_param(&mut url);
+        announcement.info_hash.add_query_param(&mut url);
+        announcement.peer_id.add_query_param(&mut url);
+        url.query_pairs_mut()
+            .append_pair("port", &announcement.port.to_string())
+            .append_pair("uploaded", &announcement.uploaded.to_string())
+            .append_pair("downloaded", &announcement.downloaded.to_string())
+            .append_pair("left", &announcement.left.to_string())
+            .append_pair("numwant", &announcement.numwant.to_string())
+            .append_pair("key", &announcement.key.to_string())
+            .append_pair("compact", "1");
+        let buf = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(HttpTrackerError::SendRequest)?
+            .error_for_status()
+            .map_err(HttpTrackerError::HttpStatus)?
+            .bytes()
+            .await
+            .map_err(HttpTrackerError::ReadBody)?;
+        decode_bencode::<HttpAnnounceResponse>(&buf)
+            .map_err(HttpTrackerError::ParseResponse)?
+            .result()
     }
 }
 
@@ -53,6 +97,15 @@ impl<'a> HttpTrackerSession<'a> {
 enum HttpAnnounceResponse {
     Success(AnnounceResponse),
     Failure(String),
+}
+
+impl HttpAnnounceResponse {
+    fn result(self) -> Result<AnnounceResponse, TrackerError> {
+        match self {
+            HttpAnnounceResponse::Success(announcement) => Ok(announcement),
+            HttpAnnounceResponse::Failure(msg) => Err(TrackerError::Failure(msg)),
+        }
+    }
 }
 
 impl FromBencode for HttpAnnounceResponse {
@@ -145,10 +198,23 @@ impl FromBencode for HttpAnnounceResponse {
     }
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum HttpTrackerError {
+    #[error("failed to build HTTP client")]
+    BuildClient(#[source] reqwest::Error),
+    #[error("failed to send request to HTTP tracker")]
+    SendRequest(#[source] reqwest::Error),
+    #[error("HTTP tracker responded with HTTP error")]
+    HttpStatus(#[source] reqwest::Error),
+    #[error("failed to read HTTP tracker response")]
+    ReadBody(#[source] reqwest::Error),
+    #[error("failed to parse HTTP tracker response")]
+    ParseResponse(#[source] UnbencodeError),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::{decode_bencode, UnbencodeError};
     use bytes::{BufMut, BytesMut};
 
     #[test]

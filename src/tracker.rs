@@ -165,10 +165,19 @@ impl<'a> TrackerSession<'a> {
         &self,
         announcement: Announcement<'b>,
     ) -> Result<AnnounceResponse, TrackerError> {
-        match &self.inner {
-            InnerTrackerSession::Http(s) => s.announce(announcement).await,
-            InnerTrackerSession::Udp(s) => s.announce(announcement).await,
+        let announcement = match &self.inner {
+            InnerTrackerSession::Http(s) => s.announce(announcement).await?,
+            InnerTrackerSession::Udp(s) => s.announce(announcement).await?,
+        };
+        if let Some(msg) = announcement.warning_message.as_ref() {
+            log::trace!(
+                "{} replied with warning in response to {} announcement: {:?}",
+                self.tracker_display(),
+                self.info_hash,
+                msg,
+            );
         }
+        Ok(announcement)
     }
 }
 
@@ -184,17 +193,18 @@ pub(crate) enum TrackerUrlError {
     NoUdpPort,
 }
 
-#[derive(Debug, Error, Eq, PartialEq)]
+#[derive(Debug, Error)]
 pub(crate) enum TrackerError {
     #[error("interactions with tracker did not complete in time")]
     Timeout,
     #[error("tracker replied with error message {0:?}")]
     Failure(String),
+    #[error(transparent)]
+    Http(#[from] HttpTrackerError),
     #[error("UDP tracker sent response with invalid length")]
     UdpPacketLen(#[from] PacketError),
     #[error("UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}")]
     BadUdpAction { expected: u32, got: u32 },
-    // ???
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -206,6 +216,16 @@ enum AnnounceEvent {
 }
 
 impl AnnounceEvent {
+    fn add_query_param(&self, url: &mut Url) {
+        let value = match self {
+            AnnounceEvent::Announce => return,
+            AnnounceEvent::Completed => "completed",
+            AnnounceEvent::Started => "started",
+            AnnounceEvent::Stopped => "stopped",
+        };
+        url.query_pairs_mut().append_pair("event", value);
+    }
+
     fn for_udp(&self) -> u32 {
         match self {
             AnnounceEvent::Announce => 0,
