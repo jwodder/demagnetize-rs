@@ -172,6 +172,21 @@ impl From<bendy::decoding::Error> for UnbencodeError {
 
 impl std::error::Error for UnbencodeError {}
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ErrorChain<E>(pub E);
+
+impl<E: std::error::Error> fmt::Display for ErrorChain<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)?;
+        let mut source = self.0.source();
+        while let Some(e) = source {
+            write!(f, ": {e}")?;
+            source = e.source();
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,7 +5,7 @@ use self::udp::*;
 use crate::consts::{LEFT, NUMWANT, TRACKER_STOP_TIMEOUT, TRACKER_TIMEOUT};
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, LocalPeer, PeerId};
-use crate::util::{comma_list, PacketError};
+use crate::util::{comma_list, ErrorChain, PacketError};
 use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
@@ -70,8 +70,7 @@ impl Tracker {
             async move {
                 match timeout(TRACKER_STOP_TIMEOUT, s.stop()).await {
                     Ok(Ok(_)) => (),
-                    // TODO: Display source errors for `e`:
-                    Ok(Err(e)) => log::warn!("failure sending \"stopped\" announcement to {self} for {info_hash}: {e}"),
+                    Ok(Err(e)) => log::warn!("failure sending \"stopped\" announcement to {self} for {info_hash}: {}", ErrorChain(e)),
                     Err(_) => log::warn!("{self} did not response to \"stopped\" announcement for {info_hash} in time"),
                 }
             }

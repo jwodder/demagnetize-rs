@@ -9,6 +9,7 @@ use crate::asyncutil::received_stream;
 use crate::consts::NUMWANT;
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, LocalPeer};
+use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use clap::{Parser, Subcommand};
@@ -61,8 +62,7 @@ impl Command {
                 let stream =
                     received_stream(usize::try_from(NUMWANT).unwrap(), |sender| async move {
                         if let Err(e) = tracker.get_peers(&info_hash, &local, sender).await {
-                            // TODO: Show chain of source errors
-                            log::error!("Error communicating with tracker: {e}");
+                            log::error!("Error communicating with tracker: {}", ErrorChain(e));
                             inner_ok.store(false, Ordering::Release);
                         }
                     });
