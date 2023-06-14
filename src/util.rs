@@ -34,6 +34,14 @@ impl TryBytes {
         T::try_from_buf(&mut self.0)
     }
 
+    pub(crate) fn try_get_all<T: TryFromBuf>(mut self) -> Result<Vec<T>, PacketError> {
+        let mut values = Vec::new();
+        while self.0.has_remaining() {
+            values.push(self.try_get()?);
+        }
+        Ok(values)
+    }
+
     pub(crate) fn try_get_bytes(&mut self, len: usize) -> Result<Bytes, PacketError> {
         if self.0.len() >= len {
             Ok(self.0.copy_to_bytes(len))

@@ -149,20 +149,20 @@ impl UdpAnnounceResponse {
         let interval = buf.try_get::<u32>()?;
         let leechers = buf.try_get::<u32>()?;
         let seeders = buf.try_get::<u32>()?;
-        let peer_qty = match usize::try_from(leechers.saturating_add(seeders)) {
-            Ok(n) => n,
-            Err(_) => usize::MAX,
+        // Despite what BEP 15 says about packets not having definite sizes, it
+        // seems the only way to extract the peers from an announce response is
+        // to read all addresses to the end of the packet.
+        let peers = if ipv6 {
+            buf.try_get_all::<SocketAddrV6>()?
+                .into_iter()
+                .map(Peer::from)
+                .collect()
+        } else {
+            buf.try_get_all::<SocketAddrV4>()?
+                .into_iter()
+                .map(Peer::from)
+                .collect()
         };
-        let mut peers: Vec<Peer> = Vec::with_capacity(peer_qty);
-        for _ in 0..peer_qty {
-            if ipv6 {
-                peers.push(buf.try_get::<SocketAddrV6>()?.into());
-            } else {
-                peers.push(buf.try_get::<SocketAddrV4>()?.into());
-            }
-        }
-        // Don't require EOF here, as "Clients ... should not assume packets to
-        // be of a certain size"
         Ok(UdpAnnounceResponse {
             transaction_id,
             response: AnnounceResponse {
@@ -284,6 +284,64 @@ mod tests {
                 "138.199.55.37:38739".parse::<Peer>().unwrap(),
             ]
         );
+        assert_eq!(res.response.warning_message, None);
+        assert_eq!(res.response.min_interval, None);
+        assert_eq!(res.response.tracker_id, None);
+        assert_eq!(res.response.complete, None);
+        assert_eq!(res.response.incomplete, None);
+    }
+
+    #[test]
+    fn test_parse_announce_response_ipv6_not_all_peers() {
+        let mut buf = BytesMut::new();
+        buf.put(b"\x00\x00\x00\x01\r\rY\x00\x00\x00\x077\x00\x00\x00\x06\x00".as_slice());
+        buf.put(b"\x00\x00\x8f&\x07\xfe\xa8t\x97\x18\x00\x00\x00\x00\x00\x00".as_slice());
+        buf.put(b"\x00^\x02'#&\x07\xfe\xa8t\x97\x18\x00\xd6\x9fs\xa0\xa0\x92".as_slice());
+        buf.put(b"\xe9('#&\x07\xfe\xa8t\x97\x18\x00\xfc\x8d\n1\xad\x06 S'#*".as_slice());
+        buf.put(b"\x01\x04\xf8\x01\n\x10\x88\x00\x00\x00\x00\x00\x00\x00\x02".as_slice());
+        buf.put(b"\x93(*\x01\x0e\n\x02jzp\x9f\x04\x9c\x999\xfb\xb5\x12\xaeV*".as_slice());
+        buf.put(b"\x01\x0e\n\x02jzp\xed\x9c\\j\x84\xa3\xfe\x92\xaeV*\x01\x0e".as_slice());
+        buf.put(b"\n\n{a\x10\xf8\xa5\r\xadG\x87\xe8\xea\x10,*\x01\xcb\x08\x87".as_slice());
+        buf.put(b"\xfb\x84\x00\x90\x1b<\xfd(-\x9cJ\xe1\x1a*\x01\xcb\x08\x87".as_slice());
+        buf.put(b"\xfb\x84\x00\xe1Wa\xe9d\xfa9#\xe1\x1a*\x02\x06\xf8  \x01".as_slice());
+        buf.put(b"\x97\x00\x02\x00\x00\x00\x00\x10\x08\xd0\xae*\x03\x1b \x00".as_slice());
+        buf.put(b"\n\xf0\x11\x00\x00\x00\x00\x00\x00\xa0N\xf5\xd8$\x04\x0e".as_slice());
+        buf.put(b"\x80nk\x00\x00\x1e\xda\xa3\xef\xe5\xd4\xcc\xd7\xa6t$\x04".as_slice());
+        buf.put(b"\x0e\x80nk\x00\x00\x92\xa4>;L\x86\x15:\xa6t$\x04\x0e\x80nk".as_slice());
+        buf.put(b"\x00\x00\xe7Q\x94j\xff,\x82\xef\xa6t&\x00\x17\x00:\xe8\x06".as_slice());
+        buf.put(b"\x00\x00\x00\x00\x00\x00\x00\x00I\x82\xa2&\x00\x17\x00:\xe8".as_slice());
+        buf.put(b"\x06\x00\x00\x8c9(\xe7\x159\xa4\x82\xa2&\x00\x17\x00:\xe8".as_slice());
+        buf.put(b"\x06\x005\x11\xf1\x83\xcfb\xb7\xa2\x82\xa2&\x00\x17\x00:".as_slice());
+        buf.put(b"\xe8\x06\x00\xd4Cl\xf4\xf0Z\xaa(\x82\xa2&\x04=\t }7\x00\x00".as_slice());
+        buf.put(b"\x00\x00\x00\x00\x00mP\xed4&\x04=\t }7\x00B\xef.\x1d\xden".as_slice());
+        buf.put(b"\xa5\x02\xed4&\x04\xa8\x80\x08\x00\x00\x10\x00\x00\x00\x00".as_slice());
+        buf.put(b"\x01\xcc\xc0\x016Y&\x04\xa8\x80\x08\x00\x00\x10\x00\x00\x00".as_slice());
+        buf.put(b"\x00\x01\xcc\xc0\x01\x8bZ&\x04\xa8\x80\x08\x00\x00\x10\x00".as_slice());
+        buf.put(b"\x00\x00\x00\x01\xcc\xc0\x01\xac\xe0".as_slice());
+        let res = UdpAnnounceResponse::from_bytes(buf.freeze(), true).unwrap();
+        assert_eq!(res.transaction_id, 0x0D0D5900);
+        assert_eq!(res.response.interval, 1847);
+        assert_eq!(res.response.leechers, Some(6));
+        assert_eq!(res.response.seeders, Some(143));
+        assert_eq!(res.response.peers.len(), 23);
+        assert_eq!(res.response.warning_message, None);
+        assert_eq!(res.response.min_interval, None);
+        assert_eq!(res.response.tracker_id, None);
+        assert_eq!(res.response.complete, None);
+        assert_eq!(res.response.incomplete, None);
+    }
+
+    #[test]
+    fn test_parse_announce_response_ipv4_no_peers() {
+        let buf = Bytes::from(
+            b"\x00\x00\x00\x01\x13Tg\xd1\x00\x00\x07O\x00\x00\x00\x01\x00\x00\x00\x1d".as_slice(),
+        );
+        let res = UdpAnnounceResponse::from_bytes(buf, false).unwrap();
+        assert_eq!(res.transaction_id, 0x135467D1);
+        assert_eq!(res.response.interval, 1871);
+        assert_eq!(res.response.leechers, Some(1));
+        assert_eq!(res.response.seeders, Some(29));
+        assert_eq!(res.response.peers, Vec::new());
         assert_eq!(res.response.warning_message, None);
         assert_eq!(res.response.min_interval, None);
         assert_eq!(res.response.tracker_id, None);
