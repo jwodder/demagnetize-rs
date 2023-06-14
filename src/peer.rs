@@ -90,7 +90,6 @@ impl FromBencode for Peer {
                 _ => (),
             }
         }
-        // We're only supporting an absent peer id because it's just easier.
         let ip = ip.ok_or_else(|| BendyError::missing_field("ip"))?;
         let port = port.ok_or_else(|| BendyError::missing_field("port"))?;
         Ok(Peer {
