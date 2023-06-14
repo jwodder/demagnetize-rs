@@ -1,6 +1,7 @@
 use crate::consts::PEER_ID_PREFIX;
 use crate::tracker::{Tracker, TrackerUrlError};
-use bytes::{BufMut, Bytes, BytesMut};
+use crate::util::{PacketError, TryFromBuf};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use rand::Rng;
 use rand_distr::{Alphanumeric, Distribution, Standard};
@@ -14,6 +15,8 @@ use url::Url;
 pub(crate) struct InfoHash(Bytes);
 
 impl InfoHash {
+    const LENGTH: usize = 20;
+
     pub(crate) fn from_hex(s: &str) -> Result<InfoHash, InfoHashError> {
         let bs = HEXLOWER_PERMISSIVE
             .decode(s.as_bytes())
@@ -59,10 +62,22 @@ impl TryFrom<Bytes> for InfoHash {
     type Error = InfoHashError;
 
     fn try_from(bs: Bytes) -> Result<InfoHash, InfoHashError> {
-        if bs.len() == 20 {
+        if bs.len() == InfoHash::LENGTH {
             Ok(InfoHash(bs))
         } else {
             Err(InfoHashError::InvalidLength(bs.len()))
+        }
+    }
+}
+
+impl TryFromBuf for InfoHash {
+    fn try_from_buf(buf: &mut Bytes) -> Result<InfoHash, PacketError> {
+        if buf.len() >= InfoHash::LENGTH {
+            let data = buf.copy_to_bytes(InfoHash::LENGTH);
+            debug_assert_eq!(data.len(), InfoHash::LENGTH);
+            Ok(InfoHash::try_from(data).expect("Info hash size should be 20"))
+        } else {
+            Err(PacketError::Short)
         }
     }
 }
@@ -139,6 +154,18 @@ impl TryFrom<Bytes> for PeerId {
             Ok(PeerId(bs))
         } else {
             Err(PeerIdError(bs.len()))
+        }
+    }
+}
+
+impl TryFromBuf for PeerId {
+    fn try_from_buf(buf: &mut Bytes) -> Result<PeerId, PacketError> {
+        if buf.len() >= PeerId::LENGTH {
+            let data = buf.copy_to_bytes(PeerId::LENGTH);
+            debug_assert_eq!(data.len(), PeerId::LENGTH);
+            Ok(PeerId::try_from(data).expect("Peer ID size should be 20"))
+        } else {
+            Err(PacketError::Short)
         }
     }
 }
