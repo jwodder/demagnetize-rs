@@ -1,7 +1,7 @@
 use super::*;
 use crate::consts::UDP_PACKET_LEN;
 use crate::util::TryBytes;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rand::random;
 use std::cell::Cell;
 use std::fmt;
@@ -78,10 +78,16 @@ impl<'a> UdpTrackerSession<'a> {
         loop {
             let conn = self.get_connection().await?;
             let transaction_id = self.make_transaction_id();
+            let mut urldata = String::from(self.tracker.0.path());
+            if let Some(query) = self.tracker.0.query() {
+                urldata.push('?');
+                urldata.push_str(query);
+            }
             let msg = Bytes::from(UdpAnnounceRequest {
                 connection_id: conn.id,
                 transaction_id,
                 announcement,
+                urldata,
             });
             // TODO: Should communication be retried on parse errors and
             // mismatched transaction IDs?
@@ -254,11 +260,12 @@ impl TryFrom<Bytes> for UdpConnectionResponse {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct UdpAnnounceRequest<'a> {
     connection_id: u64,
     transaction_id: u32,
     announcement: Announcement<'a>,
+    urldata: String,
 }
 
 impl<'a> From<UdpAnnounceRequest<'a>> for Bytes {
@@ -277,6 +284,14 @@ impl<'a> From<UdpAnnounceRequest<'a>> for Bytes {
         buf.put_u32(req.announcement.key.into());
         buf.put_u32(req.announcement.numwant);
         buf.put_u16(req.announcement.port);
+        // BEP 41:
+        let mut urldata = Bytes::from(req.urldata.into_bytes());
+        while urldata.has_remaining() {
+            buf.put_u8(2);
+            let segment = urldata.split_to(urldata.len().min(255));
+            buf.put_u8(u8::try_from(segment.len()).unwrap());
+            buf.put(segment);
+        }
         buf.freeze()
     }
 }
@@ -404,10 +419,38 @@ mod tests {
                 left: (1 << 63) - 1,
                 numwant: 80,
             },
+            urldata: String::new(),
         };
         let buf = Bytes::from(req);
         assert_eq!(buf,
             b"\\\xcb\xdf\xdb\x15|%\xba\x00\x00\x00\x01\xa57\xee\xe7L>!_\x9eP\xb0mp\x8at\xc9\xb0\xe6n\x08\xbc\xe5 \xaa-TR3000-12nig788rk3b\x00\x00\x00\x00\x00\x00\x00\x00\x7f\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00,T^\xde\x00\x00\x00P\xea\xa5".as_slice()
+        );
+    }
+
+    #[test]
+    fn test_make_announce_request_urldata() {
+        let req = UdpAnnounceRequest {
+            connection_id: 0x5CCBDFDB157C25BA,
+            transaction_id: 0xA537EEE7,
+            announcement: Announcement {
+                info_hash: &"4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
+                    .parse::<InfoHash>()
+                    .unwrap(),
+                peer_id: &PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice()))
+                    .unwrap(),
+                port: 60069,
+                key: Key::from(0x2C545EDE),
+                event: AnnounceEvent::Started,
+                downloaded: 0,
+                uploaded: 0,
+                left: (1 << 63) - 1,
+                numwant: 80,
+            },
+            urldata: "/announce".into(),
+        };
+        let buf = Bytes::from(req);
+        assert_eq!(buf,
+            b"\\\xcb\xdf\xdb\x15|%\xba\x00\x00\x00\x01\xa57\xee\xe7L>!_\x9eP\xb0mp\x8at\xc9\xb0\xe6n\x08\xbc\xe5 \xaa-TR3000-12nig788rk3b\x00\x00\x00\x00\x00\x00\x00\x00\x7f\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00,T^\xde\x00\x00\x00P\xea\xa5\x02\x09/announce".as_slice()
         );
     }
 
