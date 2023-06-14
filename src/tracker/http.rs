@@ -82,9 +82,7 @@ impl FromBencode for HttpAnnounceResponse {
                         peers.extend(Vec::<Peer>::decode_bencode_object(v).context("peers")?);
                     } else {
                         // Compact format (BEP 23)
-                        let buf = TryBytes::from(Bytes::from(
-                            v.try_into_bytes().context("peers")?.to_vec(),
-                        ));
+                        let buf = TryBytes::from(v.try_into_bytes().context("peers")?);
                         let addrs = match buf.try_get_all::<SocketAddrV4>() {
                             Ok(addrs) => addrs,
                             Err(e) => {
@@ -98,8 +96,7 @@ impl FromBencode for HttpAnnounceResponse {
                 }
                 (b"peers6", v) => {
                     // Compact format (BEP 7)
-                    let buf =
-                        TryBytes::from(Bytes::from(v.try_into_bytes().context("peers6")?.to_vec()));
+                    let buf = TryBytes::from(v.try_into_bytes().context("peers6")?);
                     let addrs = match buf.try_get_all::<SocketAddrV6>() {
                         Ok(addrs) => addrs,
                         Err(e) => {

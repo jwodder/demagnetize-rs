@@ -74,6 +74,12 @@ impl From<Bytes> for TryBytes {
     }
 }
 
+impl From<&[u8]> for TryBytes {
+    fn from(bs: &[u8]) -> TryBytes {
+        TryBytes::from(Bytes::from(bs.to_vec()))
+    }
+}
+
 // All integers are read in big-endian order.
 pub(crate) trait TryFromBuf: Sized {
     fn try_from_buf(buf: &mut Bytes) -> Result<Self, PacketError>;
@@ -180,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_try_get_u8() {
-        let mut buf = TryBytes::from(Bytes::from(b"abc".as_slice()));
+        let mut buf = TryBytes::from(b"abc".as_slice());
         assert_eq!(buf.try_get::<u8>(), Ok(0x61));
         assert_eq!(buf.try_get::<u8>(), Ok(0x62));
         assert_eq!(buf.try_get::<u8>(), Ok(0x63));
@@ -189,35 +195,35 @@ mod tests {
 
     #[test]
     fn test_try_get_u16() {
-        let mut buf = TryBytes::from(Bytes::from(b"abc".as_slice()));
+        let mut buf = TryBytes::from(b"abc".as_slice());
         assert_eq!(buf.try_get::<u16>(), Ok(0x6162));
         assert_eq!(buf.try_get::<u16>(), Err(PacketError::Short));
     }
 
     #[test]
     fn test_try_get_u32() {
-        let mut buf = TryBytes::from(Bytes::from(b"0123abc".as_slice()));
+        let mut buf = TryBytes::from(b"0123abc".as_slice());
         assert_eq!(buf.try_get::<u32>(), Ok(0x30313233));
         assert_eq!(buf.try_get::<u32>(), Err(PacketError::Short));
     }
 
     #[test]
     fn test_try_get_i32() {
-        let mut buf = TryBytes::from(Bytes::from(b"\x80123abc".as_slice()));
+        let mut buf = TryBytes::from(b"\x80123abc".as_slice());
         assert_eq!(buf.try_get::<i32>(), Ok(-2144259533));
         assert_eq!(buf.try_get::<i32>(), Err(PacketError::Short));
     }
 
     #[test]
     fn test_try_get_u64() {
-        let mut buf = TryBytes::from(Bytes::from(b"01234567abcde".as_slice()));
+        let mut buf = TryBytes::from(b"01234567abcde".as_slice());
         assert_eq!(buf.try_get::<u64>(), Ok(0x3031323334353637));
         assert_eq!(buf.try_get::<u64>(), Err(PacketError::Short));
     }
 
     #[test]
     fn test_try_get_ipv4addr() {
-        let mut buf = TryBytes::from(Bytes::from(b"0123abc".as_slice()));
+        let mut buf = TryBytes::from(b"0123abc".as_slice());
         assert_eq!(
             buf.try_get::<Ipv4Addr>(),
             Ok(Ipv4Addr::new(0x30, 0x31, 0x32, 0x33))
@@ -227,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_try_get_ipv6addr() {
-        let mut buf = TryBytes::from(Bytes::from(b"iiiiiiiiiiiiiiii000000000".as_slice()));
+        let mut buf = TryBytes::from(b"iiiiiiiiiiiiiiii000000000".as_slice());
         assert_eq!(
             buf.try_get::<Ipv6Addr>(),
             Ok("6969:6969:6969:6969:6969:6969:6969:6969"
@@ -239,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_try_get_socketaddrv4() {
-        let mut buf = TryBytes::from(Bytes::from(b"iiiipp0123".as_slice()));
+        let mut buf = TryBytes::from(b"iiiipp0123".as_slice());
         assert_eq!(
             buf.try_get::<SocketAddrV4>(),
             Ok(SocketAddrV4::new(Ipv4Addr::new(105, 105, 105, 105), 28784))
@@ -249,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_try_get_socketaddrv6() {
-        let mut buf = TryBytes::from(Bytes::from(b"iiiiiiiiiiiiiiiipp012345678".as_slice()));
+        let mut buf = TryBytes::from(b"iiiiiiiiiiiiiiiipp012345678".as_slice());
         assert_eq!(
             buf.try_get::<SocketAddrV6>(),
             Ok("[6969:6969:6969:6969:6969:6969:6969:6969]:28784"
