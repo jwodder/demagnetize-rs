@@ -1,16 +1,34 @@
 use super::*;
+use crate::consts::UDP_PACKET_LEN;
 use crate::util::TryBytes;
 use bytes::{BufMut, Bytes, BytesMut};
+use rand::random;
+use std::cell::Cell;
 use std::fmt;
-use std::net::{SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::time::Duration;
+use thiserror::Error;
+use tokio::net::{lookup_host, UdpSocket};
+use tokio::time::{timeout, timeout_at, Instant};
 use url::Url;
+
+const PROTOCOL_ID: u64 = 0x41727101980;
+const CONNECT_ACTION: u32 = 0;
+const ANNOUNCE_ACTION: u32 = 1;
+const ERROR_ACTION: u32 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct UdpTracker(Url);
 
 impl UdpTracker {
     pub(super) async fn connect(&self) -> Result<UdpTrackerSession<'_>, TrackerError> {
-        todo!()
+        let host = self
+            .0
+            .host_str()
+            .expect("UDP tracker host should not be None");
+        let port = self.0.port().expect("UDP tracker port should not be None");
+        let socket = ConnectedUdpSocket::connect(host, port).await?;
+        Ok(UdpTrackerSession::new(self, socket))
     }
 }
 
@@ -40,22 +58,157 @@ impl TryFrom<Url> for UdpTracker {
 
 pub(super) struct UdpTrackerSession<'a> {
     pub(super) tracker: &'a UdpTracker,
-    // ???
+    socket: ConnectedUdpSocket,
+    conn: Cell<Option<Connection>>,
 }
 
 impl<'a> UdpTrackerSession<'a> {
+    fn new(tracker: &'a UdpTracker, socket: ConnectedUdpSocket) -> Self {
+        UdpTrackerSession {
+            tracker,
+            socket,
+            conn: Cell::new(None),
+        }
+    }
+
     pub(super) async fn announce<'b>(
         &self,
-        _announcement: Announcement<'b>,
+        announcement: Announcement<'b>,
     ) -> Result<AnnounceResponse, TrackerError> {
-        todo!()
+        loop {
+            let conn = self.get_connection().await?;
+            let transaction_id = self.make_transaction_id();
+            let msg = Bytes::from(UdpAnnounceRequest {
+                connection_id: conn.id,
+                transaction_id,
+                announcement,
+            });
+            // TODO: Should communication be retried on parse errors and
+            // mismatched transaction IDs?
+            let resp = match timeout_at(conn.expiration, self.chat(msg)).await {
+                Ok(Ok(buf)) => UdpAnnounceResponse::from_bytes(buf, self.socket.ipv6)?,
+                Ok(Err(e)) => return Err(e.into()),
+                Err(_) => {
+                    log::trace!("Connection to {} timed out; restarting", self.tracker);
+                    let _ = self.conn.take();
+                    continue;
+                }
+            };
+            if resp.transaction_id != transaction_id {
+                return Err(TrackerError::XactionMismatch {
+                    expected: transaction_id,
+                    got: resp.transaction_id,
+                });
+            }
+            return Ok(resp.response);
+        }
+    }
+
+    async fn get_connection(&self) -> Result<Connection, TrackerError> {
+        match self.conn.get() {
+            Some(c) if c.expiration < Instant::now() => Ok(c),
+            _ => {
+                let conn = self.connect().await?;
+                self.conn.set(Some(conn));
+                Ok(conn)
+            }
+        }
+    }
+
+    async fn connect(&self) -> Result<Connection, TrackerError> {
+        log::trace!("Sending connection request to {}", self.tracker);
+        let transaction_id = self.make_transaction_id();
+        let msg = Bytes::from(UdpConnectionRequest { transaction_id });
+        // TODO: Should communication be retried on parse errors and mismatched
+        // transaction IDs?
+        let resp = UdpConnectionResponse::try_from(self.chat(msg).await?)?;
+        if resp.transaction_id != transaction_id {
+            return Err(TrackerError::XactionMismatch {
+                expected: transaction_id,
+                got: resp.transaction_id,
+            });
+        }
+        let expiration = Instant::now() + Duration::from_secs(60);
+        Ok(Connection {
+            id: resp.connection_id,
+            expiration,
+        })
+    }
+
+    async fn chat(&self, msg: Bytes) -> Result<Bytes, UdpError> {
+        let mut n = 0;
+        loop {
+            self.socket.send(&msg).await?;
+            let maxtime = Duration::from_secs(15 << n);
+            match timeout(maxtime, self.socket.recv()).await {
+                Ok(r) => return r,
+                Err(_) => {
+                    log::trace!("{} did not reply in time; resending message", self.tracker);
+                    if n < 8 {
+                        // TODO: Should this count remember timeouts from
+                        // previous connections & connection attempts?
+                        n += 1;
+                    }
+                    continue;
+                }
+            }
+        }
+    }
+
+    fn make_transaction_id(&self) -> u32 {
+        random()
     }
 }
 
-const PROTOCOL_ID: u64 = 0x41727101980;
-const CONNECT_ACTION: u32 = 0;
-const ANNOUNCE_ACTION: u32 = 1;
-const ERROR_ACTION: u32 = 3;
+struct ConnectedUdpSocket {
+    inner: UdpSocket,
+    ipv6: bool,
+}
+
+impl ConnectedUdpSocket {
+    async fn connect(host: &str, port: u16) -> Result<ConnectedUdpSocket, UdpError> {
+        let Some(addr) = lookup_host((host, port)).await.map_err(UdpError::Lookup)?.next() else {
+            return Err(UdpError::NoResolve);
+        };
+        let (bindaddr, ipv6) = match addr {
+            SocketAddr::V4(_) => ("0.0.0.0:0", false),
+            SocketAddr::V6(_) => ("[::]:0", true),
+        };
+        let socket = UdpSocket::bind(bindaddr).await.map_err(UdpError::Bind)?;
+        log::trace!(
+            "Connected UDP socket to {} (IP address: {}), port {}",
+            host,
+            addr.ip(),
+            port,
+        );
+        socket.connect(addr).await.map_err(UdpError::Connect)?;
+        Ok(ConnectedUdpSocket {
+            inner: socket,
+            ipv6,
+        })
+    }
+
+    async fn send(&self, msg: &Bytes) -> Result<(), UdpError> {
+        self.inner.send(msg).await.map_err(UdpError::Send)?;
+        Ok(())
+    }
+
+    async fn recv(&self) -> Result<Bytes, UdpError> {
+        let mut buf = BytesMut::with_capacity(UDP_PACKET_LEN);
+        self.inner
+            .recv_buf(&mut buf)
+            .await
+            .map_err(UdpError::Recv)?;
+        Ok(buf.freeze())
+    }
+}
+
+// UDP tracker psuedo-connection (BEP 15)
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct Connection {
+    id: u64,
+    expiration: Instant,
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct UdpConnectionRequest {
@@ -178,6 +331,22 @@ impl UdpAnnounceResponse {
             },
         })
     }
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum UdpError {
+    #[error("failed to resolve remote hostname")]
+    Lookup(#[source] std::io::Error),
+    #[error("remote hostname did not resolve to any IP addresses")]
+    NoResolve,
+    #[error("failed to bind UDP socket")]
+    Bind(#[source] std::io::Error),
+    #[error("failed to connect UDP socket")]
+    Connect(#[source] std::io::Error),
+    #[error("failed to send UDP packet")]
+    Send(#[source] std::io::Error),
+    #[error("failed to receive UDP packet")]
+    Recv(#[source] std::io::Error),
 }
 
 fn raise_for_error(buf: &Bytes) -> Result<(), TrackerError> {

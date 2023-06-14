@@ -63,14 +63,14 @@ impl Command {
                         if let Err(e) = tracker.get_peers(&info_hash, &local, sender).await {
                             // TODO: Show chain of source errors
                             log::error!("Error communicating with tracker: {e}");
-                            inner_ok.store(true, Ordering::Relaxed);
+                            inner_ok.store(false, Ordering::Release);
                         }
                     });
                 tokio::pin!(stream);
                 while let Some(peer) = stream.next().await {
                     println!("{peer}");
                 }
-                if ok.load(Ordering::Relaxed) {
+                if ok.load(Ordering::Acquire) {
                     ExitCode::SUCCESS
                 } else {
                     ExitCode::FAILURE
