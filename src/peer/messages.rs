@@ -5,6 +5,7 @@ use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultE
 use bendy::encoding::{Encoder, SingleItemEncoder, ToBencode};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::collections::BTreeMap;
+use std::fmt;
 use thiserror::Error;
 
 static HANDSHAKE_HEADER: &[u8; 20] = b"\x13BitTorrent protocol";
@@ -25,6 +26,16 @@ impl Handshake {
             info_hash: info_hash.clone(),
             peer_id: peer_id.clone(),
         }
+    }
+}
+
+impl fmt::Display for Handshake {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "handshake (extensions: {}; peer ID: {})",
+            self.extensions, self.peer_id
+        )
     }
 }
 
@@ -96,6 +107,15 @@ impl Message {
     }
 }
 
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Message::Core(msg) => write!(f, "{msg}"),
+            Message::Extended(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum CoreMessage {
     // BEP 3:
@@ -119,6 +139,51 @@ pub(super) enum CoreMessage {
     AllowedFast { index: u32 },
     // BEP 10:
     Extended { msg_id: u8, payload: Bytes },
+}
+
+impl fmt::Display for CoreMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CoreMessage::Keepalive => write!(f, "keepalive"),
+            CoreMessage::Choke => write!(f, "choke"),
+            CoreMessage::Unchoke => write!(f, "unchoke"),
+            CoreMessage::Interested => write!(f, "interested"),
+            CoreMessage::NotInterested => write!(f, "not interested"),
+            CoreMessage::Have { piece } => write!(f, "have: piece {piece}"),
+            CoreMessage::Bitfield(bitfield) => {
+                let total = bitfield.iter().copied().map(u8::count_ones).sum::<u32>();
+                write!(f, "bitfield: have {total} pieces")
+            }
+            CoreMessage::Request {
+                index,
+                begin,
+                length,
+            } => write!(f, "request: index {index}, begin {begin}, length {length}"),
+            CoreMessage::Piece { index, begin, data } => write!(
+                f,
+                "piece: index {index}, begin {begin}, length {}",
+                data.len()
+            ),
+            CoreMessage::Cancel {
+                index,
+                begin,
+                length,
+            } => write!(f, "cancel: index {index}, begin {begin}, length {length}"),
+            CoreMessage::Port { port } => write!(f, "DHT port: {port}"),
+            CoreMessage::Suggest { index } => write!(f, "suggest: piece {index}"),
+            CoreMessage::HaveAll => write!(f, "have all"),
+            CoreMessage::HaveNone => write!(f, "have none"),
+            CoreMessage::Reject {
+                index,
+                begin,
+                length,
+            } => write!(f, "reject: index {index}, begin {begin}, length {length}"),
+            CoreMessage::AllowedFast { index } => write!(f, "allowed fast: piece {index}"),
+            CoreMessage::Extended { msg_id, .. } => {
+                write!(f, "extended message (message ID {msg_id})")
+            }
+        }
+    }
 }
 
 impl From<CoreMessage> for Bytes {
@@ -364,6 +429,15 @@ impl ExtendedMessage {
     }
 }
 
+impl fmt::Display for ExtendedMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExtendedMessage::Handshake(msg) => write!(f, "{msg}"),
+            ExtendedMessage::Metadata(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ExtendedHandshake {
     m: Option<BTreeMap<String, u8>>,
@@ -377,6 +451,34 @@ impl ExtendedHandshake {
             Some(m) => Bep10Registry::from_m(m),
             None => Ok(Bep10Registry::new()),
         }
+    }
+}
+
+impl fmt::Display for ExtendedHandshake {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "extended handshake: ")?;
+        if let Some(m) = self.m.as_ref() {
+            write!(f, "extensions: ")?;
+            let mut first = true;
+            for k in m.keys() {
+                if !std::mem::replace(&mut first, false) {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{k:?}")?;
+            }
+            if first {
+                write!(f, "<none>")?;
+            }
+        } else {
+            write!(f, "no extensions")?;
+        }
+        if let Some(v) = self.v.as_ref() {
+            write!(f, "; client: {v:?}")?;
+        }
+        if let Some(metadata_size) = self.metadata_size {
+            write!(f, "; metadata size: {metadata_size:?}")?;
+        }
+        Ok(())
     }
 }
 
@@ -455,6 +557,24 @@ pub(super) enum MetadataMessage {
     Reject {
         piece: u32,
     },
+}
+
+impl fmt::Display for MetadataMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MetadataMessage::Request { piece } => write!(f, "metadata request: piece {piece}"),
+            MetadataMessage::Data {
+                piece,
+                total_size,
+                payload,
+            } => write!(
+                f,
+                "metadata data: piece {piece}, total size {total_size}, payload size {}",
+                payload.len()
+            ),
+            MetadataMessage::Reject { piece } => write!(f, "metadata reject: piece {piece}"),
+        }
+    }
 }
 
 impl From<MetadataMessage> for Bytes {
@@ -578,6 +698,7 @@ impl TryFrom<Bytes> for MetadataMessage {
                 }
                 Ok(MetadataMessage::Reject { piece })
             }
+            // TODO: Return an `Unknown` variant instead?
             x => Err(MessageError::UnknownMetadata(x)),
         }
     }
@@ -632,6 +753,7 @@ mod tests {
             b"k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82\xe3\x12\x91\xd3\x85\xa7\x96L"
         );
         assert_eq!(shake.peer_id.as_bytes(), b"-TR3000-vfu1svh0ewb6");
+        assert_eq!(shake.to_string(), "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension; peer ID: b\"-TR3000-vfu1svh0ewb6\")");
         assert_eq!(Bytes::from(shake), buf);
     }
 
@@ -649,6 +771,7 @@ mod tests {
             b"k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82\xe3\x12\x91\xd3\x85\xa7\x96L"
         );
         assert_eq!(shake.peer_id.as_bytes(), b"-qB4360-5Ngjy9uIMl~O");
+        assert_eq!(shake.to_string(), "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension, Unknown(0x0000000000080000); peer ID: b\"-qB4360-5Ngjy9uIMl~O\")");
         assert_eq!(Bytes::from(shake), buf);
     }
 
@@ -659,6 +782,7 @@ mod tests {
             CoreMessage::try_from(buf.clone()).unwrap(),
             CoreMessage::HaveAll
         );
+        assert_eq!(CoreMessage::HaveAll.to_string(), "have all");
         assert_eq!(Bytes::from(CoreMessage::HaveAll), buf);
     }
 
@@ -669,6 +793,7 @@ mod tests {
             CoreMessage::try_from(buf.clone()).unwrap(),
             CoreMessage::HaveNone
         );
+        assert_eq!(CoreMessage::HaveNone.to_string(), "have none");
         assert_eq!(Bytes::from(CoreMessage::HaveNone), buf);
     }
 
@@ -678,6 +803,10 @@ mod tests {
         assert_eq!(
             CoreMessage::try_from(buf.clone()).unwrap(),
             CoreMessage::Port { port: 34999 }
+        );
+        assert_eq!(
+            (CoreMessage::Port { port: 34999 }).to_string(),
+            "DHT port: 34999"
         );
         assert_eq!(Bytes::from(CoreMessage::Port { port: 34999 }), buf);
     }
@@ -697,6 +826,7 @@ mod tests {
             ),
         };
         assert_eq!(CoreMessage::try_from(buf.clone()).unwrap(), msg);
+        assert_eq!(msg.to_string(), "extended message (message ID 1)");
         assert_eq!(Bytes::from(msg), buf);
     }
 
@@ -727,6 +857,7 @@ mod tests {
                 metadata_size: Some(5436),
             }))
         );
+        assert_eq!(msg.to_string(), "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436");
         let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
             unreachable!();
         };
@@ -764,6 +895,7 @@ mod tests {
                 piece: 0
             }))
         );
+        assert_eq!(msg.to_string(), "metadata request: piece 0");
         assert_eq!(msg.encode(&registry).unwrap(), buf);
     }
 
@@ -780,6 +912,10 @@ mod tests {
                 total_size: 5436,
                 payload: Bytes::from(b"d5:filesld6:lengthi267661684e4:pathl72:...".as_slice())
             }))
+        );
+        assert_eq!(
+            msg.to_string(),
+            "metadata data: piece 0, total size 5436, payload size 42"
         );
         assert_eq!(msg.encode(&registry).unwrap(), buf);
     }
