@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::ops::BitAnd;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -43,7 +44,7 @@ impl fmt::Display for Extension {
 pub(super) struct ExtensionSet(u64);
 
 impl ExtensionSet {
-    fn has(&self, ext: Extension) -> bool {
+    pub(super) fn has(&self, ext: Extension) -> bool {
         self.0 & ext.bit() != 0
     }
 }
@@ -71,6 +72,14 @@ impl fmt::Display for ExtensionSet {
             write!(f, "<none>")?;
         }
         Ok(())
+    }
+}
+
+impl BitAnd for ExtensionSet {
+    type Output = ExtensionSet;
+
+    fn bitand(self, rhs: ExtensionSet) -> ExtensionSet {
+        ExtensionSet(self.0 & rhs.0)
     }
 }
 

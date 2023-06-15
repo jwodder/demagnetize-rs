@@ -157,7 +157,7 @@ pub(crate) enum PushError {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub(crate) enum BuildError {
-    #[error("invalid torrent info")]
+    #[error(transparent)]
     Bencode(#[from] BencodeDictError),
     #[error("not all metadata pieces fetched; {left} remaining")]
     NotFinished { left: usize },

@@ -1,3 +1,4 @@
+use crate::peer::extensions::Extension;
 use std::time::Duration;
 
 /// Number of peers to request per tracker
@@ -22,3 +23,19 @@ pub(crate) const UDP_PACKET_LEN: usize = 65535;
 
 /// Maximum metadata size to accept
 pub(crate) const MAX_INFO_LENGTH: usize = 20 << 20; // 20 MiB
+
+/// Timeout for connecting to a peer
+pub(crate) const PEER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// BitTorrent protocol extensions supported by demagnetize
+pub(crate) const SUPPORTED_EXTENSIONS: [Extension; 2] = [Extension::Bep10, Extension::Fast];
+
+/// Extended message ID to declare for receiving BEP 9 messages
+pub(crate) const UT_METADATA: u8 = 42;
+
+/// Client string to send in extended handshakes and to use as the "Created by"
+/// field in Torrent files
+pub(crate) static CLIENT: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
+
+/// Maximum length of a message to accept from a peer
+pub(crate) const MAX_PEER_MSG_LEN: usize = 65535;

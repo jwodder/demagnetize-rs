@@ -13,12 +13,14 @@ use thiserror::Error;
 static HANDSHAKE_HEADER: &[u8; 20] = b"\x13BitTorrent protocol";
 
 pub(super) struct Handshake {
-    extensions: ExtensionSet,
-    info_hash: InfoHash,
-    peer_id: PeerId,
+    pub(super) extensions: ExtensionSet,
+    pub(super) info_hash: InfoHash,
+    pub(super) peer_id: PeerId,
 }
 
 impl Handshake {
+    pub(super) const LENGTH: usize = 20 + 8 + 20 + 20;
+
     pub(super) fn new<I>(extensions: I, info_hash: &InfoHash, peer_id: &PeerId) -> Handshake
     where
         I: IntoIterator<Item = Extension>,
@@ -43,7 +45,7 @@ impl fmt::Display for Handshake {
 
 impl From<Handshake> for Bytes {
     fn from(shake: Handshake) -> Bytes {
-        let mut buf = BytesMut::with_capacity(20 + 8 + 20 + 20);
+        let mut buf = BytesMut::with_capacity(Handshake::LENGTH);
         buf.put(HANDSHAKE_HEADER.as_slice());
         buf.put_u64(shake.extensions.into());
         buf.put(shake.info_hash.as_bytes());
@@ -74,12 +76,11 @@ impl TryFrom<Bytes> for Handshake {
 }
 
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
-pub(super) enum HandshakeError {
+pub(crate) enum HandshakeError {
     #[error("peer sent handshake with invalid header")]
     InvalidHeader,
     #[error("peer sent handshake with invalid length")]
     Length(#[from] PacketError),
-    // TODO: Add "wrong info hash"
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -480,9 +481,9 @@ impl fmt::Display for ExtendedMessage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ExtendedHandshake {
-    m: Option<BTreeMap<String, u8>>,
-    v: Option<String>,
-    metadata_size: Option<u32>,
+    pub(super) m: Option<BTreeMap<String, u8>>,
+    pub(super) v: Option<String>,
+    pub(super) metadata_size: Option<u32>,
 }
 
 impl ExtendedHandshake {
@@ -760,7 +761,7 @@ impl TryFrom<Bytes> for MetadataMessage {
 }
 
 #[derive(Clone, Debug, Error)]
-pub(super) enum MessageError {
+pub(crate) enum MessageError {
     #[error("unknown message type: {0}")]
     Unknown(u8),
     #[error("message had invalid length")]
