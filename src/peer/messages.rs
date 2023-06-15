@@ -1,6 +1,8 @@
-use super::{Extension, ExtensionSet};
+use super::{Bep10Extension, Bep10Registry, Bep10RegistryError, Extension, ExtensionSet};
 use crate::types::{InfoHash, PeerId};
-use crate::util::{PacketError, TryBytes, UnbencodeError};
+use crate::util::{decode_bencode, PacketError, TryBytes, UnbencodeError};
+use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
+use bendy::encoding::{Encoder, SingleItemEncoder, ToBencode};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -68,9 +70,30 @@ pub(super) enum HandshakeError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) enum AnyMessage {
+pub(super) enum Message {
     Core(CoreMessage),
     Extended(ExtendedMessage),
+}
+
+impl Message {
+    pub(super) fn decode(buf: Bytes, registry: &Bep10Registry) -> Result<Message, MessageError> {
+        match CoreMessage::try_from(buf)? {
+            CoreMessage::Extended { msg_id, payload } => Ok(Message::Extended(
+                ExtendedMessage::decode(msg_id, payload, registry)?,
+            )),
+            msg => Ok(Message::Core(msg)),
+        }
+    }
+
+    pub(super) fn encode(self, registry: &Bep10Registry) -> Result<Bytes, MessageEncodeError> {
+        match self {
+            Message::Core(msg) => Ok(Bytes::from(msg)),
+            Message::Extended(msg) => {
+                let (msg_id, payload) = msg.encode(registry)?;
+                Ok(Bytes::from(CoreMessage::Extended { msg_id, payload }))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -98,10 +121,247 @@ pub(super) enum CoreMessage {
     Extended { msg_id: u8, payload: Bytes },
 }
 
+impl From<CoreMessage> for Bytes {
+    fn from(msg: CoreMessage) -> Bytes {
+        // The returned buffer does not include the length prefix, as that is
+        // added by LengthDelimitedCodec.
+        match msg {
+            CoreMessage::Keepalive => Bytes::new(),
+            CoreMessage::Choke => Bytes::from(vec![0]),
+            CoreMessage::Unchoke => Bytes::from(vec![1]),
+            CoreMessage::Interested => Bytes::from(vec![2]),
+            CoreMessage::NotInterested => Bytes::from(vec![3]),
+            CoreMessage::Have { piece } => {
+                let mut buf = BytesMut::with_capacity(5);
+                buf.put_u8(4);
+                buf.put_u32(piece);
+                buf.freeze()
+            }
+            CoreMessage::Bitfield(bitfield) => {
+                let mut buf = BytesMut::with_capacity(1 + bitfield.len());
+                buf.put_u8(5);
+                buf.extend(bitfield);
+                buf.freeze()
+            }
+            CoreMessage::Request {
+                index,
+                begin,
+                length,
+            } => {
+                let mut buf = BytesMut::with_capacity(13);
+                buf.put_u8(6);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.put_u32(length);
+                buf.freeze()
+            }
+            CoreMessage::Piece { index, begin, data } => {
+                let mut buf = BytesMut::with_capacity(9 + data.len());
+                buf.put_u8(7);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.extend(data);
+                buf.freeze()
+            }
+            CoreMessage::Cancel {
+                index,
+                begin,
+                length,
+            } => {
+                let mut buf = BytesMut::with_capacity(13);
+                buf.put_u8(8);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.put_u32(length);
+                buf.freeze()
+            }
+            CoreMessage::Port { port } => {
+                let mut buf = BytesMut::with_capacity(3);
+                buf.put_u8(9);
+                buf.put_u16(port);
+                buf.freeze()
+            }
+            CoreMessage::Suggest { index } => {
+                let mut buf = BytesMut::with_capacity(5);
+                buf.put_u8(0x0D);
+                buf.put_u32(index);
+                buf.freeze()
+            }
+            CoreMessage::HaveAll => Bytes::from(vec![0x0E]),
+            CoreMessage::HaveNone => Bytes::from(vec![0x0F]),
+            CoreMessage::Reject {
+                index,
+                begin,
+                length,
+            } => {
+                let mut buf = BytesMut::with_capacity(13);
+                buf.put_u8(0x10);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.put_u32(length);
+                buf.freeze()
+            }
+            CoreMessage::AllowedFast { index } => {
+                let mut buf = BytesMut::with_capacity(5);
+                buf.put_u8(0x11);
+                buf.put_u32(index);
+                buf.freeze()
+            }
+            CoreMessage::Extended { msg_id, payload } => {
+                let mut buf = BytesMut::with_capacity(2 + payload.len());
+                buf.put_u8(0x14);
+                buf.put_u8(msg_id);
+                buf.extend(payload);
+                buf.freeze()
+            }
+        }
+    }
+}
+
+impl TryFrom<Bytes> for CoreMessage {
+    type Error = MessageError;
+
+    fn try_from(buf: Bytes) -> Result<CoreMessage, MessageError> {
+        // `buf` does not include the length prefix, as that is stripped by
+        // LengthDelimitedCodec.
+        let mut buf = TryBytes::from(buf);
+        let Ok(msg_type) = buf.try_get::<u8>() else {
+            return Ok(CoreMessage::Keepalive);
+        };
+        match msg_type {
+            0 => {
+                buf.eof()?;
+                Ok(CoreMessage::Choke)
+            }
+            1 => {
+                buf.eof()?;
+                Ok(CoreMessage::Unchoke)
+            }
+            2 => {
+                buf.eof()?;
+                Ok(CoreMessage::Interested)
+            }
+            3 => {
+                buf.eof()?;
+                Ok(CoreMessage::NotInterested)
+            }
+            4 => {
+                let piece = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Have { piece })
+            }
+            5 => Ok(CoreMessage::Bitfield(buf.remainder())),
+            6 => {
+                let index = buf.try_get::<u32>()?;
+                let begin = buf.try_get::<u32>()?;
+                let length = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Request {
+                    index,
+                    begin,
+                    length,
+                })
+            }
+            7 => {
+                let index = buf.try_get::<u32>()?;
+                let begin = buf.try_get::<u32>()?;
+                let data = buf.remainder();
+                Ok(CoreMessage::Piece { index, begin, data })
+            }
+            8 => {
+                let index = buf.try_get::<u32>()?;
+                let begin = buf.try_get::<u32>()?;
+                let length = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Cancel {
+                    index,
+                    begin,
+                    length,
+                })
+            }
+            9 => {
+                let port = buf.try_get::<u16>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Port { port })
+            }
+            0x0D => {
+                let index = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Suggest { index })
+            }
+            0x0E => {
+                buf.eof()?;
+                Ok(CoreMessage::HaveAll)
+            }
+            0x0F => {
+                buf.eof()?;
+                Ok(CoreMessage::HaveNone)
+            }
+            0x10 => {
+                let index = buf.try_get::<u32>()?;
+                let begin = buf.try_get::<u32>()?;
+                let length = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::Reject {
+                    index,
+                    begin,
+                    length,
+                })
+            }
+            0x11 => {
+                let index = buf.try_get::<u32>()?;
+                buf.eof()?;
+                Ok(CoreMessage::AllowedFast { index })
+            }
+            0x14 => {
+                let msg_id = buf.try_get::<u8>()?;
+                let payload = buf.remainder();
+                Ok(CoreMessage::Extended { msg_id, payload })
+            }
+            x => Err(MessageError::Unknown(x)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum ExtendedMessage {
     Handshake(ExtendedHandshake),
     Metadata(MetadataMessage),
+}
+
+impl ExtendedMessage {
+    fn decode(
+        msg_id: u8,
+        payload: Bytes,
+        registry: &Bep10Registry,
+    ) -> Result<ExtendedMessage, MessageError> {
+        if msg_id == 0 {
+            return Ok(ExtendedMessage::Handshake(ExtendedHandshake::try_from(
+                payload,
+            )?));
+        }
+        let Some(ext) = registry.for_message_id(msg_id) else {
+            return Err(MessageError::UnknownExtended(msg_id));
+        };
+        match ext {
+            Bep10Extension::Metadata => Ok(ExtendedMessage::Metadata(MetadataMessage::try_from(
+                payload,
+            )?)),
+        }
+    }
+
+    fn encode(self, registry: &Bep10Registry) -> Result<(u8, Bytes), MessageEncodeError> {
+        match self {
+            ExtendedMessage::Handshake(shake) => Ok((0, Bytes::from(shake))),
+            ExtendedMessage::Metadata(msg) => {
+                let Some(msg_id) = registry.get_message_id(Bep10Extension::Metadata) else {
+                    return Err(MessageEncodeError(Bep10Extension::Metadata));
+                };
+                let payload = Bytes::from(msg);
+                Ok((msg_id, payload))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -109,6 +369,77 @@ pub(super) struct ExtendedHandshake {
     m: Option<BTreeMap<String, u8>>,
     v: Option<String>,
     metadata_size: Option<u32>,
+}
+
+impl ExtendedHandshake {
+    pub(super) fn into_bep10_registry(self) -> Result<Bep10Registry, Bep10RegistryError> {
+        match self.m {
+            Some(m) => Bep10Registry::from_m(m),
+            None => Ok(Bep10Registry::new()),
+        }
+    }
+}
+
+impl From<ExtendedHandshake> for Bytes {
+    fn from(eshake: ExtendedHandshake) -> Bytes {
+        Bytes::from(eshake.to_bencode().expect("Bencoding should not fail"))
+    }
+}
+
+impl TryFrom<Bytes> for ExtendedHandshake {
+    type Error = MessageError;
+
+    fn try_from(buf: Bytes) -> Result<ExtendedHandshake, MessageError> {
+        decode_bencode(&buf).map_err(MessageError::ExtendedHandshake)
+    }
+}
+
+impl ToBencode for ExtendedHandshake {
+    const MAX_DEPTH: usize = 3;
+
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), bendy::encoding::Error> {
+        encoder.emit_dict(|mut e| {
+            if let Some(m) = self.m.as_ref() {
+                e.emit_pair(b"m", m)?;
+            }
+            if let Some(metadata_size) = self.metadata_size {
+                e.emit_pair(b"metadata_size", metadata_size)?;
+            }
+            if let Some(v) = self.v.as_ref() {
+                e.emit_pair(b"v", v)?;
+            }
+            Ok(())
+        })
+    }
+}
+
+impl FromBencode for ExtendedHandshake {
+    fn decode_bencode_object(object: Object) -> Result<ExtendedHandshake, BendyError> {
+        let mut m = None;
+        let mut v = None;
+        let mut metadata_size = None;
+        let mut dd = object.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"m", value) => {
+                    m = Some(BTreeMap::<String, u8>::decode_bencode_object(value).context("m")?);
+                }
+                (b"v", value) => {
+                    v = Some(String::decode_bencode_object(value).context("v")?);
+                }
+                (b"metadata_size", value) => {
+                    metadata_size =
+                        Some(u32::decode_bencode_object(value).context("metadata_size")?);
+                }
+                _ => (),
+            }
+        }
+        Ok(ExtendedHandshake {
+            m,
+            v,
+            metadata_size,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,6 +457,132 @@ pub(super) enum MetadataMessage {
     },
 }
 
+impl From<MetadataMessage> for Bytes {
+    fn from(msg: MetadataMessage) -> Bytes {
+        let mut encoder = Encoder::new().with_max_depth(3);
+        encoder
+            .emit_dict(|mut e| {
+                match msg {
+                    MetadataMessage::Request { piece } => {
+                        e.emit_pair(b"msg_type", 0)?;
+                        e.emit_pair(b"piece", piece)?;
+                    }
+                    MetadataMessage::Data {
+                        piece, total_size, ..
+                    } => {
+                        e.emit_pair(b"msg_type", 1)?;
+                        e.emit_pair(b"piece", piece)?;
+                        e.emit_pair(b"total_size", total_size)?;
+                    }
+                    MetadataMessage::Reject { piece } => {
+                        e.emit_pair(b"msg_type", 2)?;
+                        e.emit_pair(b"piece", piece)?;
+                    }
+                }
+                Ok(())
+            })
+            .expect("Encoding should not fail");
+        let mut buf = encoder.get_output().expect("Encoding should not fail");
+        if let MetadataMessage::Data { payload, .. } = msg {
+            buf.extend(&payload);
+        }
+        Bytes::from(buf)
+    }
+}
+
+impl TryFrom<Bytes> for MetadataMessage {
+    type Error = MessageError;
+
+    fn try_from(mut buf: Bytes) -> Result<MetadataMessage, MessageError> {
+        let mut decoder = Decoder::new(&buf).with_max_depth(2);
+        let mut dd = match decoder.next_object() {
+            Ok(Some(obj)) => match obj.try_into_dictionary() {
+                Ok(dd) => dd,
+                Err(e) => return Err(MessageError::metadata_bendy(e)),
+            },
+            Ok(None) => return Err(MessageError::Metadata(UnbencodeError::NoData)),
+            Err(e) => return Err(MessageError::metadata_bendy(e)),
+        };
+        let mut msg_type = None;
+        let mut piece = None;
+        let mut total_size = None;
+        while let Some(kv) = dd.next_pair().map_err(MessageError::metadata_bendy)? {
+            match kv {
+                (b"msg_type", v) => {
+                    msg_type = Some(
+                        u8::decode_bencode_object(v)
+                            .context("msg_type")
+                            .map_err(MessageError::metadata_bendy)?,
+                    );
+                }
+                (b"piece", v) => {
+                    piece = Some(
+                        u32::decode_bencode_object(v)
+                            .context("piece")
+                            .map_err(MessageError::metadata_bendy)?,
+                    );
+                }
+                (b"total_size", v) => {
+                    total_size = Some(
+                        u32::decode_bencode_object(v)
+                            .context("total_size")
+                            .map_err(MessageError::metadata_bendy)?,
+                    );
+                }
+                _ => (),
+            }
+        }
+        let msg_type = match msg_type {
+            Some(msg_type) => msg_type,
+            None => {
+                return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                    "msg_type",
+                )))?
+            }
+        };
+        let piece = match piece {
+            Some(piece) => piece,
+            None => {
+                return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                    "piece",
+                )))?
+            }
+        };
+        let dict_len = dd.into_raw().unwrap().len();
+        match msg_type {
+            0 => {
+                if !matches!(decoder.next_object(), Ok(None)) {
+                    return Err(MessageError::Metadata(UnbencodeError::TrailingData));
+                }
+                Ok(MetadataMessage::Request { piece })
+            }
+            1 => {
+                let total_size = match total_size {
+                    Some(total_size) => total_size,
+                    None => {
+                        return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                            "total_size",
+                        )))?
+                    }
+                };
+                let payload = buf.split_off(dict_len);
+                Ok(MetadataMessage::Data {
+                    piece,
+                    total_size,
+                    payload,
+                })
+            }
+            2 => {
+                if !matches!(decoder.next_object(), Ok(None)) {
+                    return Err(MessageError::Metadata(UnbencodeError::TrailingData));
+                }
+                Ok(MetadataMessage::Reject { piece })
+            }
+            x => Err(MessageError::UnknownMetadata(x)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Error)]
 pub(super) enum MessageError {
     #[error("unknown message type: {0}")]
@@ -136,19 +593,30 @@ pub(super) enum MessageError {
     #[error("unknown extended message ID: {0}")]
     UnknownExtended(u8),
     #[error("unknown metadata message type: {0}")]
-    UnknownMetadata(u32),
+    // NOTE: This error type should be ignored, per BEP 9.
+    UnknownMetadata(u8),
     #[error("failed to decode extended handshake payload")]
     ExtendedHandshake(#[source] UnbencodeError),
     #[error("failed to decode metadata message")]
     Metadata(#[source] UnbencodeError),
 }
 
+impl MessageError {
+    fn metadata_bendy(e: BendyError) -> MessageError {
+        MessageError::Metadata(UnbencodeError::Bendy(e))
+    }
+}
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+#[error("no remote message ID registered for extension \"{0}\"")]
+pub(super) struct MessageEncodeError(Bep10Extension);
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_handshake_tofrom_bytes() {
+    fn test_handshake() {
         let mut buf = BytesMut::new();
         buf.put(b"\x13BitTorrent protocol\x00\x00\x00\x00\x00\x10".as_slice());
         buf.put(b"\x00\x05k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82".as_slice());
@@ -168,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handshake_unknown_ext_tofrom_bytes() {
+    fn test_handshake_unknown_ext() {
         let mut buf = BytesMut::new();
         buf.put(b"\x13BitTorrent protocol\x00\x00\x00\x00\x00\x18".as_slice());
         buf.put(b"\x00\x05k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82".as_slice());
@@ -182,5 +650,137 @@ mod tests {
         );
         assert_eq!(shake.peer_id.as_bytes(), b"-qB4360-5Ngjy9uIMl~O");
         assert_eq!(Bytes::from(shake), buf);
+    }
+
+    #[test]
+    fn test_haveall() {
+        let buf = Bytes::from(b"\x0E".as_slice());
+        assert_eq!(
+            CoreMessage::try_from(buf.clone()).unwrap(),
+            CoreMessage::HaveAll
+        );
+        assert_eq!(Bytes::from(CoreMessage::HaveAll), buf);
+    }
+
+    #[test]
+    fn test_havenone() {
+        let buf = Bytes::from(b"\x0F".as_slice());
+        assert_eq!(
+            CoreMessage::try_from(buf.clone()).unwrap(),
+            CoreMessage::HaveNone
+        );
+        assert_eq!(Bytes::from(CoreMessage::HaveNone), buf);
+    }
+
+    #[test]
+    fn test_port() {
+        let buf = Bytes::from(b"\x09\x88\xB7".as_slice());
+        assert_eq!(
+            CoreMessage::try_from(buf.clone()).unwrap(),
+            CoreMessage::Port { port: 34999 }
+        );
+        assert_eq!(Bytes::from(CoreMessage::Port { port: 34999 }), buf);
+    }
+
+    #[test]
+    fn test_extended() {
+        // ut_pex
+        let buf = Bytes::from(
+            b"\x14\x01d5:added12:V`\\\xe5\xc8\xd5\xb2\x9b\x8b\xa8\x88\xb77:added.f2:\x10\x10e"
+                .as_slice(),
+        );
+        let msg = CoreMessage::Extended {
+            msg_id: 1,
+            payload: Bytes::from(
+                b"d5:added12:V`\\\xe5\xc8\xd5\xb2\x9b\x8b\xa8\x88\xb77:added.f2:\x10\x10e"
+                    .as_slice(),
+            ),
+        };
+        assert_eq!(CoreMessage::try_from(buf.clone()).unwrap(), msg);
+        assert_eq!(Bytes::from(msg), buf);
+    }
+
+    #[test]
+    fn test_decode_extended_handshake() {
+        let registry = Bep10Registry::new();
+        let mut buf = BytesMut::new();
+        buf.put(b"\x14\x00d12:complete_agoi1441e1:".as_slice());
+        buf.put(b"md11:lt_donthavei7e10:share_modei8e11:upload_onl".as_slice());
+        buf.put(b"yi3e12:ut_holepunchi4e11:ut_metadatai2e6:ut_pexi".as_slice());
+        buf.put(b"1ee13:metadata_sizei5436e4:reqqi500e11:upload_on".as_slice());
+        buf.put(b"lyi1e1:v17:qBittorrent/4.3.66:yourip4:\x99\xa2D".as_slice());
+        buf.put(b"\x9be".as_slice());
+        let buf = buf.freeze();
+        let msg = Message::decode(buf, &registry).unwrap();
+        assert_eq!(
+            msg,
+            Message::Extended(ExtendedMessage::Handshake(ExtendedHandshake {
+                m: Some(BTreeMap::from([
+                    ("lt_donthave".into(), 7),
+                    ("share_mode".into(), 8),
+                    ("upload_only".into(), 3),
+                    ("ut_holepunch".into(), 4),
+                    ("ut_metadata".into(), 2),
+                    ("ut_pex".into(), 1),
+                ])),
+                v: Some("qBittorrent/4.3.6".into()),
+                metadata_size: Some(5436),
+            }))
+        );
+        let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
+            unreachable!();
+        };
+        let mut their_registry = Bep10Registry::new();
+        their_registry
+            .register(Bep10Extension::Metadata, 2)
+            .unwrap();
+        assert_eq!(msg.into_bep10_registry(), Ok(their_registry));
+    }
+
+    #[test]
+    fn test_encode_extended_handshake() {
+        let mut registry = Bep10Registry::new();
+        registry.register(Bep10Extension::Metadata, 23).unwrap();
+        let msg = Message::Extended(ExtendedMessage::Handshake(ExtendedHandshake {
+            m: Some(registry.to_m()),
+            v: Some("omicron-torrent v1.2.3".into()),
+            metadata_size: None,
+        }));
+        let buf = Bytes::from(
+            b"\x14\x00d1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.3e".as_slice(),
+        );
+        assert_eq!(msg.encode(&Bep10Registry::new()).unwrap(), buf);
+    }
+
+    #[test]
+    fn test_metadata_request() {
+        let mut registry = Bep10Registry::new();
+        registry.register(Bep10Extension::Metadata, 3).unwrap();
+        let buf = Bytes::from(b"\x14\x03d8:msg_typei0e5:piecei0ee".as_slice());
+        let msg = Message::decode(buf.clone(), &registry).unwrap();
+        assert_eq!(
+            msg,
+            Message::Extended(ExtendedMessage::Metadata(MetadataMessage::Request {
+                piece: 0
+            }))
+        );
+        assert_eq!(msg.encode(&registry).unwrap(), buf);
+    }
+
+    #[test]
+    fn test_metadata_data() {
+        let mut registry = Bep10Registry::new();
+        registry.register(Bep10Extension::Metadata, 3).unwrap();
+        let buf = Bytes::from(b"\x14\x03d8:msg_typei1e5:piecei0e10:total_sizei5436eed5:filesld6:lengthi267661684e4:pathl72:...".as_slice());
+        let msg = Message::decode(buf.clone(), &registry).unwrap();
+        assert_eq!(
+            msg,
+            Message::Extended(ExtendedMessage::Metadata(MetadataMessage::Data {
+                piece: 0,
+                total_size: 5436,
+                payload: Bytes::from(b"d5:filesld6:lengthi267661684e4:pathl72:...".as_slice())
+            }))
+        );
+        assert_eq!(msg.encode(&registry).unwrap(), buf);
     }
 }

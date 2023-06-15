@@ -2,11 +2,13 @@ mod messages;
 use crate::types::PeerId;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::Bytes;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Peer {
@@ -194,6 +196,110 @@ impl FromIterator<Extension> for ExtensionSet {
         }
         ExtensionSet(value)
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Bep10Extension {
+    Metadata, // BEP 9
+              //Pex,      // BEP 11
+              //Holepunch,  // BEP 55
+}
+
+impl FromStr for Bep10Extension {
+    type Err = Bep10Error;
+
+    fn from_str(s: &str) -> Result<Bep10Extension, Bep10Error> {
+        match s {
+            "ut_metadata" => Ok(Bep10Extension::Metadata),
+            //"ut_pex" => Ok(Bep10Extension::Pex),
+            _ => Err(Bep10Error),
+        }
+    }
+}
+
+impl fmt::Display for Bep10Extension {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Bep10Extension::Metadata => write!(f, "ut_metadata"),
+            //Bep10Extension::Pex => write!(f, "ut_pex"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+#[error("unknown extension dict key")]
+pub(crate) struct Bep10Error;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Bep10Registry {
+    to_code: HashMap<Bep10Extension, u8>,
+    from_code: HashMap<u8, Bep10Extension>,
+}
+
+impl Bep10Registry {
+    fn new() -> Bep10Registry {
+        Bep10Registry {
+            to_code: HashMap::new(),
+            from_code: HashMap::new(),
+        }
+    }
+
+    fn from_m(m: BTreeMap<String, u8>) -> Result<Bep10Registry, Bep10RegistryError> {
+        let mut registry = Bep10Registry::new();
+        for (k, v) in m {
+            if let Ok(ext) = k.parse::<Bep10Extension>() {
+                registry.register(ext, v)?;
+            }
+        }
+        Ok(registry)
+    }
+
+    fn to_m(&self) -> BTreeMap<String, u8> {
+        let mut m = BTreeMap::new();
+        for (&ext, &code) in &self.to_code {
+            m.insert(ext.to_string(), code);
+        }
+        m
+    }
+
+    fn contains(&self, ext: Bep10Extension) -> bool {
+        self.to_code.contains_key(&ext)
+    }
+
+    fn get_message_id(&self, ext: Bep10Extension) -> Option<u8> {
+        self.to_code.get(&ext).copied()
+    }
+
+    fn for_message_id(&self, code: u8) -> Option<Bep10Extension> {
+        self.from_code.get(&code).copied()
+    }
+
+    fn register(&mut self, ext: Bep10Extension, code: u8) -> Result<(), Bep10RegistryError> {
+        if code == 0 {
+            return Err(Bep10RegistryError::Handshake);
+        }
+        if self.from_code.contains_key(&code) {
+            return Err(Bep10RegistryError::Code(code));
+        }
+        if self.to_code.contains_key(&ext) {
+            return Err(Bep10RegistryError::Ext(ext));
+        }
+        let _prev_ext = self.from_code.insert(code, ext);
+        debug_assert!(_prev_ext.is_none());
+        let _prev_code = self.to_code.insert(ext, code);
+        debug_assert!(_prev_code.is_none());
+        Ok(())
+    }
+}
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+pub(crate) enum Bep10RegistryError {
+    #[error("extended message ID 0 listed in \"m\"")]
+    Handshake,
+    #[error("extended message ID {0} listed in \"m\" more than once")]
+    Code(u8),
+    #[error("extension {0} listed in \"m\" more than once")]
+    Ext(Bep10Extension),
 }
 
 #[cfg(test)]
