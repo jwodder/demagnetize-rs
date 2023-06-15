@@ -484,7 +484,7 @@ impl From<MetadataMessage> for Bytes {
             .expect("Encoding should not fail");
         let mut buf = encoder.get_output().expect("Encoding should not fail");
         if let MetadataMessage::Data { payload, .. } = msg {
-            buf.extend(&payload);
+            buf.extend(payload);
         }
         Bytes::from(buf)
     }
