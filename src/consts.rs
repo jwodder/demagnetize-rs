@@ -19,3 +19,6 @@ pub(crate) static PEER_ID_PREFIX: &str = "-DM-0010-";
 /// Size of buffer for receiving incoming UDP packets.  Any packets longer than
 /// this are truncated.
 pub(crate) const UDP_PACKET_LEN: usize = 65535;
+
+/// Maximum metadata size to accept
+pub(crate) const MAX_INFO_LENGTH: usize = 20 << 20; // 20 MiB

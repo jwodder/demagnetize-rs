@@ -2,6 +2,7 @@
 mod asyncutil;
 mod consts;
 mod peer;
+mod torrent;
 mod tracker;
 mod types;
 mod util;
