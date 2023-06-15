@@ -1,4 +1,6 @@
-use super::{Bep10Extension, Bep10Registry, Bep10RegistryError, Extension, ExtensionSet};
+use super::extensions::{
+    Bep10Extension, Bep10Registry, Bep10RegistryError, Extension, ExtensionSet,
+};
 use crate::types::{InfoHash, PeerId};
 use crate::util::{decode_bencode, PacketError, TryBytes, UnbencodeError};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
