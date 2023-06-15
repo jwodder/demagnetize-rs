@@ -105,6 +105,13 @@ impl Message {
             }
         }
     }
+
+    pub(super) fn can_be_ignored(&self) -> bool {
+        match self {
+            Message::Core(msg) => msg.can_be_ignored(),
+            Message::Extended(msg) => msg.can_be_ignored(),
+        }
+    }
 }
 
 impl fmt::Display for Message {
@@ -139,6 +146,27 @@ pub(super) enum CoreMessage {
     AllowedFast { index: u32 },
     // BEP 10:
     Extended { msg_id: u8, payload: Bytes },
+}
+
+impl CoreMessage {
+    fn can_be_ignored(&self) -> bool {
+        use CoreMessage::*;
+        matches!(
+            self,
+            Keepalive
+                | Choke
+                | Unchoke
+                | Interested
+                | NotInterested
+                | Have { .. }
+                | Bitfield(_)
+                | Piece { .. }
+                | HaveAll
+                | HaveNone
+                | AllowedFast { .. }
+                | Suggest { .. }
+        )
+    }
 }
 
 impl fmt::Display for CoreMessage {
@@ -427,6 +455,16 @@ impl ExtendedMessage {
             }
         }
     }
+
+    fn can_be_ignored(&self) -> bool {
+        match self {
+            // It's valid for a peer to send an extended handshake more than
+            // once, and it's valid for us to ignore subsequent handshakes, so
+            // that's what we'll do.
+            ExtendedMessage::Handshake(_) => true,
+            ExtendedMessage::Metadata(msg) => msg.can_be_ignored(),
+        }
+    }
 }
 
 impl fmt::Display for ExtendedMessage {
@@ -557,6 +595,16 @@ pub(super) enum MetadataMessage {
     Reject {
         piece: u32,
     },
+    // To be ignored on receipt, per BEP 9; not sent
+    Unknown {
+        msg_type: u8,
+    },
+}
+
+impl MetadataMessage {
+    fn can_be_ignored(&self) -> bool {
+        matches!(self, MetadataMessage::Unknown { .. })
+    }
 }
 
 impl fmt::Display for MetadataMessage {
@@ -573,6 +621,9 @@ impl fmt::Display for MetadataMessage {
                 payload.len()
             ),
             MetadataMessage::Reject { piece } => write!(f, "metadata reject: piece {piece}"),
+            MetadataMessage::Unknown { msg_type } => {
+                write!(f, "metadata: unknown message type {msg_type}")
+            }
         }
     }
 }
@@ -597,6 +648,9 @@ impl From<MetadataMessage> for Bytes {
                     MetadataMessage::Reject { piece } => {
                         e.emit_pair(b"msg_type", 2)?;
                         e.emit_pair(b"piece", piece)?;
+                    }
+                    MetadataMessage::Unknown { msg_type } => {
+                        e.emit_pair(b"msg_type", msg_type)?;
                     }
                 }
                 Ok(())
@@ -698,8 +752,7 @@ impl TryFrom<Bytes> for MetadataMessage {
                 }
                 Ok(MetadataMessage::Reject { piece })
             }
-            // TODO: Return an `Unknown` variant instead?
-            x => Err(MessageError::UnknownMetadata(x)),
+            _ => Ok(MetadataMessage::Unknown { msg_type }),
         }
     }
 }
@@ -713,9 +766,6 @@ pub(super) enum MessageError {
     Length(#[from] PacketError),
     #[error("unknown extended message ID: {0}")]
     UnknownExtended(u8),
-    #[error("unknown metadata message type: {0}")]
-    // NOTE: This error type should be ignored, per BEP 9.
-    UnknownMetadata(u8),
     #[error("failed to decode extended handshake payload")]
     ExtendedHandshake(#[source] UnbencodeError),
     #[error("failed to decode metadata message")]
