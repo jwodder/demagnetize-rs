@@ -126,6 +126,18 @@ impl fmt::Display for Message {
     }
 }
 
+impl From<ExtendedHandshake> for Message {
+    fn from(shake: ExtendedHandshake) -> Message {
+        Message::Extended(ExtendedMessage::Handshake(shake))
+    }
+}
+
+impl From<MetadataMessage> for Message {
+    fn from(msg: MetadataMessage) -> Message {
+        Message::Extended(ExtendedMessage::Metadata(msg))
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum CoreMessage {
     // BEP 3:
@@ -897,7 +909,7 @@ mod tests {
         let msg = Message::decode(buf, &registry).unwrap();
         assert_eq!(
             msg,
-            Message::Extended(ExtendedMessage::Handshake(ExtendedHandshake {
+            Message::from(ExtendedHandshake {
                 m: Some(BTreeMap::from([
                     ("lt_donthave".into(), 7),
                     ("share_mode".into(), 8),
@@ -908,7 +920,7 @@ mod tests {
                 ])),
                 v: Some("qBittorrent/4.3.6".into()),
                 metadata_size: Some(5436),
-            }))
+            })
         );
         assert_eq!(msg.to_string(), "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436");
         let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
@@ -925,11 +937,11 @@ mod tests {
     fn test_encode_extended_handshake() {
         let mut registry = Bep10Registry::new();
         registry.register(Bep10Extension::Metadata, 23).unwrap();
-        let msg = Message::Extended(ExtendedMessage::Handshake(ExtendedHandshake {
+        let msg = Message::from(ExtendedHandshake {
             m: Some(registry.to_m()),
             v: Some("omicron-torrent v1.2.3".into()),
             metadata_size: None,
-        }));
+        });
         let buf = Bytes::from(
             b"\x14\x00d1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.3e".as_slice(),
         );
@@ -942,12 +954,7 @@ mod tests {
         registry.register(Bep10Extension::Metadata, 3).unwrap();
         let buf = Bytes::from(b"\x14\x03d8:msg_typei0e5:piecei0ee".as_slice());
         let msg = Message::decode(buf.clone(), &registry).unwrap();
-        assert_eq!(
-            msg,
-            Message::Extended(ExtendedMessage::Metadata(MetadataMessage::Request {
-                piece: 0
-            }))
-        );
+        assert_eq!(msg, Message::from(MetadataMessage::Request { piece: 0 }));
         assert_eq!(msg.to_string(), "metadata request: piece 0");
         assert_eq!(msg.encode(&registry).unwrap(), buf);
     }
@@ -960,11 +967,11 @@ mod tests {
         let msg = Message::decode(buf.clone(), &registry).unwrap();
         assert_eq!(
             msg,
-            Message::Extended(ExtendedMessage::Metadata(MetadataMessage::Data {
+            Message::from(MetadataMessage::Data {
                 piece: 0,
                 total_size: 5436,
                 payload: Bytes::from(b"d5:filesld6:lengthi267661684e4:pathl72:...".as_slice())
-            }))
+            })
         );
         assert_eq!(
             msg.to_string(),

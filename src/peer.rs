@@ -80,11 +80,11 @@ impl Peer {
                 .unwrap();
             registry
         };
-        let msg = Message::Extended(ExtendedMessage::Handshake(ExtendedHandshake {
+        let msg = Message::from(ExtendedHandshake {
             m: Some(local_registry.to_m()),
             v: Some(CLIENT.into()),
             metadata_size: None,
-        }));
+        });
         let mut channel = MessageChannel::new(self, s, local_registry);
         channel.send(msg).await?;
         let msg = channel.recv().await?;
@@ -265,9 +265,7 @@ impl<'a> PeerConnection<'a> {
         };
         let mut piecer = TorrentInfoBuilder::new(self.info_hash.clone(), metadata_size)?;
         while let Some(i) = piecer.next_piece() {
-            let msg = Message::Extended(ExtendedMessage::Metadata(MetadataMessage::Request {
-                piece: i,
-            }));
+            let msg = Message::from(MetadataMessage::Request { piece: i });
             self.channel.send(msg).await?;
             loop {
                 let msg = self.channel.recv().await?;
@@ -307,9 +305,7 @@ impl<'a> PeerConnection<'a> {
                                 "Rejecting request for metadata info piece {piece} from {}",
                                 self.channel.peer
                             );
-                            let msg = Message::Extended(ExtendedMessage::Metadata(
-                                MetadataMessage::Reject { piece },
-                            ));
+                            let msg = Message::from(MetadataMessage::Reject { piece });
                             self.channel.send(msg).await?;
                         }
                         MetadataMessage::Unknown { .. } => (),
