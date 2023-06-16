@@ -18,6 +18,7 @@ anstream = "0.3.2"
 anstyle = "1.0.0"
 bendy = "0.3.3"
 bytes = "1.4.0"
+chrono = "0.4.26"
 clap = { version = "4.3.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.4.0"
 fern = "0.6.2"

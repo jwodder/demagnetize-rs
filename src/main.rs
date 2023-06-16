@@ -125,8 +125,9 @@ fn init_logging(log_level: LevelFilter) {
                 Level::Trace => Style::new().fg_color(Some(Green.into())),
             };
             out.finish(format_args!(
-                "{}[{:<5}] {}{}",
+                "{}{} [{:<5}] {}{}",
                 style.render(),
+                chrono::Local::now().format("%H:%M:%S"),
                 record.level(),
                 message,
                 style.render_reset(),
