@@ -6,8 +6,10 @@ use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::iter::{repeat, Peekable};
 use std::ops::Range;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -178,6 +180,85 @@ impl From<TorrentFile> for Bytes {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PathTemplate(Vec<TemplateElement>);
+
+impl PathTemplate {
+    pub(crate) fn format(&self, name: &str, info_hash: &InfoHash) -> String {
+        let mut buf = String::new();
+        for elem in &self.0 {
+            match elem {
+                TemplateElement::Literal(s) => buf.push_str(s),
+                TemplateElement::Name => buf.push_str(name),
+                TemplateElement::Hash => write!(buf, "{info_hash}").unwrap(),
+            }
+        }
+        buf
+    }
+}
+
+impl FromStr for PathTemplate {
+    type Err = PathTemplateError;
+
+    fn from_str(s: &str) -> Result<PathTemplate, PathTemplateError> {
+        let mut elems = Vec::new();
+        let mut buf = String::new();
+        let mut brace_iter = s.match_indices('{');
+        let mut prev_end = 0;
+        while let Some((i, _)) = brace_iter.next() {
+            debug_assert!(prev_end <= i);
+            buf.push_str(&s[prev_end..i]);
+            match s[i..]
+                .char_indices()
+                .skip(1)
+                .find(|&(_, ch)| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            {
+                Some((1, '{')) => {
+                    buf.push('{');
+                    let _ = brace_iter.next();
+                    prev_end = i + 2;
+                }
+                Some((j, '}')) => {
+                    if !buf.is_empty() {
+                        elems.push(TemplateElement::Literal(buf.replace("}}", "}")));
+                        buf.clear();
+                    }
+                    match &s[(i + 1)..(i + j)] {
+                        "name" => elems.push(TemplateElement::Name),
+                        "hash" => elems.push(TemplateElement::Hash),
+                        field => return Err(PathTemplateError::UnknownField(field.into())),
+                    }
+                    prev_end = i + j + 1;
+                }
+                Some(_) => return Err(PathTemplateError::InvalidField(i)),
+                None => return Err(PathTemplateError::Unmatched(i)),
+            }
+        }
+        buf.push_str(&s[prev_end..]);
+        if !buf.is_empty() {
+            elems.push(TemplateElement::Literal(buf.replace("}}", "}")));
+        }
+        Ok(PathTemplate(elems))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TemplateElement {
+    Literal(String),
+    Name,
+    Hash,
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub(crate) enum PathTemplateError {
+    #[error("unmatched brace at byte index {0}")]
+    Unmatched(usize),
+    #[error("malformed placeholder at byte index {0}")]
+    InvalidField(usize),
+    #[error("unknown placeholder {0:?}")]
+    UnknownField(String),
+}
+
 fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
     let mut decoder = Decoder::new(buf);
     match decoder.next_object() {
@@ -324,5 +405,75 @@ mod tests {
         let buf = Bytes::from(torrent);
         assert_eq!(buf, b"d13:announce-listll40:http://tracker.example.com:8080/announceel27:udp://bits.example.net:9001ee10:created by16:demagnetize vDEV13:creation datei1686939764e4:infod6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000ee".as_slice());
         check_bencode_dict(&buf).unwrap();
+    }
+
+    #[test]
+    fn test_path_template() {
+        let template = "Torrent-{name}-{hash}.torrent"
+            .parse::<PathTemplate>()
+            .unwrap();
+        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+            .parse::<InfoHash>()
+            .unwrap();
+        assert_eq!(
+            template.format("My Test Torrent", &info_hash),
+            "Torrent-My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
+        );
+    }
+
+    #[test]
+    fn test_path_template_escaped_braces() {
+        let template = "Torrent-{{{name}}}-{hash}.torrent"
+            .parse::<PathTemplate>()
+            .unwrap();
+        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+            .parse::<InfoHash>()
+            .unwrap();
+        assert_eq!(
+            template.format("My Test Torrent", &info_hash),
+            "Torrent-{My Test Torrent}-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
+        );
+    }
+
+    #[test]
+    fn test_path_template_no_leading_or_trailing_literals() {
+        let template = "{name}-{hash}".parse::<PathTemplate>().unwrap();
+        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+            .parse::<InfoHash>()
+            .unwrap();
+        assert_eq!(
+            template.format("My Test Torrent", &info_hash),
+            "My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9"
+        );
+    }
+
+    #[test]
+    fn test_path_template_unmatched() {
+        let e = "torrent={name".parse::<PathTemplate>().unwrap_err();
+        assert_eq!(e, PathTemplateError::Unmatched(8));
+        assert_eq!(e.to_string(), "unmatched brace at byte index 8");
+    }
+
+    #[test]
+    fn test_path_template_nested_field() {
+        let e = "{name{hash}torrent}".parse::<PathTemplate>().unwrap_err();
+        assert_eq!(e, PathTemplateError::InvalidField(0));
+        assert_eq!(e.to_string(), "malformed placeholder at byte index 0");
+    }
+
+    #[test]
+    fn test_path_template_invalid_field() {
+        let e = "torrent={name+hash}".parse::<PathTemplate>().unwrap_err();
+        assert_eq!(e, PathTemplateError::InvalidField(8));
+        assert_eq!(e.to_string(), "malformed placeholder at byte index 8");
+    }
+
+    #[test]
+    fn test_path_template_unknown_field() {
+        let e = "torrent={tracker}.torrent"
+            .parse::<PathTemplate>()
+            .unwrap_err();
+        assert_eq!(e, PathTemplateError::UnknownField("tracker".into()));
+        assert_eq!(e.to_string(), "unknown placeholder \"tracker\"");
     }
 }
