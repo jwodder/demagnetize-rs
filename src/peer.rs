@@ -47,6 +47,7 @@ impl Peer {
         info_hash: &'a InfoHash,
         local: &LocalPeer,
     ) -> Result<PeerConnection<'a>, PeerError> {
+        log::debug!("Connecting to {self}");
         let mut s = match timeout(PEER_CONNECT_TIMEOUT, TcpStream::connect(&self.address)).await {
             Ok(Ok(s)) => s,
             Ok(Err(e)) => return Err(PeerError::Connect(e)),
