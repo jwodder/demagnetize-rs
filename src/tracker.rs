@@ -187,7 +187,7 @@ impl<'a> TrackerSession<'a> {
     }
 }
 
-#[derive(Debug, Error, Eq, PartialEq)]
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub(crate) enum TrackerUrlError {
     #[error("invalid tracker URL")]
     Url(#[from] url::ParseError),

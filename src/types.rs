@@ -82,7 +82,7 @@ impl TryFromBuf for InfoHash {
     }
 }
 
-#[derive(Debug, Eq, Error, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Error, PartialEq)]
 pub(crate) enum InfoHashError {
     #[error("info hash is invalid hexadecimal")]
     InvalidHex(#[source] DecodeError),
@@ -269,7 +269,7 @@ impl FromStr for Magnet {
     }
 }
 
-#[derive(Debug, Eq, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub(crate) enum MagnetError {
     #[error("invalid magnet URI")]
     Url(#[from] url::ParseError),
@@ -297,7 +297,7 @@ fn parse_xt(xt: &str) -> Result<InfoHash, XtError> {
     Ok(s.parse::<InfoHash>()?)
 }
 
-#[derive(Debug, Eq, Error, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Error, PartialEq)]
 pub(crate) enum XtError {
     #[error("\"xt\" parameter is not a URN")]
     NotUrn,
