@@ -4,14 +4,17 @@ use crate::types::InfoHash;
 use bendy::decoding::{Decoder, Object};
 use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
+use patharg::OutputArg;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::iter::{repeat, Peekable};
 use std::ops::Range;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use tokio::fs::create_dir_all;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TorrentInfo {
@@ -146,6 +149,23 @@ impl TorrentFile {
             creation_date: unix_now(),
             info,
         }
+    }
+
+    pub(crate) async fn save(self, template: &PathTemplate) -> std::io::Result<()> {
+        let name = sanitize(self.info.name().as_deref().unwrap_or("NONAME"));
+        let path = OutputArg::from_arg(template.format(&name, &self.info.info_hash));
+        log::info!(
+            "Saving torrent for info hash {} to file {}",
+            self.info.info_hash,
+            path
+        );
+        if let Some(parent) = path.path_ref().and_then(|p| p.parent()) {
+            if parent != Path::new("") {
+                create_dir_all(parent).await?;
+            }
+        }
+        let buf = Bytes::from(self);
+        path.async_write(buf).await
     }
 }
 
@@ -284,6 +304,19 @@ fn unix_now() -> i64 {
             .map(|i| -i)
             .unwrap_or(i64::MIN),
     }
+}
+
+fn sanitize(s: &str) -> String {
+    static PRINTABLE_UNSANITARY: &str = "/\\<>:|\"?*";
+    s.chars()
+        .map(|ch| {
+            if ch < ' ' || PRINTABLE_UNSANITARY.contains(ch) {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect()
 }
 
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
