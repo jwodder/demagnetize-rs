@@ -8,11 +8,13 @@ mod types;
 mod util;
 use crate::asyncutil::received_stream;
 use crate::consts::NUMWANT;
+use crate::peer::Peer;
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, LocalPeer};
 use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
+use bytes::Bytes;
 use clap::{Parser, Subcommand};
 use futures::stream::StreamExt;
 use log::{Level, LevelFilter};
@@ -50,6 +52,10 @@ enum Command {
         tracker: Tracker,
         info_hash: InfoHash,
     },
+    QueryPeer {
+        peer: Peer,
+        info_hash: InfoHash,
+    },
 }
 
 impl Command {
@@ -75,6 +81,26 @@ impl Command {
                     ExitCode::SUCCESS
                 } else {
                     ExitCode::FAILURE
+                }
+            }
+            Command::QueryPeer { peer, info_hash } => {
+                let local = LocalPeer::generate(rand::thread_rng());
+                // TODO: Log local details?
+                match peer.get_metadata_info(&info_hash, &local).await {
+                    Ok(info) => {
+                        let filename = format!("{info_hash}.bencode");
+                        log::info!("Saving info to {filename}");
+                        if let Err(e) = std::fs::write(filename, Bytes::from(info)) {
+                            log::error!("Failed to write to file: {}", ErrorChain(e));
+                            ExitCode::FAILURE
+                        } else {
+                            ExitCode::SUCCESS
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
+                        ExitCode::FAILURE
+                    }
                 }
             }
         }

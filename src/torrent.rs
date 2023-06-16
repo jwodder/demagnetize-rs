@@ -32,6 +32,12 @@ impl TorrentInfo {
     }
 }
 
+impl From<TorrentInfo> for Bytes {
+    fn from(info: TorrentInfo) -> Bytes {
+        info.data
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct TorrentInfoBuilder {
     info_hash: InfoHash,
