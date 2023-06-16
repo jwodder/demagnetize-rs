@@ -21,6 +21,9 @@ const ERROR_ACTION: u32 = 3;
 pub(crate) struct UdpTracker(Url);
 
 impl UdpTracker {
+    pub(crate) fn url_str(&self) -> &str {
+        self.0.as_str()
+    }
     pub(super) async fn connect(&self) -> Result<UdpTrackerSession<'_>, TrackerError> {
         let host = self
             .0

@@ -21,6 +21,13 @@ pub(crate) enum Tracker {
 }
 
 impl Tracker {
+    pub(crate) fn url_str(&self) -> &str {
+        match self {
+            Tracker::Http(tr) => tr.url_str(),
+            Tracker::Udp(tr) => tr.url_str(),
+        }
+    }
+
     pub(crate) async fn get_peers(
         &self,
         info_hash: &InfoHash,

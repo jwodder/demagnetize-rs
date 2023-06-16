@@ -20,6 +20,10 @@ static USER_AGENT: &str = concat!(
 pub(crate) struct HttpTracker(Url);
 
 impl HttpTracker {
+    pub(crate) fn url_str(&self) -> &str {
+        self.0.as_str()
+    }
+
     pub(super) async fn connect(&self) -> Result<HttpTrackerSession<'_>, TrackerError> {
         let client = Client::builder()
             .user_agent(USER_AGENT)

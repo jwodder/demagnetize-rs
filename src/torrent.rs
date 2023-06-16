@@ -1,11 +1,14 @@
-use crate::consts::MAX_INFO_LENGTH;
+use crate::consts::{CLIENT, MAX_INFO_LENGTH};
+use crate::tracker::Tracker;
 use crate::types::InfoHash;
 use bendy::decoding::{Decoder, Object};
-use bytes::{Bytes, BytesMut};
+use bendy::encoding::ToBencode;
+use bytes::{BufMut, Bytes, BytesMut};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::iter::{repeat, Peekable};
 use std::ops::Range;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -125,6 +128,56 @@ impl TorrentInfoBuilder {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TorrentFile {
+    info: TorrentInfo,
+    trackers: Vec<Tracker>,
+    creation_date: i64,
+    created_by: String,
+}
+
+impl TorrentFile {
+    pub(crate) fn new(info: TorrentInfo, trackers: Vec<Tracker>) -> TorrentFile {
+        TorrentFile {
+            trackers,
+            created_by: CLIENT.into(),
+            creation_date: unix_now(),
+            info,
+        }
+    }
+}
+
+macro_rules! put_kv {
+    ($buf:ident, $key:literal, $value:expr) => {
+        $buf.put($key.to_bencode().unwrap().as_slice());
+        $buf.put($value.to_bencode().unwrap().as_slice());
+    };
+}
+
+impl From<TorrentFile> for Bytes {
+    fn from(torrent: TorrentFile) -> Bytes {
+        let mut buf = BytesMut::new();
+        buf.put_u8(b'd');
+        if !torrent.trackers.is_empty() {
+            put_kv!(
+                buf,
+                "announce-list",
+                torrent
+                    .trackers
+                    .into_iter()
+                    .map(|tr| vec![tr.url_str().to_string()])
+                    .collect::<Vec<Vec<String>>>()
+            );
+        }
+        put_kv!(buf, "created by", torrent.created_by);
+        put_kv!(buf, "creation date", torrent.creation_date);
+        buf.put("info".to_bencode().unwrap().as_slice());
+        buf.put(Bytes::from(torrent.info));
+        buf.put_u8(b'e');
+        buf.freeze()
+    }
+}
+
 fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
     let mut decoder = Decoder::new(buf);
     match decoder.next_object() {
@@ -141,6 +194,15 @@ fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
         return Err(BencodeDictError::Trailing);
     }
     Ok(())
+}
+
+fn unix_now() -> i64 {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
+        Err(e) => i64::try_from(e.duration().as_secs())
+            .map(|i| -i)
+            .unwrap_or(i64::MIN),
+    }
 }
 
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
@@ -189,6 +251,12 @@ mod tests {
     use bytes::BufMut;
 
     #[test]
+    fn test_check_good_bencode_dict() {
+        let buf = Bytes::from(b"d3:foo3:bar3:keyi42ee".as_slice());
+        assert_eq!(check_bencode_dict(&buf), Ok(()));
+    }
+
+    #[test]
     fn test_check_invalid_bencode() {
         let buf = Bytes::from(b"d3:keyi42e8:no valuee".as_slice());
         assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Syntax));
@@ -234,5 +302,27 @@ mod tests {
         assert_eq!(builder.next_piece(), None);
         let info = builder.build().unwrap();
         assert_eq!(info.name(), Some(Cow::from("My Test Torrent")));
+    }
+
+    #[test]
+    fn test_torrent_file_into_bytes() {
+        let info = TorrentInfo {
+            info_hash: "ddbf90f0d41c8f91a555192279845bc45e530ec9".parse::<InfoHash>().unwrap(),
+            data: Bytes::from(b"d6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000e".as_slice()),
+        };
+        let torrent = TorrentFile {
+            info,
+            trackers: vec![
+                "http://tracker.example.com:8080/announce"
+                    .parse::<Tracker>()
+                    .unwrap(),
+                "udp://bits.example.net:9001".parse::<Tracker>().unwrap(),
+            ],
+            creation_date: 1686939764,
+            created_by: "demagnetize vDEV".into(),
+        };
+        let buf = Bytes::from(torrent);
+        assert_eq!(buf, b"d13:announce-listll40:http://tracker.example.com:8080/announceel27:udp://bits.example.net:9001ee10:created by16:demagnetize vDEV13:creation datei1686939764e4:infod6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000ee".as_slice());
+        check_bencode_dict(&buf).unwrap();
     }
 }
