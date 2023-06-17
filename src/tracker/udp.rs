@@ -116,7 +116,7 @@ impl UdpTrackerSession {
     async fn get_connection(&self) -> Result<Connection, TrackerError> {
         let mut cell = self.conn.lock().await;
         match cell.take() {
-            Some(c) if c.expiration < Instant::now() => Ok(c),
+            Some(c) if Instant::now() < c.expiration => Ok(c),
             _ => {
                 let conn = self.connect().await?;
                 *cell = Some(conn);
