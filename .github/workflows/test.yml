@@ -1,0 +1,120 @@
+name: Test
+
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+  pull_request:
+  schedule:
+    - cron: '0 12 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        toolchain:
+          - minimal
+          - stable
+          - beta
+          - nightly
+        include:
+          - os: macos-latest
+            toolchain: stable
+          - os: windows-latest
+            toolchain: stable
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        if: matrix.toolchain != 'minimal'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Determine minimal supported Rust
+        if: matrix.toolchain == 'minimal'
+        id: minimal-version
+        run: |
+          rust_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].rust_version')"
+          echo "msrv=$rust_version" >> "$GITHUB_OUTPUT"
+
+      - name: Install minimal supported Rust
+        if: matrix.toolchain == 'minimal'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.minimal-version.outputs.msrv }}
+
+      - name: Activate cache
+        if: github.actor != 'dependabot[bot]'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build crate
+        run: cargo build --all-targets --verbose
+
+      - name: Test crate
+        run: cargo test --verbose
+
+  coverage:
+    # This is separate from the main tests because cargo-llvm-cov doesn't run
+    # doctests.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Activate cache
+        if: github.actor != 'dependabot[bot]'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Test with coverage
+        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Activate cache
+        if: github.actor != 'dependabot[bot]'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check code
+        run: cargo clippy --all-features --all-targets -- -Dwarnings
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+# vim:set et sts=2:
