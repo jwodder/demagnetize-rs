@@ -1,7 +1,10 @@
 use futures::future::{maybe_done, MaybeDone};
+use futures::ready;
 use futures::stream::Stream;
 use pin_project_lite::pin_project;
+use std::collections::HashSet;
 use std::future::Future;
+use std::hash::Hash;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -12,7 +15,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 ///
 /// If the stream is dropped before completion, the async procedure (which may
 /// or may not have completed by that point) is dropped as well.
-pub fn received_stream<F, Fut, T>(buffer: usize, f: F) -> ReceivedStream<Fut, T>
+pub(crate) fn received_stream<F, Fut, T>(buffer: usize, f: F) -> ReceivedStream<Fut, T>
 where
     F: FnOnce(Sender<T>) -> Fut,
     Fut: Future<Output = ()>,
@@ -26,7 +29,7 @@ where
 }
 
 pin_project! {
-    pub struct ReceivedStream<Fut, T> where Fut: Future {
+    pub(crate) struct ReceivedStream<Fut, T> where Fut: Future {
         #[pin]
         future: MaybeDone<Fut>,
         receiver: Option<Receiver<T>>,
@@ -65,10 +68,65 @@ where
     }
 }
 
+pub(crate) trait UniqueExt: Stream {
+    fn unique(self) -> UniqueStream<Self>
+    where
+        Self: Sized,
+        Self::Item: Eq + Hash + Clone,
+    {
+        UniqueStream::new(self)
+    }
+}
+
+impl<S: Stream> UniqueExt for S {}
+
+pin_project! {
+    #[derive(Clone, Debug)]
+    #[must_use = "streams do nothing unless polled"]
+    pub(crate) struct UniqueStream<S: Stream> {
+        #[pin]
+        inner: S,
+        seen: HashSet<S::Item>,
+    }
+}
+
+impl<S: Stream> UniqueStream<S> {
+    fn new(inner: S) -> Self
+    where
+        S::Item: Eq + Hash,
+    {
+        UniqueStream {
+            inner,
+            seen: HashSet::new(),
+        }
+    }
+}
+
+impl<S: Stream> Stream for UniqueStream<S>
+where
+    S::Item: Eq + Hash + Clone,
+{
+    type Item = S::Item;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<S::Item>> {
+        let mut this = self.project();
+        loop {
+            match ready!(this.inner.as_mut().poll_next(cx)) {
+                Some(value) => {
+                    if this.seen.insert(value.clone()) {
+                        return Some(value).into();
+                    }
+                }
+                None => return None.into(),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::stream::StreamExt;
+    use futures::stream::{iter, StreamExt};
     use std::io::Cursor;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -125,5 +183,12 @@ mod tests {
         #[allow(clippy::drop_non_drop)]
         drop(stream);
         assert!(!done.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_unique_stream() {
+        let stream = iter([10, 20, 30, 20, 40, 10, 50]).unique();
+        tokio::pin!(stream);
+        assert_eq!(stream.collect::<Vec<_>>().await, vec![10, 20, 30, 40, 50]);
     }
 }

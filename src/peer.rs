@@ -23,7 +23,7 @@ use tokio_util::codec::{
     Framed,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct Peer {
     address: SocketAddr,
     id: Option<PeerId>,

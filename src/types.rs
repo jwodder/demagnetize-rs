@@ -108,7 +108,7 @@ impl LocalPeer {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct PeerId(Bytes);
 
 impl PeerId {
