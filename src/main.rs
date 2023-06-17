@@ -9,8 +9,9 @@ mod util;
 use crate::asyncutil::ShutdownGroup;
 use crate::consts::TRACKER_STOP_TIMEOUT;
 use crate::peer::Peer;
+use crate::torrent::PathTemplate;
 use crate::tracker::Tracker;
-use crate::types::{InfoHash, LocalPeer};
+use crate::types::{InfoHash, LocalPeer, Magnet};
 use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
@@ -45,6 +46,12 @@ impl Arguments {
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
 enum Command {
+    Get {
+        #[clap(short, long, default_value = "{name}.torrent")]
+        output: PathTemplate,
+
+        magnet: Magnet,
+    },
     QueryTracker {
         tracker: Tracker,
         info_hash: InfoHash,
@@ -57,10 +64,29 @@ enum Command {
 
 impl Command {
     async fn run(self) -> ExitCode {
+        let local = LocalPeer::generate(rand::thread_rng());
+        // TODO: Log local details?
         match self {
+            Command::Get { output, magnet } => {
+                let group = ShutdownGroup::new();
+                let r = match magnet.get_torrent_file(&local, &group).await {
+                    Ok(tf) => {
+                        if let Err(e) = tf.save(&output).await {
+                            log::error!("Failed to save torrent file: {e}");
+                            ExitCode::FAILURE
+                        } else {
+                            ExitCode::SUCCESS
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to get metadata info: {e}");
+                        ExitCode::FAILURE
+                    }
+                };
+                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                r
+            }
             Command::QueryTracker { tracker, info_hash } => {
-                let local = LocalPeer::generate(rand::thread_rng());
-                // TODO: Log local details?
                 let group = ShutdownGroup::new();
                 let r = match tracker.get_peers(&info_hash, &local, &group).await {
                     Ok(peers) => {
@@ -78,8 +104,6 @@ impl Command {
                 r
             }
             Command::QueryPeer { peer, info_hash } => {
-                let local = LocalPeer::generate(rand::thread_rng());
-                // TODO: Log local details?
                 match peer.get_metadata_info(&info_hash, &local).await {
                     Ok(info) => {
                         let filename = format!("{info_hash}.bencode");
