@@ -22,7 +22,7 @@ chrono = "0.4.26"
 clap = { version = "4.3.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.4.0"
 fern = "0.6.2"
-futures = { version = "0.3.28", default-features = false }
+futures = { version = "0.3.28", default-features = false, features = ["std"] }
 log = "0.4.19"
 patharg = { version = "0.3.0", features = ["tokio"] }
 pin-project-lite = "0.2.9"
