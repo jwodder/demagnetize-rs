@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 mod asyncutil;
 mod consts;
 mod peer;

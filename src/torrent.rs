@@ -104,10 +104,6 @@ impl TorrentInfoBuilder {
         Ok(())
     }
 
-    pub(crate) fn piece_qty(&self) -> usize {
-        self.sizes.len()
-    }
-
     pub(crate) fn next_piece(&mut self) -> Option<u32> {
         self.index_iter.peek().copied()
     }

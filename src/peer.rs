@@ -250,6 +250,7 @@ impl<'a> MessageChannel<'a> {
 #[derive(Debug)]
 struct PeerConnection<'a> {
     channel: MessageChannel<'a>,
+    #[allow(dead_code)]
     extensions: ExtensionSet,
     info_hash: &'a InfoHash,
     metadata_size: Option<u32>,

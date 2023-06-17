@@ -223,7 +223,9 @@ pub(crate) enum TrackerError {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum AnnounceEvent {
+    #[allow(dead_code)]
     Announce,
+    #[allow(dead_code)]
     Completed,
     Started,
     Stopped,
