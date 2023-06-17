@@ -39,3 +39,9 @@ pub(crate) static CLIENT: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARG
 
 /// Maximum length of a message to accept from a peer
 pub(crate) const MAX_PEER_MSG_LEN: usize = 65535;
+
+/// Maximum number of trackers per magnet link to communicate with at once
+pub(crate) const TRACKERS_PER_MAGNET_LIMIT: usize = 30;
+
+/// Maximum number of peers per magnet link to interact with at once
+pub(crate) const PEERS_PER_MAGNET_LIMIT: usize = 30;

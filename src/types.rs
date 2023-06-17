@@ -1,8 +1,11 @@
-use crate::consts::PEER_ID_PREFIX;
+use crate::asyncutil::{ShutdownGroup, UniqueExt};
+use crate::consts::{PEERS_PER_MAGNET_LIMIT, PEER_ID_PREFIX, TRACKERS_PER_MAGNET_LIMIT};
+use crate::torrent::TorrentFile;
 use crate::tracker::{Tracker, TrackerUrlError};
-use crate::util::{PacketError, TryFromBuf};
+use crate::util::{ErrorChain, PacketError, TryFromBuf};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
+use futures::stream::{iter, StreamExt};
 use rand::Rng;
 use rand_distr::{Alphanumeric, Distribution, Standard};
 use std::borrow::Cow;
@@ -226,6 +229,42 @@ impl Magnet {
     fn trackers(&self) -> &[Tracker] {
         &self.trackers
     }
+
+    pub(crate) async fn get_torrent_file(
+        &self,
+        local: &LocalPeer,
+        shutdown_group: &ShutdownGroup,
+    ) -> Result<TorrentFile, GetInfoError> {
+        let stream = iter(self.trackers())
+            .map(|tracker| async move {
+                match tracker
+                    .get_peers(self.info_hash(), local, shutdown_group)
+                    .await
+                {
+                    Ok(peers) => iter(peers),
+                    Err(e) => {
+                        log::warn!("Error communicating with {}: {}", tracker, ErrorChain(e));
+                        iter(Vec::new())
+                    }
+                }
+            })
+            .buffer_unordered(TRACKERS_PER_MAGNET_LIMIT)
+            .flatten()
+            .unique()
+            .map(|peer| async move {
+                let r = peer.get_metadata_info(self.info_hash(), local).await;
+                (peer, r)
+            })
+            .buffer_unordered(PEERS_PER_MAGNET_LIMIT);
+        tokio::pin!(stream);
+        while let Some((peer, r)) = stream.next().await {
+            match r {
+                Ok(info) => return Ok(TorrentFile::new(info, self.trackers.clone())),
+                Err(e) => log::warn!("Failed to fetch info from {}: {}", peer, ErrorChain(e)),
+            }
+        }
+        Err(GetInfoError)
+    }
 }
 
 impl FromStr for Magnet {
@@ -306,6 +345,10 @@ pub(crate) enum XtError {
     #[error("\"xt\" parameter contains invalid info hash")]
     InfoHash(#[from] InfoHashError),
 }
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+#[error("no peer returned metadata info")]
+pub(crate) struct GetInfoError;
 
 fn add_bytes_query_param(url: &mut Url, key: &str, value: &Bytes) {
     static SENTINEL: &str = "ADD_BYTES_QUERY_PARAM";
