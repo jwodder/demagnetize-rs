@@ -10,7 +10,6 @@ use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
-use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 use url::Url;
 
@@ -32,12 +31,11 @@ impl Tracker {
         &self,
         info_hash: &InfoHash,
         local: &LocalPeer,
-        sender: Sender<Peer>,
-    ) -> Result<(), TrackerError> {
+    ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
             TRACKER_TIMEOUT,
-            self._get_peers(info_hash.clone(), local.clone(), sender),
+            self._get_peers(info_hash.clone(), local.clone()),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
@@ -47,8 +45,7 @@ impl Tracker {
         &self,
         info_hash: InfoHash,
         local: LocalPeer,
-        sender: Sender<Peer>,
-    ) -> Result<(), TrackerError> {
+    ) -> Result<Vec<Peer>, TrackerError> {
         let s = self.connect(info_hash.clone(), local).await?;
         let peers = s.start().await?.peers;
         log::info!("{self} returned {} peers for {info_hash}", peers.len());
@@ -56,23 +53,20 @@ impl Tracker {
             "{self} returned peers for {info_hash}: {}",
             comma_list(&peers)
         );
-        tokio::join!(
-            async move {
-                for p in peers {
-                    if sender.send(p).await.is_err() {
-                        break;
-                    }
-                }
-            },
-            async move {
-                match timeout(TRACKER_STOP_TIMEOUT, s.stop()).await {
-                    Ok(Ok(_)) => (),
-                    Ok(Err(e)) => log::warn!("failure sending \"stopped\" announcement to {self} for {info_hash}: {}", ErrorChain(e)),
-                    Err(_) => log::warn!("{self} did not response to \"stopped\" announcement for {info_hash} in time"),
-                }
+        let display = self.to_string();
+        tokio::spawn(async move {
+            match timeout(TRACKER_STOP_TIMEOUT, s.stop()).await {
+                Ok(Ok(_)) => (),
+                Ok(Err(e)) => log::warn!(
+                    "failure sending \"stopped\" announcement to {display} for {info_hash}: {}",
+                    ErrorChain(e)
+                ),
+                Err(_) => log::warn!(
+                    "{display} did not response to \"stopped\" announcement for {info_hash} in time"
+                ),
             }
-        );
-        Ok(())
+        });
+        Ok(peers)
     }
 
     async fn connect(

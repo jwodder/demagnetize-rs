@@ -3,12 +3,12 @@ use crate::consts::UDP_PACKET_LEN;
 use crate::util::TryBytes;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rand::random;
-use std::cell::Cell;
 use std::fmt;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::net::{lookup_host, UdpSocket};
+use tokio::sync::Mutex;
 use tokio::time::{timeout, timeout_at, Instant};
 use url::Url;
 
@@ -62,7 +62,7 @@ impl TryFrom<Url> for UdpTracker {
 pub(super) struct UdpTrackerSession {
     pub(super) tracker: UdpTracker,
     socket: ConnectedUdpSocket,
-    conn: Cell<Option<Connection>>,
+    conn: Mutex<Option<Connection>>,
 }
 
 impl UdpTrackerSession {
@@ -70,7 +70,7 @@ impl UdpTrackerSession {
         UdpTrackerSession {
             tracker: tracker.clone(),
             socket,
-            conn: Cell::new(None),
+            conn: Mutex::new(None),
         }
     }
 
@@ -99,7 +99,7 @@ impl UdpTrackerSession {
                 Ok(Err(e)) => return Err(e.into()),
                 Err(_) => {
                     log::trace!("Connection to {} timed out; restarting", self.tracker);
-                    let _ = self.conn.take();
+                    self.reset_connection().await;
                     continue;
                 }
             };
@@ -114,14 +114,19 @@ impl UdpTrackerSession {
     }
 
     async fn get_connection(&self) -> Result<Connection, TrackerError> {
-        match self.conn.get() {
+        let mut cell = self.conn.lock().await;
+        match cell.take() {
             Some(c) if c.expiration < Instant::now() => Ok(c),
             _ => {
                 let conn = self.connect().await?;
-                self.conn.set(Some(conn));
+                *cell = Some(conn);
                 Ok(conn)
             }
         }
+    }
+
+    async fn reset_connection(&self) {
+        let _ = self.conn.lock().await.take();
     }
 
     async fn connect(&self) -> Result<Connection, TrackerError> {

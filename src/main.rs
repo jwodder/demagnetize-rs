@@ -6,8 +6,6 @@ mod torrent;
 mod tracker;
 mod types;
 mod util;
-use crate::asyncutil::received_stream;
-use crate::consts::NUMWANT;
 use crate::peer::Peer;
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, LocalPeer};
@@ -16,11 +14,8 @@ use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
-use futures::stream::StreamExt;
 use log::{Level, LevelFilter};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 /// Convert magnet links to .torrent files
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
@@ -64,23 +59,17 @@ impl Command {
             Command::QueryTracker { tracker, info_hash } => {
                 let local = LocalPeer::generate(rand::thread_rng());
                 // TODO: Log local details?
-                let ok = Arc::new(AtomicBool::new(true));
-                let inner_ok = ok.clone();
-                let stream =
-                    received_stream(usize::try_from(NUMWANT).unwrap(), |sender| async move {
-                        if let Err(e) = tracker.get_peers(&info_hash, &local, sender).await {
-                            log::error!("Error communicating with tracker: {}", ErrorChain(e));
-                            inner_ok.store(false, Ordering::Release);
+                match tracker.get_peers(&info_hash, &local).await {
+                    Ok(peers) => {
+                        for p in peers {
+                            println!("{p}");
                         }
-                    });
-                tokio::pin!(stream);
-                while let Some(peer) = stream.next().await {
-                    println!("{peer}");
-                }
-                if ok.load(Ordering::Acquire) {
-                    ExitCode::SUCCESS
-                } else {
-                    ExitCode::FAILURE
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        log::error!("Error communicating with tracker: {}", ErrorChain(e));
+                        ExitCode::FAILURE
+                    }
                 }
             }
             Command::QueryPeer { peer, info_hash } => {
