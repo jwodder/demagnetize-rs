@@ -115,17 +115,20 @@ impl UdpTrackerSession {
 
     async fn get_connection(&self) -> Result<Connection, TrackerError> {
         let mut cell = self.conn.lock().await;
-        match cell.take() {
-            Some(c) if Instant::now() < c.expiration => Ok(c),
-            _ => {
-                let conn = self.connect().await?;
-                *cell = Some(conn);
-                Ok(conn)
+        if let Some(c) = cell.take() {
+            if Instant::now() < c.expiration {
+                return Ok(c);
+            } else {
+                log::trace!("Connection to {} expired; will reconnect", self.tracker);
             }
         }
+        let conn = self.connect().await?;
+        *cell = Some(conn);
+        Ok(conn)
     }
 
     async fn reset_connection(&self) {
+        // TODO: Should this immediately call `connect()`?
         let _ = self.conn.lock().await.take();
     }
 
@@ -142,6 +145,7 @@ impl UdpTrackerSession {
                 got: resp.transaction_id,
             });
         }
+        log::trace!("Connected to {}", self.tracker);
         let expiration = Instant::now() + Duration::from_secs(60);
         Ok(Connection {
             id: resp.connection_id,
