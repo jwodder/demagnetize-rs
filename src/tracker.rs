@@ -2,7 +2,8 @@ pub(crate) mod http;
 pub(crate) mod udp;
 use self::http::*;
 use self::udp::*;
-use crate::consts::{LEFT, NUMWANT, TRACKER_STOP_TIMEOUT, TRACKER_TIMEOUT};
+use crate::asyncutil::ShutdownGroup;
+use crate::consts::{LEFT, NUMWANT, TRACKER_TIMEOUT};
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, LocalPeer, PeerId};
 use crate::util::{comma_list, ErrorChain, PacketError};
@@ -31,11 +32,12 @@ impl Tracker {
         &self,
         info_hash: &InfoHash,
         local: &LocalPeer,
+        shutdown_group: &ShutdownGroup,
     ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
             TRACKER_TIMEOUT,
-            self._get_peers(info_hash.clone(), local.clone()),
+            self._get_peers(info_hash.clone(), local.clone(), shutdown_group),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
@@ -45,6 +47,7 @@ impl Tracker {
         &self,
         info_hash: InfoHash,
         local: LocalPeer,
+        shutdown_group: &ShutdownGroup,
     ) -> Result<Vec<Peer>, TrackerError> {
         let s = self.connect(info_hash.clone(), local).await?;
         let peers = s.start().await?.peers;
@@ -54,16 +57,17 @@ impl Tracker {
             comma_list(&peers)
         );
         let display = self.to_string();
-        tokio::spawn(async move {
-            match timeout(TRACKER_STOP_TIMEOUT, s.stop()).await {
-                Ok(Ok(_)) => (),
-                Ok(Err(e)) => log::warn!(
-                    "failure sending \"stopped\" announcement to {display} for {info_hash}: {}",
-                    ErrorChain(e)
-                ),
-                Err(_) => log::warn!(
-                    "{display} did not response to \"stopped\" announcement for {info_hash} in time"
-                ),
+        shutdown_group.spawn(|token| async move {
+            tokio::select! {
+                _ = token.cancelled() => log::trace!("\"stopped\" announcement to {display} for {info_hash} cancelled"),
+                r = s.stop() => {
+                    if let Err(e) = r {
+                        log::warn!(
+                            "failure sending \"stopped\" announcement to {display} for {info_hash}: {}",
+                            ErrorChain(e)
+                        );
+                    }
+                }
             }
         });
         Ok(peers)

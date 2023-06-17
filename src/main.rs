@@ -6,6 +6,8 @@ mod torrent;
 mod tracker;
 mod types;
 mod util;
+use crate::asyncutil::ShutdownGroup;
+use crate::consts::TRACKER_STOP_TIMEOUT;
 use crate::peer::Peer;
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, LocalPeer};
@@ -59,7 +61,8 @@ impl Command {
             Command::QueryTracker { tracker, info_hash } => {
                 let local = LocalPeer::generate(rand::thread_rng());
                 // TODO: Log local details?
-                match tracker.get_peers(&info_hash, &local).await {
+                let group = ShutdownGroup::new();
+                let r = match tracker.get_peers(&info_hash, &local, &group).await {
                     Ok(peers) => {
                         for p in peers {
                             println!("{p}");
@@ -70,7 +73,9 @@ impl Command {
                         log::error!("Error communicating with tracker: {}", ErrorChain(e));
                         ExitCode::FAILURE
                     }
-                }
+                };
+                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                r
             }
             Command::QueryPeer { peer, info_hash } => {
                 let local = LocalPeer::generate(rand::thread_rng());
