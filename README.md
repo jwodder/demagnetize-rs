@@ -6,8 +6,8 @@
 
 [GitHub](https://github.com/jwodder/demagnetize-rs) | [Issues](https://github.com/jwodder/demagnetize-rs/issues)
 
-`demagnetize` is a Rust program for converting one or more BitTorrent [`magnet
-links`](https://en.wikipedia.org/wiki/Magnet_URI_scheme) into `.torrent` files
+`demagnetize` is a Rust program for converting one or more BitTorrent [magnet
+links](https://en.wikipedia.org/wiki/Magnet_URI_scheme) into `.torrent` files
 by downloading the torrent info from active peers.
 
 At the moment, `demagnetize` only supports basic features of the BitTorrent
