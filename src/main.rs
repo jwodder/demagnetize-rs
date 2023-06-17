@@ -47,26 +47,43 @@ impl Arguments {
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
 enum Command {
+    /// Download the .torrent file for a single magnet link
     Get {
+        /// Save the .torrent file to the given path.
+        ///
+        /// The path may contain a `{name}` placeholder, which will be replaced
+        /// by the (sanitized) name of the torrent, and/or a `{hash}`
+        /// placeholder, which will be replaced by the torrent's info hash in
+        /// hexadecimal.
         #[clap(short, long, default_value = "{name}.torrent")]
-        output: PathTemplate,
+        outfile: PathTemplate,
 
         magnet: Magnet,
     },
+    /// Download the .torrent files for a file of magnet links
     Batch {
+        /// Save the .torrent files to the given path template.
+        ///
+        /// The path template may contain a `{name}` placeholder, which will be
+        /// replaced by the (sanitized) name of each torrent, and/or a `{hash}`
+        /// placeholder, which will be replaced by each torrent's info hash in
+        /// hexadecimal.
         #[clap(short, long, default_value = "{name}.torrent")]
-        output: PathTemplate,
+        outfile: PathTemplate,
 
+        /// A file listing magnet links, one per line.  Empty lines and lines
+        /// starting with '#' are ignored.
         file: InputArg,
     },
+    /// Fetch peers for an info hash from a tracker
+    #[clap(hide = true)]
     QueryTracker {
         tracker: Tracker,
         info_hash: InfoHash,
     },
-    QueryPeer {
-        peer: Peer,
-        info_hash: InfoHash,
-    },
+    /// Fetch torrent metadata for an info hash from a peer
+    #[clap(hide = true)]
+    QueryPeer { peer: Peer, info_hash: InfoHash },
 }
 
 impl Command {
@@ -74,9 +91,9 @@ impl Command {
         let local = LocalPeer::generate(rand::thread_rng());
         // TODO: Log local details?
         match self {
-            Command::Get { output, magnet } => {
+            Command::Get { outfile, magnet } => {
                 let group = ShutdownGroup::new();
-                let r = if let Err(e) = magnet.download_torrent_file(&output, &local, &group).await
+                let r = if let Err(e) = magnet.download_torrent_file(&outfile, &local, &group).await
                 {
                     log::error!("Failed to download torrent file: {}", ErrorChain(e));
                     ExitCode::FAILURE
@@ -86,7 +103,7 @@ impl Command {
                 group.shutdown(TRACKER_STOP_TIMEOUT).await;
                 r
             }
-            Command::Batch { output, file } => {
+            Command::Batch { outfile, file } => {
                 let magnets = match parse_magnets_file(file).await {
                     Ok(magnets) => magnets,
                     Err(e) => {
@@ -102,12 +119,12 @@ impl Command {
                 let mut success = 0usize;
                 let mut total = 0usize;
                 {
-                    let outp = &output;
+                    let outf = &outfile;
                     let lc = &local;
                     let gr = &group;
                     let stream = iter(magnets)
                         .map(|magnet| async move {
-                            if let Err(e) = magnet.download_torrent_file(outp, lc, gr).await {
+                            if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
                                 log::error!(
                                     "Failed to download torrent file for {magnet}: {}",
                                     ErrorChain(e)
