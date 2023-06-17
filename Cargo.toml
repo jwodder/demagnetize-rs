@@ -8,9 +8,8 @@ authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
 repository = "https://github.com/jwodder/demagnetize-rs"
 documentation = "https://github.com/jwodder/demagnetize-rs"
 license = "MIT"
-keywords = []
-# See <https://crates.io/category_slugs> for a list of categories
-categories = []
+keywords = ["bittorent", "magnet link", "torrent"]
+categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
 [dependencies]
