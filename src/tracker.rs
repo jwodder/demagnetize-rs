@@ -35,37 +35,27 @@ impl Tracker {
         sender: Sender<Peer>,
     ) -> Result<(), TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
-        timeout(TRACKER_TIMEOUT, self._get_peers(info_hash, local, sender))
-            .await
-            .unwrap_or(Err(TrackerError::Timeout))
-    }
-
-    async fn connect<'a>(
-        &'a self,
-        info_hash: &'a InfoHash,
-        local: &'a LocalPeer,
-    ) -> Result<TrackerSession<'a>, TrackerError> {
-        let inner = match self {
-            Tracker::Http(t) => InnerTrackerSession::Http(t.connect().await?),
-            Tracker::Udp(t) => InnerTrackerSession::Udp(t.connect().await?),
-        };
-        Ok(TrackerSession {
-            inner,
-            info_hash,
-            local,
-        })
+        timeout(
+            TRACKER_TIMEOUT,
+            self._get_peers(info_hash.clone(), local.clone(), sender),
+        )
+        .await
+        .unwrap_or(Err(TrackerError::Timeout))
     }
 
     async fn _get_peers(
         &self,
-        info_hash: &InfoHash,
-        local: &LocalPeer,
+        info_hash: InfoHash,
+        local: LocalPeer,
         sender: Sender<Peer>,
     ) -> Result<(), TrackerError> {
-        let s = self.connect(info_hash, local).await?;
+        let s = self.connect(info_hash.clone(), local).await?;
         let peers = s.start().await?.peers;
-        log::info!("{self} returned {} peers", peers.len());
-        log::debug!("{self} returned peers: {}", comma_list(&peers));
+        log::info!("{self} returned {} peers for {info_hash}", peers.len());
+        log::debug!(
+            "{self} returned peers for {info_hash}: {}",
+            comma_list(&peers)
+        );
         tokio::join!(
             async move {
                 for p in peers {
@@ -83,6 +73,22 @@ impl Tracker {
             }
         );
         Ok(())
+    }
+
+    async fn connect(
+        &self,
+        info_hash: InfoHash,
+        local: LocalPeer,
+    ) -> Result<TrackerSession, TrackerError> {
+        let inner = match self {
+            Tracker::Http(t) => InnerTrackerSession::Http(t.connect().await?),
+            Tracker::Udp(t) => InnerTrackerSession::Udp(t.connect().await?),
+        };
+        Ok(TrackerSession {
+            inner,
+            info_hash,
+            local,
+        })
     }
 }
 
@@ -108,18 +114,18 @@ impl FromStr for Tracker {
     }
 }
 
-struct TrackerSession<'a> {
-    inner: InnerTrackerSession<'a>,
-    info_hash: &'a InfoHash,
-    local: &'a LocalPeer,
+struct TrackerSession {
+    inner: InnerTrackerSession,
+    info_hash: InfoHash,
+    local: LocalPeer,
 }
 
-enum InnerTrackerSession<'a> {
-    Http(HttpTrackerSession<'a>),
-    Udp(UdpTrackerSession<'a>),
+enum InnerTrackerSession {
+    Http(HttpTrackerSession),
+    Udp(UdpTrackerSession),
 }
 
-impl<'a> TrackerSession<'a> {
+impl TrackerSession {
     fn tracker_display(&self) -> String {
         match &self.inner {
             InnerTrackerSession::Http(s) => s.tracker.to_string(),
@@ -134,7 +140,7 @@ impl<'a> TrackerSession<'a> {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash,
+            info_hash: &self.info_hash,
             peer_id: &self.local.id,
             downloaded: 0,
             left: LEFT,
@@ -154,7 +160,7 @@ impl<'a> TrackerSession<'a> {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash,
+            info_hash: &self.info_hash,
             peer_id: &self.local.id,
             downloaded: 0,
             left: LEFT,

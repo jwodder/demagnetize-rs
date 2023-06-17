@@ -24,13 +24,13 @@ impl HttpTracker {
         self.0.as_str()
     }
 
-    pub(super) async fn connect(&self) -> Result<HttpTrackerSession<'_>, TrackerError> {
+    pub(super) async fn connect(&self) -> Result<HttpTrackerSession, TrackerError> {
         let client = Client::builder()
             .user_agent(USER_AGENT)
             .build()
             .map_err(HttpTrackerError::BuildClient)?;
         Ok(HttpTrackerSession {
-            tracker: self,
+            tracker: self.clone(),
             client,
         })
     }
@@ -57,15 +57,15 @@ impl TryFrom<Url> for HttpTracker {
     }
 }
 
-pub(super) struct HttpTrackerSession<'a> {
-    pub(super) tracker: &'a HttpTracker,
+pub(super) struct HttpTrackerSession {
+    pub(super) tracker: HttpTracker,
     client: Client,
 }
 
-impl<'a> HttpTrackerSession<'a> {
-    pub(super) async fn announce<'b>(
+impl HttpTrackerSession {
+    pub(super) async fn announce<'a>(
         &self,
-        announcement: Announcement<'b>,
+        announcement: Announcement<'a>,
     ) -> Result<AnnounceResponse, TrackerError> {
         let mut url = self.tracker.0.clone();
         url.set_fragment(None);

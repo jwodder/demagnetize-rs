@@ -24,7 +24,7 @@ impl UdpTracker {
     pub(crate) fn url_str(&self) -> &str {
         self.0.as_str()
     }
-    pub(super) async fn connect(&self) -> Result<UdpTrackerSession<'_>, TrackerError> {
+    pub(super) async fn connect(&self) -> Result<UdpTrackerSession, TrackerError> {
         let host = self
             .0
             .host_str()
@@ -59,24 +59,24 @@ impl TryFrom<Url> for UdpTracker {
     }
 }
 
-pub(super) struct UdpTrackerSession<'a> {
-    pub(super) tracker: &'a UdpTracker,
+pub(super) struct UdpTrackerSession {
+    pub(super) tracker: UdpTracker,
     socket: ConnectedUdpSocket,
     conn: Cell<Option<Connection>>,
 }
 
-impl<'a> UdpTrackerSession<'a> {
-    fn new(tracker: &'a UdpTracker, socket: ConnectedUdpSocket) -> Self {
+impl UdpTrackerSession {
+    fn new(tracker: &UdpTracker, socket: ConnectedUdpSocket) -> Self {
         UdpTrackerSession {
-            tracker,
+            tracker: tracker.clone(),
             socket,
             conn: Cell::new(None),
         }
     }
 
-    pub(super) async fn announce<'b>(
+    pub(super) async fn announce<'a>(
         &self,
-        announcement: Announcement<'b>,
+        announcement: Announcement<'a>,
     ) -> Result<AnnounceResponse, TrackerError> {
         loop {
             let conn = self.get_connection().await?;
