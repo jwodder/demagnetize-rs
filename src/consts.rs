@@ -45,3 +45,6 @@ pub(crate) const TRACKERS_PER_MAGNET_LIMIT: usize = 30;
 
 /// Maximum number of peers per magnet link to interact with at once
 pub(crate) const PEERS_PER_MAGNET_LIMIT: usize = 30;
+
+/// Maximum number of magnet links to operate on at once in batch mode
+pub(crate) const MAGNET_LIMIT: usize = 50;

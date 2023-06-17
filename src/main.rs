@@ -7,17 +7,19 @@ mod tracker;
 mod types;
 mod util;
 use crate::asyncutil::ShutdownGroup;
-use crate::consts::TRACKER_STOP_TIMEOUT;
+use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::peer::Peer;
 use crate::torrent::PathTemplate;
 use crate::tracker::Tracker;
-use crate::types::{InfoHash, LocalPeer, Magnet};
+use crate::types::{parse_magnets_file, InfoHash, LocalPeer, Magnet};
 use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
+use futures::stream::{iter, StreamExt};
 use log::{Level, LevelFilter};
+use patharg::InputArg;
 use std::process::ExitCode;
 
 /// Convert magnet links to .torrent files
@@ -52,6 +54,12 @@ enum Command {
 
         magnet: Magnet,
     },
+    Batch {
+        #[clap(short, long, default_value = "{name}.torrent")]
+        output: PathTemplate,
+
+        file: InputArg,
+    },
     QueryTracker {
         tracker: Tracker,
         info_hash: InfoHash,
@@ -69,22 +77,67 @@ impl Command {
         match self {
             Command::Get { output, magnet } => {
                 let group = ShutdownGroup::new();
-                let r = match magnet.get_torrent_file(&local, &group).await {
-                    Ok(tf) => {
-                        if let Err(e) = tf.save(&output).await {
-                            log::error!("Failed to save torrent file: {e}");
-                            ExitCode::FAILURE
-                        } else {
-                            ExitCode::SUCCESS
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Failed to get metadata info: {e}");
-                        ExitCode::FAILURE
-                    }
+                let r = if let Err(e) = magnet.download_torrent_file(&output, &local, &group).await
+                {
+                    log::error!("Failed to download torrent file: {}", ErrorChain(e));
+                    ExitCode::FAILURE
+                } else {
+                    ExitCode::SUCCESS
                 };
                 group.shutdown(TRACKER_STOP_TIMEOUT).await;
                 r
+            }
+            Command::Batch { output, file } => {
+                let magnets = match parse_magnets_file(file).await {
+                    Ok(magnets) => magnets,
+                    Err(e) => {
+                        log::error!("Error reading magnets file: {}", ErrorChain(e));
+                        return ExitCode::FAILURE;
+                    }
+                };
+                if magnets.is_empty() {
+                    log::info!("No magnet links supplied");
+                    return ExitCode::SUCCESS;
+                }
+                let group = ShutdownGroup::new();
+                let mut success = 0usize;
+                let mut total = 0usize;
+                {
+                    let outp = &output;
+                    let lc = &local;
+                    let gr = &group;
+                    let stream = iter(magnets)
+                        .map(|magnet| async move {
+                            if let Err(e) = magnet.download_torrent_file(outp, lc, gr).await {
+                                log::error!(
+                                    "Failed to download torrent file for {magnet}: {}",
+                                    ErrorChain(e)
+                                );
+                                false
+                            } else {
+                                true
+                            }
+                        })
+                        .buffer_unordered(MAGNET_LIMIT);
+                    tokio::pin!(stream);
+                    while let Some(b) = stream.next().await {
+                        if b {
+                            success += 1;
+                        }
+                        total += 1;
+                    }
+                }
+                log::info!(
+                    "{}/{} magnet links successfully converted to torrent files",
+                    success,
+                    total
+                );
+                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                if success == total {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
             }
             Command::QueryTracker { tracker, info_hash } => {
                 let group = ShutdownGroup::new();

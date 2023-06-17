@@ -1,11 +1,12 @@
 use crate::asyncutil::{ShutdownGroup, UniqueExt};
 use crate::consts::{PEERS_PER_MAGNET_LIMIT, PEER_ID_PREFIX, TRACKERS_PER_MAGNET_LIMIT};
-use crate::torrent::TorrentFile;
+use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::util::{ErrorChain, PacketError, TryFromBuf};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use futures::stream::{iter, StreamExt};
+use patharg::InputArg;
 use rand::Rng;
 use rand_distr::{Alphanumeric, Distribution, Standard};
 use std::borrow::Cow;
@@ -235,6 +236,7 @@ impl Magnet {
         local: &LocalPeer,
         shutdown_group: &ShutdownGroup,
     ) -> Result<TorrentFile, GetInfoError> {
+        log::info!("Fetching metadata info for {self}");
         let stream = iter(self.trackers())
             .map(|tracker| async move {
                 match tracker
@@ -243,7 +245,12 @@ impl Magnet {
                 {
                     Ok(peers) => iter(peers),
                     Err(e) => {
-                        log::warn!("Error communicating with {}: {}", tracker, ErrorChain(e));
+                        log::warn!(
+                            "Error communicating with {} for {}: {}",
+                            tracker,
+                            self.info_hash(),
+                            ErrorChain(e)
+                        );
                         iter(Vec::new())
                     }
                 }
@@ -264,6 +271,17 @@ impl Magnet {
             }
         }
         Err(GetInfoError)
+    }
+
+    pub(crate) async fn download_torrent_file(
+        &self,
+        template: &PathTemplate,
+        local: &LocalPeer,
+        shutdown_group: &ShutdownGroup,
+    ) -> Result<(), DownloadInfoError> {
+        let tf = self.get_torrent_file(local, shutdown_group).await?;
+        tf.save(template).await?;
+        Ok(())
     }
 }
 
@@ -308,9 +326,19 @@ impl FromStr for Magnet {
     }
 }
 
+impl fmt::Display for Magnet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(dn) = self.display_name() {
+            write!(f, "{dn:?} ({})", self.info_hash)
+        } else {
+            write!(f, "{}", self.info_hash)
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub(crate) enum MagnetError {
-    #[error("invalid magnet URI")]
+    #[error("invalid URI")]
     Url(#[from] url::ParseError),
     #[error("not a magnet URI")]
     NotMagnet,
@@ -349,6 +377,51 @@ pub(crate) enum XtError {
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 #[error("no peer returned metadata info")]
 pub(crate) struct GetInfoError;
+
+#[derive(Debug, Error)]
+pub(crate) enum DownloadInfoError {
+    #[error(transparent)]
+    Get(#[from] GetInfoError),
+    #[error("failed to save torrent file")]
+    Save(#[from] std::io::Error),
+}
+
+pub(crate) async fn parse_magnets_file(input: InputArg) -> Result<Vec<Magnet>, MagnetsFileError> {
+    let lines = input
+        .async_lines()
+        .await
+        .map_err(MagnetsFileError::Open)?
+        .enumerate();
+    tokio::pin!(lines);
+    let mut magnets = Vec::new();
+    while let Some((i, r)) = lines.next().await {
+        let ln = r.map_err(MagnetsFileError::Read)?;
+        let ln = ln.trim();
+        if ln.is_empty() || ln.starts_with('#') {
+            continue;
+        }
+        match ln.parse::<Magnet>() {
+            Ok(m) => magnets.push(m),
+            Err(e) => {
+                return Err(MagnetsFileError::Parse {
+                    lineno: i + 1,
+                    source: e,
+                })
+            }
+        }
+    }
+    Ok(magnets)
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum MagnetsFileError {
+    #[error("failed to open file")]
+    Open(std::io::Error),
+    #[error("failed reading from file")]
+    Read(std::io::Error),
+    #[error("invalid magnet link on line {lineno}")]
+    Parse { lineno: usize, source: MagnetError },
+}
 
 fn add_bytes_query_param(url: &mut Url, key: &str, value: &Bytes) {
     static SENTINEL: &str = "ADD_BYTES_QUERY_PARAM";
