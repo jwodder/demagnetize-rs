@@ -416,9 +416,9 @@ pub(crate) async fn parse_magnets_file(input: InputArg) -> Result<Vec<Magnet>, M
 #[derive(Debug, Error)]
 pub(crate) enum MagnetsFileError {
     #[error("failed to open file")]
-    Open(std::io::Error),
+    Open(#[source] std::io::Error),
     #[error("failed reading from file")]
-    Read(std::io::Error),
+    Read(#[source] std::io::Error),
     #[error("invalid magnet link on line {lineno}")]
     Parse { lineno: usize, source: MagnetError },
 }

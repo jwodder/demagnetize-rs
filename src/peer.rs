@@ -329,13 +329,13 @@ impl<'a> PeerConnection<'a> {
 #[derive(Debug, Error)]
 pub(crate) enum PeerError {
     #[error("could not connect to peer")]
-    Connect(std::io::Error),
+    Connect(#[source] std::io::Error),
     #[error("timed out trying to connect to peer")]
     ConnectTimeout,
     #[error("error sending message to peer")]
-    Send(std::io::Error),
+    Send(#[source] std::io::Error),
     #[error("error receiving message from peer")]
-    Recv(std::io::Error),
+    Recv(#[source] std::io::Error),
     #[error("peer sent wrong info hash in handshake; expected {expected}, got {got}")]
     InfoHashMismatch { expected: InfoHash, got: InfoHash },
     #[error("peer does not support BEP 10 extensions")]
