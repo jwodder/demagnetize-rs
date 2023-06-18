@@ -8,7 +8,6 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::net::{lookup_host, UdpSocket};
-use tokio::sync::Mutex;
 use tokio::time::{timeout, timeout_at, Instant};
 use url::Url;
 
@@ -62,7 +61,7 @@ impl TryFrom<Url> for UdpTracker {
 pub(super) struct UdpTrackerSession {
     pub(super) tracker: UdpTracker,
     socket: ConnectedUdpSocket,
-    conn: Mutex<Option<Connection>>,
+    conn: Option<Connection>,
 }
 
 impl UdpTrackerSession {
@@ -70,13 +69,13 @@ impl UdpTrackerSession {
         UdpTrackerSession {
             tracker: tracker.clone(),
             socket,
-            conn: Mutex::new(None),
+            conn: None,
         }
     }
 
-    pub(super) async fn announce<'a>(
-        &self,
-        announcement: Announcement<'a>,
+    pub(super) async fn announce(
+        &mut self,
+        announcement: Announcement,
     ) -> Result<AnnounceResponse, TrackerError> {
         loop {
             let conn = self.get_connection().await?;
@@ -89,7 +88,7 @@ impl UdpTrackerSession {
             let msg = Bytes::from(UdpAnnounceRequest {
                 connection_id: conn.id,
                 transaction_id,
-                announcement,
+                announcement: announcement.clone(),
                 urldata,
             });
             // TODO: Should communication be retried on parse errors and
@@ -113,9 +112,8 @@ impl UdpTrackerSession {
         }
     }
 
-    async fn get_connection(&self) -> Result<Connection, TrackerError> {
-        let mut cell = self.conn.lock().await;
-        if let Some(c) = cell.take() {
+    async fn get_connection(&mut self) -> Result<Connection, TrackerError> {
+        if let Some(c) = self.conn {
             if Instant::now() < c.expiration {
                 return Ok(c);
             } else {
@@ -123,12 +121,12 @@ impl UdpTrackerSession {
             }
         }
         let conn = self.connect().await?;
-        *cell = Some(conn);
+        self.conn = Some(conn);
         Ok(conn)
     }
 
-    async fn reset_connection(&self) {
-        let _ = self.conn.lock().await.take();
+    async fn reset_connection(&mut self) {
+        self.conn = None;
     }
 
     async fn connect(&self) -> Result<Connection, TrackerError> {
@@ -273,15 +271,15 @@ impl TryFrom<Bytes> for UdpConnectionResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct UdpAnnounceRequest<'a> {
+struct UdpAnnounceRequest {
     connection_id: u64,
     transaction_id: u32,
-    announcement: Announcement<'a>,
+    announcement: Announcement,
     urldata: String,
 }
 
-impl<'a> From<UdpAnnounceRequest<'a>> for Bytes {
-    fn from(req: UdpAnnounceRequest<'a>) -> Bytes {
+impl From<UdpAnnounceRequest> for Bytes {
+    fn from(req: UdpAnnounceRequest) -> Bytes {
         let mut buf = BytesMut::with_capacity(98);
         buf.put_u64(req.connection_id);
         buf.put_u32(ANNOUNCE_ACTION);
@@ -418,11 +416,10 @@ mod tests {
             connection_id: 0x5CCBDFDB157C25BA,
             transaction_id: 0xA537EEE7,
             announcement: Announcement {
-                info_hash: &"4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
+                info_hash: "4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
                     .parse::<InfoHash>()
                     .unwrap(),
-                peer_id: &PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice()))
-                    .unwrap(),
+                peer_id: PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice())).unwrap(),
                 port: 60069,
                 key: Key::from(0x2C545EDE),
                 event: AnnounceEvent::Started,
@@ -445,11 +442,10 @@ mod tests {
             connection_id: 0x5CCBDFDB157C25BA,
             transaction_id: 0xA537EEE7,
             announcement: Announcement {
-                info_hash: &"4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
+                info_hash: "4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
                     .parse::<InfoHash>()
                     .unwrap(),
-                peer_id: &PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice()))
-                    .unwrap(),
+                peer_id: PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice())).unwrap(),
                 port: 60069,
                 key: Key::from(0x2C545EDE),
                 event: AnnounceEvent::Started,

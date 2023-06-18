@@ -49,7 +49,7 @@ impl Tracker {
         local: LocalPeer,
         shutdown_group: &ShutdownGroup,
     ) -> Result<Vec<Peer>, TrackerError> {
-        let s = self.connect(info_hash.clone(), local).await?;
+        let mut s = self.connect(info_hash.clone(), local).await?;
         let peers = s.start().await?.peers;
         log::info!("{self} returned {} peers for {info_hash}", peers.len());
         log::debug!(
@@ -131,15 +131,15 @@ impl TrackerSession {
         }
     }
 
-    async fn start(&self) -> Result<AnnounceResponse, TrackerError> {
+    async fn start(&mut self) -> Result<AnnounceResponse, TrackerError> {
         log::trace!(
             "Sending 'started' announcement to {} for {}",
             self.tracker_display(),
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: &self.info_hash,
-            peer_id: &self.local.id,
+            info_hash: self.info_hash.clone(),
+            peer_id: self.local.id.clone(),
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
@@ -151,15 +151,15 @@ impl TrackerSession {
         .await
     }
 
-    async fn stop(&self) -> Result<AnnounceResponse, TrackerError> {
+    async fn stop(&mut self) -> Result<AnnounceResponse, TrackerError> {
         log::trace!(
             "Sending 'stopped' announcement to {} for {}",
             self.tracker_display(),
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: &self.info_hash,
-            peer_id: &self.local.id,
+            info_hash: self.info_hash.clone(),
+            peer_id: self.local.id.clone(),
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
@@ -171,11 +171,11 @@ impl TrackerSession {
         .await
     }
 
-    async fn announce<'b>(
-        &self,
-        announcement: Announcement<'b>,
+    async fn announce(
+        &mut self,
+        announcement: Announcement,
     ) -> Result<AnnounceResponse, TrackerError> {
-        let announcement = match &self.inner {
+        let announcement = match &mut self.inner {
             InnerTrackerSession::Http(s) => s.announce(announcement).await?,
             InnerTrackerSession::Udp(s) => s.announce(announcement).await?,
         };
@@ -252,10 +252,10 @@ impl AnnounceEvent {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-struct Announcement<'a> {
-    info_hash: &'a InfoHash,
-    peer_id: &'a PeerId,
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Announcement {
+    info_hash: InfoHash,
+    peer_id: PeerId,
     downloaded: u64,
     left: u64,
     uploaded: u64,

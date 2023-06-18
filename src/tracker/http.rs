@@ -63,9 +63,9 @@ pub(super) struct HttpTrackerSession {
 }
 
 impl HttpTrackerSession {
-    pub(super) async fn announce<'a>(
+    pub(super) async fn announce(
         &self,
-        announcement: Announcement<'a>,
+        announcement: Announcement,
     ) -> Result<AnnounceResponse, TrackerError> {
         let mut url = self.tracker.0.clone();
         url.set_fragment(None);
