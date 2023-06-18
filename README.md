@@ -29,6 +29,9 @@ particular order:
 - `x.pe` parameters in magnet links
 - uTP
 
+`demagnetize` is a translation of a Python program by the same author; you can
+find the Python version at <https://github.com/jwodder/demagnetize>.
+
 
 Usage
 =====
