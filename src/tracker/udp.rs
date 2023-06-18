@@ -94,7 +94,10 @@ impl UdpTrackerSession {
             // TODO: Should communication be retried on parse errors and
             // mismatched transaction IDs?
             let resp = match timeout_at(conn.expiration, self.chat(msg)).await {
-                Ok(Ok(buf)) => UdpAnnounceResponse::from_bytes(buf, self.socket.ipv6)?,
+                Ok(Ok(buf)) => Response::<UdpAnnounceResponse>::from_bytes(buf, |buf| {
+                    UdpAnnounceResponse::from_bytes(buf, self.socket.ipv6)
+                })?
+                .ok()?,
                 Ok(Err(e)) => return Err(e.into()),
                 Err(_) => {
                     log::trace!("Connection to {} timed out; restarting", self.tracker);
@@ -103,10 +106,11 @@ impl UdpTrackerSession {
                 }
             };
             if resp.transaction_id != transaction_id {
-                return Err(TrackerError::XactionMismatch {
+                return Err(UdpTrackerError::XactionMismatch {
                     expected: transaction_id,
                     got: resp.transaction_id,
-                });
+                }
+                .into());
             }
             return Ok(resp.response);
         }
@@ -133,14 +137,19 @@ impl UdpTrackerSession {
         log::trace!("Sending connection request to {}", self.tracker);
         let transaction_id = self.make_transaction_id();
         let msg = Bytes::from(UdpConnectionRequest { transaction_id });
+        let raw_resp = self.chat(msg).await?;
         // TODO: Should communication be retried on parse errors and mismatched
         // transaction IDs?
-        let resp = UdpConnectionResponse::try_from(self.chat(msg).await?)?;
+        let resp = Response::<UdpConnectionResponse>::from_bytes(raw_resp, |buf| {
+            UdpConnectionResponse::try_from(buf)
+        })?
+        .ok()?;
         if resp.transaction_id != transaction_id {
-            return Err(TrackerError::XactionMismatch {
+            return Err(UdpTrackerError::XactionMismatch {
                 expected: transaction_id,
                 got: resp.transaction_id,
-            });
+            }
+            .into());
         }
         log::trace!("Connected to {}", self.tracker);
         let expiration = Instant::now() + Duration::from_secs(60);
@@ -150,7 +159,7 @@ impl UdpTrackerSession {
         })
     }
 
-    async fn chat(&self, msg: Bytes) -> Result<Bytes, UdpError> {
+    async fn chat(&self, msg: Bytes) -> Result<Bytes, UdpTrackerError> {
         let mut n = 0;
         loop {
             self.socket.send(&msg).await?;
@@ -181,39 +190,44 @@ struct ConnectedUdpSocket {
 }
 
 impl ConnectedUdpSocket {
-    async fn connect(host: &str, port: u16) -> Result<ConnectedUdpSocket, UdpError> {
-        let Some(addr) = lookup_host((host, port)).await.map_err(UdpError::Lookup)?.next() else {
-            return Err(UdpError::NoResolve);
+    async fn connect(host: &str, port: u16) -> Result<ConnectedUdpSocket, UdpTrackerError> {
+        let Some(addr) = lookup_host((host, port)).await.map_err(UdpTrackerError::Lookup)?.next() else {
+            return Err(UdpTrackerError::NoResolve);
         };
         let (bindaddr, ipv6) = match addr {
             SocketAddr::V4(_) => ("0.0.0.0:0", false),
             SocketAddr::V6(_) => ("[::]:0", true),
         };
-        let socket = UdpSocket::bind(bindaddr).await.map_err(UdpError::Bind)?;
+        let socket = UdpSocket::bind(bindaddr)
+            .await
+            .map_err(UdpTrackerError::Bind)?;
         log::trace!(
             "Connected UDP socket to {} (IP address: {}), port {}",
             host,
             addr.ip(),
             port,
         );
-        socket.connect(addr).await.map_err(UdpError::Connect)?;
+        socket
+            .connect(addr)
+            .await
+            .map_err(UdpTrackerError::Connect)?;
         Ok(ConnectedUdpSocket {
             inner: socket,
             ipv6,
         })
     }
 
-    async fn send(&self, msg: &Bytes) -> Result<(), UdpError> {
-        self.inner.send(msg).await.map_err(UdpError::Send)?;
+    async fn send(&self, msg: &Bytes) -> Result<(), UdpTrackerError> {
+        self.inner.send(msg).await.map_err(UdpTrackerError::Send)?;
         Ok(())
     }
 
-    async fn recv(&self) -> Result<Bytes, UdpError> {
+    async fn recv(&self) -> Result<Bytes, UdpTrackerError> {
         let mut buf = BytesMut::with_capacity(UDP_PACKET_LEN);
         self.inner
             .recv_buf(&mut buf)
             .await
-            .map_err(UdpError::Recv)?;
+            .map_err(UdpTrackerError::Recv)?;
         Ok(buf.freeze())
     }
 }
@@ -223,6 +237,36 @@ impl ConnectedUdpSocket {
 struct Connection {
     id: u64,
     expiration: Instant,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Response<T> {
+    Success(T),
+    Failure(String),
+}
+
+impl<T> Response<T> {
+    fn ok(self) -> Result<T, TrackerError> {
+        match self {
+            Response::Success(res) => Ok(res),
+            Response::Failure(msg) => Err(TrackerError::Failure(msg)),
+        }
+    }
+
+    fn from_bytes<F>(buf: Bytes, parser: F) -> Result<Self, UdpTrackerError>
+    where
+        F: FnOnce(Bytes) -> Result<T, UdpTrackerError>,
+    {
+        let mut view = TryBytes::from(buf.slice(0..));
+        if view.try_get::<u32>() == Ok(ERROR_ACTION) {
+            let _transaction_id = view.try_get::<u32>()?;
+            // TODO: Should we bother to check the transaction ID?
+            let message = view.into_string_lossy();
+            Ok(Response::Failure(message))
+        } else {
+            parser(buf).map(Response::Success)
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -247,14 +291,13 @@ struct UdpConnectionResponse {
 }
 
 impl TryFrom<Bytes> for UdpConnectionResponse {
-    type Error = TrackerError;
+    type Error = UdpTrackerError;
 
-    fn try_from(buf: Bytes) -> Result<Self, TrackerError> {
-        raise_for_error(&buf)?;
+    fn try_from(buf: Bytes) -> Result<Self, UdpTrackerError> {
         let mut buf = TryBytes::from(buf);
         let action = buf.try_get::<u32>()?;
         if action != CONNECT_ACTION {
-            return Err(TrackerError::BadUdpAction {
+            return Err(UdpTrackerError::BadAction {
                 expected: CONNECT_ACTION,
                 got: action,
             });
@@ -313,12 +356,11 @@ struct UdpAnnounceResponse {
 }
 
 impl UdpAnnounceResponse {
-    fn from_bytes(buf: Bytes, ipv6: bool) -> Result<Self, TrackerError> {
-        raise_for_error(&buf)?;
+    fn from_bytes(buf: Bytes, ipv6: bool) -> Result<Self, UdpTrackerError> {
         let mut buf = TryBytes::from(buf);
         let action = buf.try_get::<u32>()?;
         if action != ANNOUNCE_ACTION {
-            return Err(TrackerError::BadUdpAction {
+            return Err(UdpTrackerError::BadAction {
                 expected: ANNOUNCE_ACTION,
                 got: action,
             });
@@ -359,7 +401,7 @@ impl UdpAnnounceResponse {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum UdpError {
+pub(crate) enum UdpTrackerError {
     #[error("failed to resolve remote hostname")]
     Lookup(#[source] std::io::Error),
     #[error("remote hostname did not resolve to any IP addresses")]
@@ -372,18 +414,12 @@ pub(crate) enum UdpError {
     Send(#[source] std::io::Error),
     #[error("failed to receive UDP packet")]
     Recv(#[source] std::io::Error),
-}
-
-fn raise_for_error(buf: &Bytes) -> Result<(), TrackerError> {
-    let mut view = TryBytes::from(buf.slice(0..));
-    if view.try_get::<u32>() == Ok(ERROR_ACTION) {
-        let _transaction_id = view.try_get::<u32>()?;
-        // TODO: Should we bother to check the transaction ID?
-        let message = view.into_string_lossy();
-        Err(TrackerError::Failure(message))
-    } else {
-        Ok(())
-    }
+    #[error("UDP tracker sent response with invalid length")]
+    PacketLen(#[from] PacketError),
+    #[error("UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}")]
+    BadAction { expected: u32, got: u32 },
+    #[error("response from UDP tracker did not contain expected transaction ID; expected {expected:#x}, got {got:#x}")]
+    XactionMismatch { expected: u32, got: u32 },
 }
 
 #[cfg(test)]

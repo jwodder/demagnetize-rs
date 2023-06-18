@@ -212,13 +212,7 @@ pub(crate) enum TrackerError {
     #[error(transparent)]
     Http(#[from] HttpTrackerError),
     #[error(transparent)]
-    Udp(#[from] UdpError),
-    #[error("UDP tracker sent response with invalid length")]
-    UdpPacketLen(#[from] PacketError),
-    #[error("UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}")]
-    BadUdpAction { expected: u32, got: u32 },
-    #[error("response from UDP tracker did not contain expected transaction ID; expected {expected:#x}, got {got:#x}")]
-    XactionMismatch { expected: u32, got: u32 },
+    Udp(#[from] UdpTrackerError),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
