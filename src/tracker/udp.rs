@@ -128,7 +128,6 @@ impl UdpTrackerSession {
     }
 
     async fn reset_connection(&self) {
-        // TODO: Should this immediately call `connect()`?
         let _ = self.conn.lock().await.take();
     }
 
@@ -253,6 +252,7 @@ impl TryFrom<Bytes> for UdpConnectionResponse {
     type Error = TrackerError;
 
     fn try_from(buf: Bytes) -> Result<Self, TrackerError> {
+        raise_for_error(&buf)?;
         let mut buf = TryBytes::from(buf);
         let action = buf.try_get::<u32>()?;
         if action != CONNECT_ACTION {
