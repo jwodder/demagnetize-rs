@@ -112,6 +112,16 @@ impl LocalPeer {
     }
 }
 
+impl fmt::Display for LocalPeer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "id = {}, key = {}, port = {}",
+            self.id, self.key, self.port
+        )
+    }
+}
+
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct PeerId(Bytes);
 

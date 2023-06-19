@@ -89,7 +89,7 @@ enum Command {
 impl Command {
     async fn run(self) -> ExitCode {
         let local = LocalPeer::generate(rand::thread_rng());
-        // TODO: Log local details?
+        log::debug!("Using local peer details: {local}");
         match self {
             Command::Get { outfile, magnet } => {
                 let group = ShutdownGroup::new();
