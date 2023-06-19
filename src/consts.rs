@@ -24,8 +24,9 @@ pub(crate) const UDP_PACKET_LEN: usize = 65535;
 /// Maximum metadata size to accept
 pub(crate) const MAX_INFO_LENGTH: usize = 20 << 20; // 20 MiB
 
-/// Timeout for connecting to a peer
-pub(crate) const PEER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Timeout for connecting to a peer and performing the BitTorrent handshake
+/// and extended handshake
+pub(crate) const PEER_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// BitTorrent protocol extensions supported by demagnetize
 pub(crate) const SUPPORTED_EXTENSIONS: [Extension; 2] = [Extension::Bep10, Extension::Fast];

@@ -3,7 +3,7 @@ mod messages;
 use self::extensions::*;
 use self::messages::*;
 use crate::consts::{
-    CLIENT, MAX_PEER_MSG_LEN, PEER_CONNECT_TIMEOUT, SUPPORTED_EXTENSIONS, UT_METADATA,
+    CLIENT, MAX_PEER_MSG_LEN, PEER_HANDSHAKE_TIMEOUT, SUPPORTED_EXTENSIONS, UT_METADATA,
 };
 use crate::torrent::*;
 use crate::types::{InfoHash, LocalPeer, PeerId};
@@ -36,10 +36,12 @@ impl Peer {
         local: &LocalPeer,
     ) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {info_hash} from {self}");
-        self.connect(info_hash, local)
-            .await?
-            .get_metadata_info()
-            .await
+        let mut conn = match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect(info_hash, local)).await {
+            Ok(Ok(conn)) => conn,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => return Err(PeerError::ConnectTimeout),
+        };
+        conn.get_metadata_info().await
     }
 
     async fn connect<'a>(
@@ -48,11 +50,9 @@ impl Peer {
         local: &LocalPeer,
     ) -> Result<PeerConnection<'a>, PeerError> {
         log::debug!("Connecting to {self}");
-        let mut s = match timeout(PEER_CONNECT_TIMEOUT, TcpStream::connect(&self.address)).await {
-            Ok(Ok(s)) => s,
-            Ok(Err(e)) => return Err(PeerError::Connect(e)),
-            Err(_) => return Err(PeerError::ConnectTimeout),
-        };
+        let mut s = TcpStream::connect(&self.address)
+            .await
+            .map_err(PeerError::Connect)?;
         log::trace!("Connected to {self}");
         log::trace!("Sending handshake to {self}");
         let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, &local.id);
@@ -331,7 +331,7 @@ impl<'a> PeerConnection<'a> {
 pub(crate) enum PeerError {
     #[error("could not connect to peer")]
     Connect(#[source] std::io::Error),
-    #[error("timed out trying to connect to peer")]
+    #[error("timed out trying to connect to peer and complete handshake")]
     ConnectTimeout,
     #[error("error sending message to peer")]
     Send(#[source] std::io::Error),
