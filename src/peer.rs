@@ -25,8 +25,8 @@ use tokio_util::codec::{
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct Peer {
-    address: SocketAddr,
-    id: Option<PeerId>,
+    pub(crate) address: SocketAddr,
+    pub(crate) id: Option<PeerId>,
 }
 
 impl Peer {

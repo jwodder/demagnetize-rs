@@ -220,6 +220,7 @@ pub(crate) enum HttpTrackerError {
 mod tests {
     use super::*;
     use bytes::{BufMut, BytesMut};
+    use std::net::SocketAddr;
 
     #[test]
     fn test_decode_response() {
@@ -361,6 +362,57 @@ mod tests {
         let res = decode_bencode::<HttpAnnounceResponse>(b"d14:failure reason14:too much stuffe")
             .unwrap();
         assert_eq!(res, HttpAnnounceResponse::Failure("too much stuff".into()));
+    }
+
+    #[test]
+    fn test_decode_noncompact_response() {
+        let res = decode_bencode::<HttpAnnounceResponse>(
+            b"d8:completei431e10:incompletei14e8:intervali1800e5:peersld2:ip22:2001:41d0:1004:20b5::17:peer id20:-TR3000-23xhfykztwo84:porti51413eed2:ip18:2001:41d0:e:907::17:peer id20:-lt0D80-\xf8\x01\x92N+!{\x06\xcc\x15\xf0\xc44:porti12179eed2:ip14:185.125.190.597:peer id20:T03I--00N4b1YqQdAWh44:porti6892eed2:ip19:2403:5812:a03e::2227:peer id20:-TR3000-83e2ltycmh6c4:porti51413eed2:ip37:2003:f1:6f0f:dd00:c0ab:7cff:febd:274a7:peer id20:-TR3000-9e0zt0knchh44:porti51413eeee"
+        ).unwrap();
+        let HttpAnnounceResponse::Success(announcement) = res else {
+            panic!("Announcement failed");
+        };
+        assert_eq!(
+            announcement,
+            AnnounceResponse {
+                interval: 1800,
+                peers: vec![
+                    Peer {
+                        address: "[2001:41d0:1004:20b5::1]:51413"
+                            .parse::<SocketAddr>()
+                            .unwrap(),
+                        id: Some(PeerId::from(b"-TR3000-23xhfykztwo8")),
+                    },
+                    Peer {
+                        address: "[2001:41d0:e:907::1]:12179".parse::<SocketAddr>().unwrap(),
+                        id: Some(PeerId::from(
+                            b"-lt0D80-\xf8\x01\x92N+!{\x06\xcc\x15\xf0\xc4"
+                        )),
+                    },
+                    Peer {
+                        address: "185.125.190.59:6892".parse::<SocketAddr>().unwrap(),
+                        id: Some(PeerId::from(b"T03I--00N4b1YqQdAWh4")),
+                    },
+                    Peer {
+                        address: "[2403:5812:a03e::222]:51413".parse::<SocketAddr>().unwrap(),
+                        id: Some(PeerId::from(b"-TR3000-83e2ltycmh6c")),
+                    },
+                    Peer {
+                        address: "[2003:f1:6f0f:dd00:c0ab:7cff:febd:274a]:51413"
+                            .parse::<SocketAddr>()
+                            .unwrap(),
+                        id: Some(PeerId::from(b"-TR3000-9e0zt0knchh4")),
+                    },
+                ],
+                warning_message: None,
+                min_interval: None,
+                tracker_id: None,
+                complete: Some(431),
+                incomplete: Some(14),
+                leechers: None,
+                seeders: None,
+            }
+        );
     }
 
     #[test]

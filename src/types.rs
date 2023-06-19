@@ -160,6 +160,12 @@ impl fmt::Display for PeerId {
     }
 }
 
+impl From<&[u8; 20]> for PeerId {
+    fn from(bs: &[u8; 20]) -> PeerId {
+        PeerId(Bytes::from(bs.to_vec()))
+    }
+}
+
 impl TryFrom<Bytes> for PeerId {
     type Error = PeerIdError;
 
