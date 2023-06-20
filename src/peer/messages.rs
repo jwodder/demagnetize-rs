@@ -336,34 +336,35 @@ impl TryFrom<Bytes> for CoreMessage {
         let Ok(msg_type) = buf.try_get::<u8>() else {
             return Ok(CoreMessage::Keepalive);
         };
+        let errmap = &|source| MessageError::Length { msg_type, source };
         match msg_type {
             0 => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Choke)
             }
             1 => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Unchoke)
             }
             2 => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Interested)
             }
             3 => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::NotInterested)
             }
             4 => {
-                let piece = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let piece = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Have { piece })
             }
             5 => Ok(CoreMessage::Bitfield(buf.remainder())),
             6 => {
-                let index = buf.try_get::<u32>()?;
-                let begin = buf.try_get::<u32>()?;
-                let length = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                let begin = buf.try_get::<u32>().map_err(errmap)?;
+                let length = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Request {
                     index,
                     begin,
@@ -371,16 +372,16 @@ impl TryFrom<Bytes> for CoreMessage {
                 })
             }
             7 => {
-                let index = buf.try_get::<u32>()?;
-                let begin = buf.try_get::<u32>()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                let begin = buf.try_get::<u32>().map_err(errmap)?;
                 let data = buf.remainder();
                 Ok(CoreMessage::Piece { index, begin, data })
             }
             8 => {
-                let index = buf.try_get::<u32>()?;
-                let begin = buf.try_get::<u32>()?;
-                let length = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                let begin = buf.try_get::<u32>().map_err(errmap)?;
+                let length = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Cancel {
                     index,
                     begin,
@@ -388,28 +389,28 @@ impl TryFrom<Bytes> for CoreMessage {
                 })
             }
             9 => {
-                let port = buf.try_get::<u16>()?;
-                buf.eof()?;
+                let port = buf.try_get::<u16>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Port { port })
             }
             0x0D => {
-                let index = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Suggest { index })
             }
             0x0E => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::HaveAll)
             }
             0x0F => {
-                buf.eof()?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::HaveNone)
             }
             0x10 => {
-                let index = buf.try_get::<u32>()?;
-                let begin = buf.try_get::<u32>()?;
-                let length = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                let begin = buf.try_get::<u32>().map_err(errmap)?;
+                let length = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::Reject {
                     index,
                     begin,
@@ -417,12 +418,12 @@ impl TryFrom<Bytes> for CoreMessage {
                 })
             }
             0x11 => {
-                let index = buf.try_get::<u32>()?;
-                buf.eof()?;
+                let index = buf.try_get::<u32>().map_err(errmap)?;
+                buf.eof().map_err(errmap)?;
                 Ok(CoreMessage::AllowedFast { index })
             }
             0x14 => {
-                let msg_id = buf.try_get::<u8>()?;
+                let msg_id = buf.try_get::<u8>().map_err(errmap)?;
                 let payload = buf.remainder();
                 Ok(CoreMessage::Extended { msg_id, payload })
             }
@@ -776,9 +777,8 @@ impl TryFrom<Bytes> for MetadataMessage {
 pub(crate) enum MessageError {
     #[error("unknown message type: {0}")]
     Unknown(u8),
-    #[error("message had invalid length")]
-    // TODO: Should this include information on the kind of message?
-    Length(#[from] PacketError),
+    #[error("message type {msg_type:#4x} had invalid length")]
+    Length { msg_type: u8, source: PacketError },
     #[error("unknown extended message ID: {0}")]
     UnknownExtended(u8),
     #[error("failed to decode extended handshake payload")]
