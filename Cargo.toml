@@ -1,6 +1,6 @@
 [package]
 name = "demagnetize"
-version = "0.1.0-dev"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.65"
 description = "Convert magnet links to .torrent files"
@@ -8,7 +8,7 @@ authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
 repository = "https://github.com/jwodder/demagnetize-rs"
 documentation = "https://github.com/jwodder/demagnetize-rs"
 license = "MIT"
-keywords = ["bittorent", "magnet link", "torrent"]
+keywords = ["bittorent", "magnet-link", "torrent"]
 categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 

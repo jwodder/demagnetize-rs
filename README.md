@@ -1,10 +1,10 @@
-[![Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
+[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![CI Status](https://github.com/jwodder/demagnetize-rs/actions/workflows/test.yml/badge.svg)](https://github.com/jwodder/demagnetize-rs/actions/workflows/test.yml)
 [![codecov.io](https://codecov.io/gh/jwodder/demagnetize-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/jwodder/demagnetize-rs)
 [![Minimum Supported Rust Version](https://img.shields.io/badge/MSRV-1.65-orange)](https://www.rust-lang.org)
 [![MIT License](https://img.shields.io/github/license/jwodder/demagnetize-rs.svg)](https://opensource.org/licenses/MIT)
 
-[GitHub](https://github.com/jwodder/demagnetize-rs) | [Issues](https://github.com/jwodder/demagnetize-rs/issues)
+[GitHub](https://github.com/jwodder/demagnetize-rs) | [crates.io](https://crates.io/crates/demagnetize) | [Issues](https://github.com/jwodder/demagnetize-rs/issues)
 
 `demagnetize` is a Rust program for converting one or more BitTorrent [magnet
 links](https://en.wikipedia.org/wiki/Magnet_URI_scheme) into `.torrent` files
@@ -31,6 +31,16 @@ particular order:
 
 `demagnetize` is a translation of a Python program by the same author; you can
 find the Python version at <https://github.com/jwodder/demagnetize>.
+
+
+Installation
+============
+
+In order to install `demagnetize`, you first need to have [Rust and Cargo
+installed](https://www.rust-lang.org/tools/install).  You can then build the
+latest release of `demagnetize` and install it in `~/.cargo/bin` by running:
+
+    cargo install demagnetize
 
 
 Usage
