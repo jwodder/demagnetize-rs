@@ -24,7 +24,7 @@ fern = "0.6.2"
 futures = { version = "0.3.28", default-features = false, features = ["std"] }
 log = "0.4.19"
 patharg = { version = "0.3.0", features = ["tokio"] }
-pin-project-lite = "0.2.9"
+pin-project-lite = "0.2.10"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 reqwest = "0.11.18"
