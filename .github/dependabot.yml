@@ -6,10 +6,13 @@ updates:
       - dependency-type: all
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
     commit-message:
       prefix: "[cargo]"
       include: scope
+    groups:
+      deps:
+        patterns:
+          - "*"
     labels:
       - dependencies
       - d:cargo
