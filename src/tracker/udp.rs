@@ -191,7 +191,11 @@ struct ConnectedUdpSocket {
 
 impl ConnectedUdpSocket {
     async fn connect(host: &str, port: u16) -> Result<ConnectedUdpSocket, UdpTrackerError> {
-        let Some(addr) = lookup_host((host, port)).await.map_err(UdpTrackerError::Lookup)?.next() else {
+        let Some(addr) = lookup_host((host, port))
+            .await
+            .map_err(UdpTrackerError::Lookup)?
+            .next()
+        else {
             return Err(UdpTrackerError::NoResolve);
         };
         let (bindaddr, ipv6) = match addr {
