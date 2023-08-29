@@ -13,29 +13,29 @@ categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
 [dependencies]
-anstream = "0.3.2"
-anstyle = "1.0.1"
+anstream = "0.5.0"
+anstyle = "1.0.2"
 bendy = "0.3.3"
 bytes = "1.4.0"
-chrono = { version = "0.4.26", default-features = false, features = ["clock", "std"] }
-clap = { version = "4.3.11", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
+chrono = { version = "0.4.27", default-features = false, features = ["clock", "std"] }
+clap = { version = "4.4.1", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.4.0"
 fern = "0.6.2"
 futures = { version = "0.3.28", default-features = false, features = ["std"] }
-log = "0.4.19"
+log = "0.4.20"
 patharg = { version = "0.3.0", features = ["tokio"] }
-pin-project-lite = "0.2.10"
+pin-project-lite = "0.2.13"
 rand = "0.8.5"
 rand_distr = "0.4.3"
-reqwest = "0.11.18"
+reqwest = "0.11.20"
 sha1 = "0.10.5"
 strum = "0.25.0"
-strum_macros = "0.25.1"
-thiserror = "1.0.43"
-tokio = { version = "1.29.1", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
+strum_macros = "0.25.2"
+thiserror = "1.0.47"
+tokio = { version = "1.32.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.8", features = ["codec"] }
-url = "2.4.0"
+url = "2.4.1"
 
 [dev-dependencies]
-assert_cmd = "2.0.11"
-tempfile = "3.6.0"
+assert_cmd = "2.0.12"
+tempfile = "3.8.0"
