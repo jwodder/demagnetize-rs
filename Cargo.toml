@@ -30,9 +30,9 @@ rand_distr = "0.4.3"
 reqwest = "0.11.22"
 sha1 = "0.10.6"
 strum = "0.25.0"
-strum_macros = "0.25.2"
+strum_macros = "0.25.3"
 thiserror = "1.0.49"
-tokio = { version = "1.32.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
+tokio = { version = "1.33.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.9", features = ["codec"] }
 url = "2.4.1"
 
