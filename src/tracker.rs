@@ -51,19 +51,19 @@ impl Tracker {
     ) -> Result<Vec<Peer>, TrackerError> {
         let mut s = self.connect(info_hash.clone(), local).await?;
         let peers = s.start().await?.peers;
-        log::info!("{self} returned {} peers for {info_hash}", peers.len());
+        let display = self.to_string();
+        log::info!("{display} returned {} peers for {info_hash}", peers.len());
         log::debug!(
-            "{self} returned peers for {info_hash}: {}",
+            "{display} returned peers for {info_hash}: {}",
             comma_list(&peers)
         );
-        let display = self.to_string();
         shutdown_group.spawn(|token| async move {
             tokio::select! {
-                _ = token.cancelled() => log::trace!("\"stopped\" announcement to {display} for {info_hash} cancelled"),
+                _ = token.cancelled() => log::trace!(r#""stopped" announcement to {display} for {info_hash} cancelled"#),
                 r = s.stop() => {
                     if let Err(e) = r {
                         log::warn!(
-                            "failure sending \"stopped\" announcement to {display} for {info_hash}: {}",
+                            r#"failure sending "stopped" announcement to {display} for {info_hash}: {}"#,
                             ErrorChain(e)
                         );
                     }
@@ -133,7 +133,7 @@ impl TrackerSession {
 
     async fn start(&mut self) -> Result<AnnounceResponse, TrackerError> {
         log::trace!(
-            "Sending 'started' announcement to {} for {}",
+            r#"Sending "started" announcement to {} for {}"#,
             self.tracker_display(),
             self.info_hash
         );
@@ -153,7 +153,7 @@ impl TrackerSession {
 
     async fn stop(&mut self) -> Result<AnnounceResponse, TrackerError> {
         log::trace!(
-            "Sending 'stopped' announcement to {} for {}",
+            r#"Sending "stopped" announcement to {} for {}"#,
             self.tracker_display(),
             self.info_hash
         );

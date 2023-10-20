@@ -283,7 +283,12 @@ impl Magnet {
         while let Some((peer, r)) = stream.next().await {
             match r {
                 Ok(info) => return Ok(TorrentFile::new(info, self.trackers.clone())),
-                Err(e) => log::warn!("Failed to fetch info from {}: {}", peer, ErrorChain(e)),
+                Err(e) => log::warn!(
+                    "Failed to fetch info for {} from {}: {}",
+                    self,
+                    peer,
+                    ErrorChain(e)
+                ),
             }
         }
         Err(GetInfoError)
