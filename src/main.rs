@@ -23,10 +23,10 @@ use std::process::ExitCode;
 
 /// Convert magnet links to .torrent files
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
-#[clap(version)]
+#[command(version)]
 struct Arguments {
     /// Set logging level
-    #[clap(
+    #[arg(
         short,
         long,
         default_value = "INFO",
@@ -55,7 +55,7 @@ enum Command {
         /// by the (sanitized) name of the torrent, and/or a `{hash}`
         /// placeholder, which will be replaced by the torrent's info hash in
         /// hexadecimal.
-        #[clap(short, long, default_value = "{name}.torrent")]
+        #[arg(short, long, default_value = "{name}.torrent")]
         outfile: PathTemplate,
 
         magnet: Magnet,
@@ -68,7 +68,7 @@ enum Command {
         /// replaced by the (sanitized) name of each torrent, and/or a `{hash}`
         /// placeholder, which will be replaced by each torrent's info hash in
         /// hexadecimal.
-        #[clap(short, long, default_value = "{name}.torrent")]
+        #[arg(short, long, default_value = "{name}.torrent")]
         outfile: PathTemplate,
 
         /// A file listing magnet links, one per line.  Empty lines and lines
@@ -76,13 +76,13 @@ enum Command {
         file: InputArg,
     },
     /// Fetch peers for an info hash from a tracker
-    #[clap(hide = true)]
+    #[command(hide = true)]
     QueryTracker {
         tracker: Tracker,
         info_hash: InfoHash,
     },
     /// Fetch torrent metadata for an info hash from a peer
-    #[clap(hide = true)]
+    #[command(hide = true)]
     QueryPeer { peer: Peer, info_hash: InfoHash },
 }
 
