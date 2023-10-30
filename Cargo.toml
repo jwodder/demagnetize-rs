@@ -18,10 +18,10 @@ anstyle = "1.0.4"
 bendy = "0.3.3"
 bytes = "1.5.0"
 chrono = { version = "0.4.31", default-features = false, features = ["clock", "std"] }
-clap = { version = "4.4.6", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
+clap = { version = "4.4.7", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.4.0"
 fern = "0.6.2"
-futures = { version = "0.3.28", default-features = false, features = ["std"] }
+futures = { version = "0.3.29", default-features = false, features = ["std"] }
 log = "0.4.20"
 patharg = { version = "0.3.0", features = ["tokio"] }
 pin-project-lite = "0.2.13"
@@ -33,9 +33,9 @@ strum = "0.25.0"
 strum_macros = "0.25.3"
 thiserror = "1.0.50"
 tokio = { version = "1.33.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
-tokio-util = { version = "0.7.9", features = ["codec"] }
+tokio-util = { version = "0.7.10", features = ["codec"] }
 url = "2.4.1"
 
 [dev-dependencies]
 assert_cmd = "2.0.12"
-tempfile = "3.8.0"
+tempfile = "3.8.1"
