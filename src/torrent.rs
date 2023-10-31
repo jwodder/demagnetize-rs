@@ -8,7 +8,7 @@ use patharg::OutputArg;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::iter::{repeat, Peekable};
+use std::iter::Peekable;
 use std::ops::Range;
 use std::path::Path;
 use std::str::FromStr;
@@ -70,14 +70,13 @@ impl TorrentInfoBuilder {
         }
         let hasher = Sha1::new();
         let data = BytesMut::with_capacity(lgth);
-        let mut sizes = repeat(Self::PIECE_LENGTH)
-            .take(lgth / Self::PIECE_LENGTH)
-            .collect::<Vec<_>>();
+        let mut sizes = vec![Self::PIECE_LENGTH; lgth / Self::PIECE_LENGTH];
         let overflow = lgth % Self::PIECE_LENGTH;
         if overflow > 0 {
             sizes.push(overflow);
         }
-        let piece_qty = u32::try_from(sizes.len()).unwrap();
+        let piece_qty =
+            u32::try_from(sizes.len()).expect("number of metadata pieces should fit in a u32");
         Ok(TorrentInfoBuilder {
             info_hash,
             hasher,
