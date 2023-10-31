@@ -346,7 +346,10 @@ impl From<UdpAnnounceRequest> for Bytes {
         while urldata.has_remaining() {
             buf.put_u8(2);
             let segment = urldata.split_to(urldata.len().min(255));
-            buf.put_u8(u8::try_from(segment.len()).unwrap());
+            buf.put_u8(
+                u8::try_from(segment.len())
+                    .expect("segment length is no more than 255 and thus should fit in a u8"),
+            );
             buf.put(segment);
         }
         buf.freeze()

@@ -90,7 +90,7 @@ impl TorrentInfoBuilder {
         let Some(index) = self.index_iter.next() else {
             return Err(PushError::TooManyPieces);
         };
-        let index = usize::try_from(index).unwrap();
+        let index = usize::try_from(index).expect("piece indices should fit in a usize");
         if piece.len() != self.sizes[index] {
             return Err(PushError::Length {
                 index,
@@ -166,8 +166,17 @@ impl TorrentFile {
 
 macro_rules! put_kv {
     ($buf:ident, $key:literal, $value:expr) => {
-        $buf.put($key.to_bencode().unwrap().as_slice());
-        $buf.put($value.to_bencode().unwrap().as_slice());
+        $buf.put(
+            $key.to_bencode()
+                .expect("string keys should be bencodable")
+                .as_slice(),
+        );
+        $buf.put(
+            $value
+                .to_bencode()
+                .expect("torrent file values should be bencodable")
+                .as_slice(),
+        );
     };
 }
 
@@ -188,7 +197,12 @@ impl From<TorrentFile> for Bytes {
         }
         put_kv!(buf, "created by", torrent.created_by);
         put_kv!(buf, "creation date", torrent.creation_date);
-        buf.put("info".to_bencode().unwrap().as_slice());
+        buf.put(
+            "info"
+                .to_bencode()
+                .expect("string should be bencodable")
+                .as_slice(),
+        );
         buf.put(Bytes::from(torrent.info));
         buf.put_u8(b'e');
         buf.freeze()
@@ -205,7 +219,9 @@ impl PathTemplate {
             match elem {
                 TemplateElement::Literal(s) => buf.push_str(s),
                 TemplateElement::Name => buf.push_str(name),
-                TemplateElement::Hash => write!(buf, "{info_hash}").unwrap(),
+                TemplateElement::Hash => {
+                    write!(buf, "{info_hash}").expect("fmt::writing to a String should not fail")
+                }
             }
         }
         buf

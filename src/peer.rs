@@ -78,7 +78,7 @@ impl Peer {
             let mut registry = Bep10Registry::new();
             registry
                 .register(Bep10Extension::Metadata, UT_METADATA)
-                .unwrap();
+                .expect("registering a non-zero code in a new registry should not fail");
             registry
         };
         let msg = Message::from(ExtendedHandshake {

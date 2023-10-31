@@ -738,7 +738,10 @@ impl TryFrom<Bytes> for MetadataMessage {
                 )))?
             }
         };
-        let dict_len = dd.into_raw().unwrap().len();
+        let dict_len = dd
+            .into_raw()
+            .expect("should not fail after consuming all pairs in dictionary")
+            .len();
         match msg_type {
             0 => {
                 if !matches!(decoder.next_object(), Ok(None)) {

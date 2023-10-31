@@ -224,5 +224,5 @@ fn init_logging(log_level: LevelFilter) {
         .level_for("demagnetize", log_level)
         .chain(stderr)
         .apply()
-        .unwrap();
+        .expect("no other logger should have been previously initialized");
 }
