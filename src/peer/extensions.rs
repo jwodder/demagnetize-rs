@@ -25,7 +25,7 @@ impl Extension {
 }
 
 impl fmt::Display for Extension {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Extension::*;
         match self {
             AzureusMessaging => write!(f, "Azureus Messaging Protocol"),
@@ -50,7 +50,7 @@ impl ExtensionSet {
 }
 
 impl fmt::Display for ExtensionSet {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut extset = self.0;
         let mut first = true;
         for ext in Extension::iter() {
@@ -128,7 +128,7 @@ impl FromStr for Bep10Extension {
 }
 
 impl fmt::Display for Bep10Extension {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Bep10Extension::Metadata => write!(f, "ut_metadata"),
             //Bep10Extension::Pex => write!(f, "ut_pex"),
@@ -143,10 +143,12 @@ pub(crate) struct Bep10Error;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Bep10Registry {
     to_code: HashMap<Bep10Extension, u8>,
+    #[allow(clippy::zero_sized_map_values)]
     from_code: HashMap<u8, Bep10Extension>,
 }
 
 impl Bep10Registry {
+    #[allow(clippy::zero_sized_map_values)]
     pub(super) fn new() -> Bep10Registry {
         Bep10Registry {
             to_code: HashMap::new(),
@@ -198,10 +200,8 @@ impl Bep10Registry {
         if self.to_code.contains_key(&ext) {
             return Err(Bep10RegistryError::Ext(ext));
         }
-        let _prev_ext = self.from_code.insert(code, ext);
-        debug_assert!(_prev_ext.is_none());
-        let _prev_code = self.to_code.insert(ext, code);
-        debug_assert!(_prev_code.is_none());
+        self.from_code.insert(code, ext);
+        self.to_code.insert(ext, code);
         Ok(())
     }
 }

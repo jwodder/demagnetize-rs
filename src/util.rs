@@ -11,8 +11,8 @@ pub(crate) fn comma_list<T>(values: &[T]) -> CommaList<'_, T> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CommaList<'a, T>(&'a [T]);
 
-impl<'a, T: fmt::Display> fmt::Display for CommaList<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl<T: fmt::Display> fmt::Display for CommaList<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
         for val in self.0 {
             if !std::mem::replace(&mut first, false) {
@@ -155,7 +155,7 @@ pub(crate) enum UnbencodeError {
 }
 
 impl fmt::Display for UnbencodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnbencodeError::Bendy(e) => write!(f, "{e}"),
             UnbencodeError::NoData => write!(f, "no data in bencode packet"),
@@ -173,10 +173,10 @@ impl From<bendy::decoding::Error> for UnbencodeError {
 impl std::error::Error for UnbencodeError {}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ErrorChain<E>(pub E);
+pub(crate) struct ErrorChain<E>(pub(crate) E);
 
 impl<E: std::error::Error> fmt::Display for ErrorChain<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)?;
         let mut source = self.0.source();
         while let Some(e) = source {

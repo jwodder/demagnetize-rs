@@ -24,7 +24,7 @@ impl HttpTracker {
         self.0.as_str()
     }
 
-    pub(super) async fn connect(&self) -> Result<HttpTrackerSession, TrackerError> {
+    pub(super) fn connect(&self) -> Result<HttpTrackerSession, TrackerError> {
         let client = Client::builder()
             .user_agent(USER_AGENT)
             .build()
@@ -37,7 +37,7 @@ impl HttpTracker {
 }
 
 impl fmt::Display for HttpTracker {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<Tracker {}>", self.0)
     }
 }
@@ -113,7 +113,7 @@ impl HttpAnnounceResponse {
 }
 
 impl FromBencode for HttpAnnounceResponse {
-    fn decode_bencode_object(object: Object) -> Result<Self, BendyError> {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<Self, BendyError> {
         let mut interval = None;
         let mut peers = Vec::new();
         let mut warning_message = None;

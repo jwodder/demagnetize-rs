@@ -35,7 +35,7 @@ impl UdpTracker {
 }
 
 impl fmt::Display for UdpTracker {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<Tracker {}>", self.0)
     }
 }
@@ -101,7 +101,7 @@ impl UdpTrackerSession {
                 Ok(Err(e)) => return Err(e.into()),
                 Err(_) => {
                     log::trace!("Connection to {} timed out; restarting", self.tracker);
-                    self.reset_connection().await;
+                    self.reset_connection();
                     continue;
                 }
             };
@@ -129,7 +129,7 @@ impl UdpTrackerSession {
         Ok(conn)
     }
 
-    async fn reset_connection(&mut self) {
+    fn reset_connection(&mut self) {
         self.conn = None;
     }
 
@@ -164,17 +164,16 @@ impl UdpTrackerSession {
         loop {
             self.socket.send(&msg).await?;
             let maxtime = Duration::from_secs(15 << n);
-            match timeout(maxtime, self.socket.recv()).await {
-                Ok(r) => return r,
-                Err(_) => {
-                    log::trace!("{} did not reply in time; resending message", self.tracker);
-                    if n < 8 {
-                        // TODO: Should this count remember timeouts from
-                        // previous connections & connection attempts?
-                        n += 1;
-                    }
-                    continue;
+            if let Ok(r) = timeout(maxtime, self.socket.recv()).await {
+                return r;
+            } else {
+                log::trace!("{} did not reply in time; resending message", self.tracker);
+                if n < 8 {
+                    // TODO: Should this count remember timeouts from previous
+                    // connections & connection attempts?
+                    n += 1;
                 }
+                continue;
             }
         }
     }

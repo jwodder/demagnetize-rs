@@ -34,7 +34,7 @@ impl Handshake {
 }
 
 impl fmt::Display for Handshake {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "handshake (extensions: {}; peer ID: {})",
@@ -118,7 +118,7 @@ impl Message {
 }
 
 impl fmt::Display for Message {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Message::Core(msg) => write!(f, "{msg}"),
             Message::Extended(msg) => write!(f, "{msg}"),
@@ -185,7 +185,7 @@ impl CoreMessage {
 }
 
 impl fmt::Display for CoreMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CoreMessage::Keepalive => write!(f, "keepalive"),
             CoreMessage::Choke => write!(f, "choke"),
@@ -484,7 +484,7 @@ impl ExtendedMessage {
 }
 
 impl fmt::Display for ExtendedMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExtendedMessage::Handshake(msg) => write!(f, "{msg}"),
             ExtendedMessage::Metadata(msg) => write!(f, "{msg}"),
@@ -509,7 +509,7 @@ impl ExtendedHandshake {
 }
 
 impl fmt::Display for ExtendedHandshake {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "extended handshake: ")?;
         if let Some(m) = self.m.as_ref() {
             write!(f, "extensions: ")?;
@@ -553,7 +553,7 @@ impl TryFrom<Bytes> for ExtendedHandshake {
 impl ToBencode for ExtendedHandshake {
     const MAX_DEPTH: usize = 3;
 
-    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), bendy::encoding::Error> {
+    fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
         encoder.emit_dict(|mut e| {
             if let Some(m) = self.m.as_ref() {
                 e.emit_pair(b"m", m)?;
@@ -570,7 +570,7 @@ impl ToBencode for ExtendedHandshake {
 }
 
 impl FromBencode for ExtendedHandshake {
-    fn decode_bencode_object(object: Object) -> Result<ExtendedHandshake, BendyError> {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<ExtendedHandshake, BendyError> {
         let mut m = None;
         let mut v = None;
         let mut metadata_size = None;
@@ -624,7 +624,7 @@ impl MetadataMessage {
 }
 
 impl fmt::Display for MetadataMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MetadataMessage::Request { piece } => write!(f, "metadata request: piece {piece}"),
             MetadataMessage::Data {
@@ -722,21 +722,15 @@ impl TryFrom<Bytes> for MetadataMessage {
                 _ => (),
             }
         }
-        let msg_type = match msg_type {
-            Some(msg_type) => msg_type,
-            None => {
-                return Err(MessageError::metadata_bendy(BendyError::missing_field(
-                    "msg_type",
-                )))?
-            }
+        let Some(msg_type) = msg_type else {
+            return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                "msg_type",
+            )));
         };
-        let piece = match piece {
-            Some(piece) => piece,
-            None => {
-                return Err(MessageError::metadata_bendy(BendyError::missing_field(
-                    "piece",
-                )))?
-            }
+        let Some(piece) = piece else {
+            return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                "piece",
+            )));
         };
         let dict_len = dd
             .into_raw()
@@ -750,13 +744,10 @@ impl TryFrom<Bytes> for MetadataMessage {
                 Ok(MetadataMessage::Request { piece })
             }
             1 => {
-                let total_size = match total_size {
-                    Some(total_size) => total_size,
-                    None => {
-                        return Err(MessageError::metadata_bendy(BendyError::missing_field(
-                            "total_size",
-                        )))?
-                    }
+                let Some(total_size) = total_size else {
+                    return Err(MessageError::metadata_bendy(BendyError::missing_field(
+                        "total_size",
+                    )));
                 };
                 let payload = buf.split_off(dict_len);
                 Ok(MetadataMessage::Data {

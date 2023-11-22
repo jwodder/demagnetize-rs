@@ -45,7 +45,7 @@ impl InfoHash {
 }
 
 impl fmt::Display for InfoHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}", self.0)
     }
 }
@@ -78,7 +78,6 @@ impl TryFromBuf for InfoHash {
     fn try_from_buf(buf: &mut Bytes) -> Result<InfoHash, PacketError> {
         if buf.len() >= InfoHash::LENGTH {
             let data = buf.copy_to_bytes(InfoHash::LENGTH);
-            debug_assert_eq!(data.len(), InfoHash::LENGTH);
             Ok(InfoHash::try_from(data).expect("Info hash size should be 20"))
         } else {
             Err(PacketError::Short)
@@ -98,9 +97,9 @@ pub(crate) enum InfoHashError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LocalPeer {
-    pub id: PeerId,
-    pub key: Key,
-    pub port: u16,
+    pub(crate) id: PeerId,
+    pub(crate) key: Key,
+    pub(crate) port: u16,
 }
 
 impl LocalPeer {
@@ -113,7 +112,7 @@ impl LocalPeer {
 }
 
 impl fmt::Display for LocalPeer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "id = {}, key = {}, port = {}",
@@ -141,7 +140,13 @@ impl PeerId {
                 buf.put_u8(b);
             }
         }
-        debug_assert_eq!(buf.len(), PeerId::LENGTH);
+        debug_assert_eq!(
+            buf.len(),
+            PeerId::LENGTH,
+            "Newly-generated PeerId should be {} bytes long, but got {} bytes",
+            PeerId::LENGTH,
+            buf.len()
+        );
         PeerId(buf.freeze())
     }
 
@@ -155,7 +160,7 @@ impl PeerId {
 }
 
 impl fmt::Display for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
@@ -182,7 +187,6 @@ impl TryFromBuf for PeerId {
     fn try_from_buf(buf: &mut Bytes) -> Result<PeerId, PacketError> {
         if buf.len() >= PeerId::LENGTH {
             let data = buf.copy_to_bytes(PeerId::LENGTH);
-            debug_assert_eq!(data.len(), PeerId::LENGTH);
             Ok(PeerId::try_from(data).expect("Peer ID size should be 20"))
         } else {
             Err(PacketError::Short)
@@ -204,7 +208,7 @@ pub(crate) struct PeerIdError(usize);
 pub(crate) struct Key(u32);
 
 impl fmt::Display for Key {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -348,7 +352,7 @@ impl FromStr for Magnet {
 }
 
 impl fmt::Display for Magnet {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(dn) = self.display_name() {
             write!(f, "{dn:?} ({})", self.info_hash)
         } else {
@@ -499,7 +503,7 @@ mod tests {
             .unwrap();
         let mut url = Url::parse("http://tracker.example.com:8080/announce?here=there").unwrap();
         info_hash.add_query_param(&mut url);
-        assert_eq!(url.as_str(), "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB")
+        assert_eq!(url.as_str(), "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB");
     }
 
     #[test]

@@ -220,7 +220,7 @@ impl PathTemplate {
                 TemplateElement::Literal(s) => buf.push_str(s),
                 TemplateElement::Name => buf.push_str(name),
                 TemplateElement::Hash => {
-                    write!(buf, "{info_hash}").expect("fmt::writing to a String should not fail")
+                    write!(buf, "{info_hash}").expect("fmt::writing to a String should not fail");
                 }
             }
         }
@@ -237,7 +237,10 @@ impl FromStr for PathTemplate {
         let mut brace_iter = s.match_indices('{');
         let mut prev_end = 0;
         while let Some((i, _)) = brace_iter.next() {
-            debug_assert!(prev_end <= i);
+            debug_assert!(
+                prev_end <= i,
+                "prev_end={prev_end:?} was unexpectedly greater than i={i:?}"
+            );
             buf.push_str(&s[prev_end..i]);
             match s[i..]
                 .char_indices()

@@ -59,7 +59,7 @@ impl Tracker {
         );
         shutdown_group.spawn(|token| async move {
             tokio::select! {
-                _ = token.cancelled() => log::trace!(r#""stopped" announcement to {display} for {info_hash} cancelled"#),
+                () = token.cancelled() => log::trace!(r#""stopped" announcement to {display} for {info_hash} cancelled"#),
                 r = s.stop() => {
                     if let Err(e) = r {
                         log::warn!(
@@ -79,7 +79,7 @@ impl Tracker {
         local: LocalPeer,
     ) -> Result<TrackerSession, TrackerError> {
         let inner = match self {
-            Tracker::Http(t) => InnerTrackerSession::Http(t.connect().await?),
+            Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
             Tracker::Udp(t) => InnerTrackerSession::Udp(t.connect().await?),
         };
         Ok(TrackerSession {
@@ -91,7 +91,7 @@ impl Tracker {
 }
 
 impl fmt::Display for Tracker {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Tracker::Http(http) => write!(f, "{http}"),
             Tracker::Udp(udp) => write!(f, "{udp}"),

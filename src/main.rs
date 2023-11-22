@@ -218,7 +218,7 @@ fn init_logging(log_level: LevelFilter) {
                 record.level(),
                 message,
                 style.render_reset(),
-            ))
+            ));
         })
         .level(LevelFilter::Info)
         .level_for("demagnetize", log_level)

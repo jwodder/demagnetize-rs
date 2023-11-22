@@ -1,3 +1,4 @@
+#![cfg(test)]
 use assert_cmd::Command;
 use bendy::decoding::FromBencode;
 use bendy::encoding::ToBencode;

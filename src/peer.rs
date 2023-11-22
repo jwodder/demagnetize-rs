@@ -1,4 +1,4 @@
-pub mod extensions;
+pub(crate) mod extensions;
 mod messages;
 use self::extensions::*;
 use self::messages::*;
@@ -123,7 +123,7 @@ impl FromStr for Peer {
 }
 
 impl fmt::Display for Peer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<Peer {}>", self.address)
     }
 }
@@ -147,7 +147,7 @@ impl From<SocketAddrV6> for Peer {
 }
 
 impl FromBencode for Peer {
-    fn decode_bencode_object(object: Object) -> Result<Peer, BendyError> {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<Peer, BendyError> {
         let mut peer_id = None;
         let mut ip = None;
         let mut port = None;
@@ -256,7 +256,7 @@ struct PeerConnection<'a> {
     metadata_size: Option<u32>,
 }
 
-impl<'a> PeerConnection<'a> {
+impl PeerConnection<'_> {
     async fn get_metadata_info(&mut self) -> Result<TorrentInfo, PeerError> {
         // Unlike a normal torrent, we expect to get the entire info from a
         // single peer and error if it can't give it to us (because peers
