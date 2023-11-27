@@ -19,7 +19,7 @@ bendy = "0.3.3"
 bytes = "1.5.0"
 chrono = { version = "0.4.31", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.4.8", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
-data-encoding = "2.4.0"
+data-encoding = "2.5.0"
 fern = "0.6.2"
 futures = { version = "0.3.29", default-features = false, features = ["std"] }
 log = "0.4.20"
@@ -34,7 +34,7 @@ strum_macros = "0.25.3"
 thiserror = "1.0.50"
 tokio = { version = "1.34.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.10", features = ["codec"] }
-url = "2.4.1"
+url = "2.5.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.12"
