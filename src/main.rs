@@ -122,7 +122,7 @@ impl Command {
                     let outf = &outfile;
                     let lc = &local;
                     let gr = &group;
-                    let stream = iter(magnets)
+                    let mut stream = iter(magnets)
                         .map(|magnet| async move {
                             if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
                                 log::error!(
@@ -135,7 +135,6 @@ impl Command {
                             }
                         })
                         .buffer_unordered(MAGNET_LIMIT);
-                    tokio::pin!(stream);
                     while let Some(b) = stream.next().await {
                         if b {
                             success += 1;

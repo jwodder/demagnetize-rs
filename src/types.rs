@@ -257,7 +257,7 @@ impl Magnet {
         shutdown_group: &ShutdownGroup,
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
-        let stream = iter(self.trackers())
+        let mut stream = iter(self.trackers())
             .map(|tracker| async move {
                 match tracker
                     .get_peers(self.info_hash(), local, shutdown_group)
@@ -283,7 +283,6 @@ impl Magnet {
                 (peer, r)
             })
             .buffer_unordered(PEERS_PER_MAGNET_LIMIT);
-        tokio::pin!(stream);
         while let Some((peer, r)) = stream.next().await {
             match r {
                 Ok(info) => return Ok(TorrentFile::new(info, self.trackers.clone())),
@@ -412,12 +411,11 @@ pub(crate) enum DownloadInfoError {
 }
 
 pub(crate) async fn parse_magnets_file(input: InputArg) -> Result<Vec<Magnet>, MagnetsFileError> {
-    let lines = input
+    let mut lines = input
         .async_lines()
         .await
         .map_err(MagnetsFileError::Open)?
         .enumerate();
-    tokio::pin!(lines);
     let mut magnets = Vec::new();
     while let Some((i, r)) = lines.next().await {
         let ln = r.map_err(MagnetsFileError::Read)?;

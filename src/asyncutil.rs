@@ -111,7 +111,6 @@ mod tests {
     #[tokio::test]
     async fn test_unique_stream() {
         let stream = iter([10, 20, 30, 20, 40, 10, 50]).unique();
-        tokio::pin!(stream);
         assert_eq!(stream.collect::<Vec<_>>().await, vec![10, 20, 30, 40, 50]);
     }
 
