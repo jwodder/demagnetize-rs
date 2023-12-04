@@ -1,10 +1,9 @@
-use futures::ready;
 use futures::stream::Stream;
 use pin_project_lite::pin_project;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 pub(crate) trait UniqueExt: Stream {
     fn unique(self) -> UniqueStream<Self>

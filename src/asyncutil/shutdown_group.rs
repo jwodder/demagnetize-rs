@@ -6,6 +6,7 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 // TODO: Should there be a limit on the number of tasks running at once?
+#[derive(Debug, Default)]
 pub(crate) struct ShutdownGroup {
     handles: FuturesUnordered<JoinHandle<()>>,
     token: CancellationToken,
