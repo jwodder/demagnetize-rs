@@ -10,6 +10,7 @@ use crate::util::{comma_list, ErrorChain, PacketError};
 use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::time::timeout;
 use url::Url;
@@ -30,14 +31,14 @@ impl Tracker {
 
     pub(crate) async fn get_peers(
         &self,
-        info_hash: &InfoHash,
-        local: &LocalPeer,
-        shutdown_group: &ShutdownGroup,
+        info_hash: Arc<InfoHash>,
+        local: Arc<LocalPeer>,
+        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
             TRACKER_TIMEOUT,
-            self._get_peers(info_hash.clone(), local.clone(), shutdown_group),
+            self._get_peers(info_hash, local, shutdown_group),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
@@ -45,11 +46,11 @@ impl Tracker {
 
     async fn _get_peers(
         &self,
-        info_hash: InfoHash,
-        local: LocalPeer,
-        shutdown_group: &ShutdownGroup,
+        info_hash: Arc<InfoHash>,
+        local: Arc<LocalPeer>,
+        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
-        let mut s = self.connect(info_hash.clone(), local).await?;
+        let mut s = self.connect(Arc::clone(&info_hash), local).await?;
         let peers = s.start().await?.peers;
         let display = self.to_string();
         log::info!("{display} returned {} peers for {info_hash}", peers.len());
@@ -75,8 +76,8 @@ impl Tracker {
 
     async fn connect(
         &self,
-        info_hash: InfoHash,
-        local: LocalPeer,
+        info_hash: Arc<InfoHash>,
+        local: Arc<LocalPeer>,
     ) -> Result<TrackerSession, TrackerError> {
         let inner = match self {
             Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
@@ -114,8 +115,8 @@ impl FromStr for Tracker {
 
 struct TrackerSession {
     inner: InnerTrackerSession,
-    info_hash: InfoHash,
-    local: LocalPeer,
+    info_hash: Arc<InfoHash>,
+    local: Arc<LocalPeer>,
 }
 
 enum InnerTrackerSession {
@@ -158,7 +159,7 @@ impl TrackerSession {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash.clone(),
+            info_hash: Arc::clone(&self.info_hash),
             peer_id: self.local.id.clone(),
             downloaded: 0,
             left: LEFT,
@@ -248,7 +249,7 @@ impl AnnounceEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Announcement {
-    info_hash: InfoHash,
+    info_hash: Arc<InfoHash>,
     peer_id: PeerId,
     downloaded: u64,
     left: u64,
