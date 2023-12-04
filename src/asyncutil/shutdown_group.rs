@@ -1,21 +1,19 @@
-use futures::stream::{FuturesUnordered, StreamExt};
 use std::future::Future;
 use std::time::Duration;
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 // TODO: Should there be a limit on the number of tasks running at once?
 #[derive(Debug, Default)]
 pub(crate) struct ShutdownGroup {
-    handles: FuturesUnordered<JoinHandle<()>>,
+    tracker: TaskTracker,
     token: CancellationToken,
 }
 
 impl ShutdownGroup {
     pub(crate) fn new() -> Self {
         ShutdownGroup {
-            handles: FuturesUnordered::new(),
+            tracker: TaskTracker::new(),
             token: CancellationToken::new(),
         }
     }
@@ -23,14 +21,16 @@ impl ShutdownGroup {
     pub(crate) fn spawn<F, Fut>(&self, func: F)
     where
         F: FnOnce(CancellationToken) -> Fut,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future + Send + 'static,
+        Fut::Output: Send + 'static,
     {
         let future = func(self.token.clone());
-        self.handles.push(tokio::spawn(future));
+        self.tracker.spawn(future);
     }
 
     async fn join(&mut self) {
-        while self.handles.next().await.is_some() {}
+        self.tracker.close();
+        self.tracker.wait().await;
     }
 
     pub(crate) async fn shutdown(mut self, duration: Duration) {
