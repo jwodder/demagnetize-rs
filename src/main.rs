@@ -5,7 +5,7 @@ mod torrent;
 mod tracker;
 mod types;
 mod util;
-use crate::asyncutil::ShutdownGroup;
+use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::peer::Peer;
 use crate::torrent::PathTemplate;
@@ -16,7 +16,7 @@ use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
-use futures::stream::{iter, StreamExt};
+use futures::stream::StreamExt;
 use log::{Level, LevelFilter};
 use patharg::InputArg;
 use std::process::ExitCode;
@@ -95,7 +95,7 @@ impl Command {
             Command::Get { outfile, magnet } => {
                 let group = Arc::new(ShutdownGroup::new());
                 let r = if let Err(e) = magnet
-                    .download_torrent_file(&outfile, local, Arc::clone(&group))
+                    .download_torrent_file(Arc::new(outfile), local, Arc::clone(&group))
                     .await
                 {
                     log::error!("Failed to download torrent file: {}", ErrorChain(e));
@@ -119,33 +119,32 @@ impl Command {
                     return ExitCode::SUCCESS;
                 }
                 let group = Arc::new(ShutdownGroup::new());
+                let mut tasks = BufferedTasks::new(MAGNET_LIMIT);
                 let mut success = 0usize;
                 let mut total = 0usize;
-                {
-                    let outf = &outfile;
-                    let mut stream = iter(magnets)
-                        .map(|magnet| {
-                            let lc = Arc::clone(&local);
-                            let gr = Arc::clone(&group);
-                            async move {
-                                if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
-                                    log::error!(
-                                        "Failed to download torrent file for {magnet}: {}",
-                                        ErrorChain(e)
-                                    );
-                                    false
-                                } else {
-                                    true
-                                }
-                            }
-                        })
-                        .buffer_unordered(MAGNET_LIMIT);
-                    while let Some(b) = stream.next().await {
-                        if b {
-                            success += 1;
+                let outfile = Arc::new(outfile);
+                for magnet in magnets {
+                    let lc = Arc::clone(&local);
+                    let gr = Arc::clone(&group);
+                    let outf = Arc::clone(&outfile);
+                    tasks.spawn(async move {
+                        if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
+                            log::error!(
+                                "Failed to download torrent file for {magnet}: {}",
+                                ErrorChain(e)
+                            );
+                            false
+                        } else {
+                            true
                         }
-                        total += 1;
+                    });
+                }
+                tasks.close();
+                while let Some(b) = tasks.next().await {
+                    if b {
+                        success += 1;
                     }
+                    total += 1;
                 }
                 log::info!(
                     "{}/{} magnet links successfully converted to torrent files",

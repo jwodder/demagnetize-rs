@@ -323,12 +323,12 @@ impl Magnet {
 
     pub(crate) async fn download_torrent_file(
         &self,
-        template: &PathTemplate,
+        template: Arc<PathTemplate>,
         local: Arc<LocalPeer>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<(), DownloadInfoError> {
         let tf = self.get_torrent_file(local, shutdown_group).await?;
-        tf.save(template).await?;
+        tf.save(&template).await?;
         Ok(())
     }
 }
