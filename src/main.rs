@@ -119,27 +119,28 @@ impl Command {
                     return ExitCode::SUCCESS;
                 }
                 let group = Arc::new(ShutdownGroup::new());
-                let mut tasks = BufferedTasks::new(MAGNET_LIMIT);
                 let mut success = 0usize;
                 let mut total = 0usize;
                 let outfile = Arc::new(outfile);
-                for magnet in magnets {
-                    let lc = Arc::clone(&local);
-                    let gr = Arc::clone(&group);
-                    let outf = Arc::clone(&outfile);
-                    tasks.spawn(async move {
-                        if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
-                            log::error!(
-                                "Failed to download torrent file for {magnet}: {}",
-                                ErrorChain(e)
-                            );
-                            false
-                        } else {
-                            true
+                let mut tasks = BufferedTasks::from_iter(
+                    MAGNET_LIMIT,
+                    magnets.into_iter().map(|magnet| {
+                        let lc = Arc::clone(&local);
+                        let gr = Arc::clone(&group);
+                        let outf = Arc::clone(&outfile);
+                        async move {
+                            if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
+                                log::error!(
+                                    "Failed to download torrent file for {magnet}: {}",
+                                    ErrorChain(e)
+                                );
+                                false
+                            } else {
+                                true
+                            }
                         }
-                    });
-                }
-                tasks.close();
+                    }),
+                );
                 while let Some(b) = tasks.next().await {
                     if b {
                         success += 1;

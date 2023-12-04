@@ -260,49 +260,53 @@ impl Magnet {
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
         let info_hash = self.info_hash();
-        let mut tracker_tasks = BufferedTasks::new(TRACKERS_PER_MAGNET_LIMIT);
-        for tracker in self.trackers() {
-            let tracker = Arc::clone(tracker);
-            let local = Arc::clone(&local);
-            let group = Arc::clone(&shutdown_group);
-            let info_hash = Arc::clone(&info_hash);
-            tracker_tasks.spawn(async move {
-                match tracker
-                    .get_peers(Arc::clone(&info_hash), local, group)
-                    .await
-                {
-                    Ok(peers) => iter(peers),
-                    Err(e) => {
-                        log::warn!(
-                            "Error communicating with {} for {}: {}",
-                            tracker,
-                            info_hash,
-                            ErrorChain(e)
-                        );
-                        iter(Vec::new())
+        let peer_stream = BufferedTasks::from_iter(
+            TRACKERS_PER_MAGNET_LIMIT,
+            self.trackers().iter().map(|tracker| {
+                let tracker = Arc::clone(tracker);
+                let local = Arc::clone(&local);
+                let group = Arc::clone(&shutdown_group);
+                let info_hash = Arc::clone(&info_hash);
+                async move {
+                    match tracker
+                        .get_peers(Arc::clone(&info_hash), local, group)
+                        .await
+                    {
+                        Ok(peers) => iter(peers),
+                        Err(e) => {
+                            log::warn!(
+                                "Error communicating with {} for {}: {}",
+                                tracker,
+                                info_hash,
+                                ErrorChain(e)
+                            );
+                            iter(Vec::new())
+                        }
                     }
                 }
-            });
-        }
-        tracker_tasks.close();
-        let mut peer_stream = tracker_tasks.flatten().unique();
+            }),
+        )
+        .flatten()
+        .unique();
         let (sender, mut receiver) = channel(PEERS_PER_MAGNET_LIMIT);
         let peer_job = tokio::spawn(async move {
-            let mut peer_tasks = BufferedTasks::new(PEERS_PER_MAGNET_LIMIT);
-            while let Some(peer) = peer_stream.next().await {
-                let local = Arc::clone(&local);
-                let info_hash = Arc::clone(&info_hash);
-                let sender = sender.clone();
-                peer_tasks.spawn(async move {
-                    let r = peer.get_metadata_info(info_hash, local).await;
-                    let _ = sender.send((peer, r)).await;
-                });
-            }
+            let peer_tasks = BufferedTasks::from_stream(
+                PEERS_PER_MAGNET_LIMIT,
+                peer_stream.map(|peer| {
+                    let local = Arc::clone(&local);
+                    let info_hash = Arc::clone(&info_hash);
+                    let sender = sender.clone();
+                    async move {
+                        let r = peer.get_metadata_info(info_hash, local).await;
+                        let _ = sender.send((peer, r)).await;
+                    }
+                }),
+            )
+            .await;
             drop(sender);
             // We need to process `peer_tasks` to completion, as otherwise
             // letting this task end here would drop `peer_tasks`, causing the
             // tasks inside it to be aborted.
-            peer_tasks.close();
             peer_tasks.collect::<()>().await;
         });
         while let Some((peer, r)) = receiver.recv().await {

@@ -1,4 +1,4 @@
-use futures::stream::Stream;
+use futures::stream::{Stream, StreamExt};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,6 +22,34 @@ impl<T> BufferedTasks<T> {
             semaphore: Arc::new(Semaphore::new(limit)),
             closed: false,
         }
+    }
+
+    pub(crate) fn from_iter<I, Fut>(limit: usize, iter: I) -> Self
+    where
+        I: IntoIterator<Item = Fut>,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut buff = BufferedTasks::new(limit);
+        for fut in iter {
+            buff.spawn(fut);
+        }
+        buff.close();
+        buff
+    }
+
+    pub(crate) async fn from_stream<S, Fut>(limit: usize, mut stream: S) -> Self
+    where
+        S: Stream<Item = Fut> + Unpin + Send,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut buff = BufferedTasks::new(limit);
+        while let Some(fut) = stream.next().await {
+            buff.spawn(fut);
+        }
+        buff.close();
+        buff
     }
 
     pub(crate) fn spawn<Fut>(&mut self, fut: Fut)
