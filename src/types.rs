@@ -298,9 +298,11 @@ impl Magnet {
                     let _ = sender.send((peer, r)).await;
                 });
             }
+            drop(sender);
             // We need to process `peer_tasks` to completion, as otherwise
             // letting this task end here would drop `peer_tasks`, causing the
             // tasks inside it to be aborted.
+            peer_tasks.close();
             peer_tasks.collect::<()>().await;
         });
         while let Some((peer, r)) = receiver.recv().await {
