@@ -13,7 +13,6 @@ use futures_util::{SinkExt, StreamExt};
 use std::fmt;
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
-use std::sync::Arc;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -33,7 +32,7 @@ impl Peer {
     pub(crate) async fn get_metadata_info(
         &self,
         info_hash: InfoHash,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
     ) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {info_hash} from {self}");
         let mut conn = match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect(info_hash, local)).await {
@@ -47,7 +46,7 @@ impl Peer {
     async fn connect(
         &self,
         info_hash: InfoHash,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
     ) -> Result<PeerConnection<'_>, PeerError> {
         log::debug!("Connecting to {self}");
         let mut s = TcpStream::connect(&self.address)

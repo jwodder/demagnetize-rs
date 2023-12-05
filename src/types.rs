@@ -93,7 +93,7 @@ pub(crate) enum InfoHashError {
     InvalidLength(usize),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LocalPeer {
     pub(crate) id: PeerId,
     pub(crate) key: Key,

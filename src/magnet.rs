@@ -35,7 +35,7 @@ impl Magnet {
 
     pub(crate) async fn get_torrent_file(
         &self,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
@@ -44,7 +44,6 @@ impl Magnet {
             TRACKERS_PER_MAGNET_LIMIT,
             self.trackers().iter().map(|tracker| {
                 let tracker = Arc::clone(tracker);
-                let local = Arc::clone(&local);
                 let group = Arc::clone(&shutdown_group);
                 async move {
                     match tracker.get_peers(info_hash, local, group).await {
@@ -69,7 +68,6 @@ impl Magnet {
             let peer_tasks = BufferedTasks::from_stream(
                 PEERS_PER_MAGNET_LIMIT,
                 peer_stream.map(|peer| {
-                    let local = Arc::clone(&local);
                     let sender = sender.clone();
                     async move {
                         let r = peer.get_metadata_info(info_hash, local).await;
@@ -105,7 +103,7 @@ impl Magnet {
     pub(crate) async fn download_torrent_file(
         &self,
         template: Arc<PathTemplate>,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<(), DownloadInfoError> {
         let tf = self.get_torrent_file(local, shutdown_group).await?;

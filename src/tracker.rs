@@ -32,7 +32,7 @@ impl Tracker {
     pub(crate) async fn get_peers(
         &self,
         info_hash: InfoHash,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
@@ -47,7 +47,7 @@ impl Tracker {
     async fn _get_peers(
         &self,
         info_hash: InfoHash,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
         let mut s = self.connect(info_hash, local).await?;
@@ -77,7 +77,7 @@ impl Tracker {
     async fn connect(
         &self,
         info_hash: InfoHash,
-        local: Arc<LocalPeer>,
+        local: LocalPeer,
     ) -> Result<TrackerSession, TrackerError> {
         let inner = match self {
             Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
@@ -116,7 +116,7 @@ impl FromStr for Tracker {
 struct TrackerSession {
     inner: InnerTrackerSession,
     info_hash: InfoHash,
-    local: Arc<LocalPeer>,
+    local: LocalPeer,
 }
 
 enum InnerTrackerSession {
