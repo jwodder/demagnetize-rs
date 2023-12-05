@@ -155,6 +155,17 @@ impl From<&[u8; 20]> for PeerId {
     }
 }
 
+impl TryFrom<&[u8]> for PeerId {
+    type Error = PeerIdError;
+
+    fn try_from(bs: &[u8]) -> Result<PeerId, PeerIdError> {
+        match bs.try_into() {
+            Ok(barray) => Ok(PeerId(barray)),
+            Err(_) => Err(PeerIdError(bs.len())),
+        }
+    }
+}
+
 impl TryFrom<Vec<u8>> for PeerId {
     type Error = PeerIdError;
 

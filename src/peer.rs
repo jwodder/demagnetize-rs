@@ -155,7 +155,7 @@ impl FromBencode for Peer {
         while let Some(kv) = dd.next_pair()? {
             match kv {
                 (b"peer id", v) => {
-                    let buf = v.try_into_bytes().context("peer id")?.to_vec();
+                    let buf = v.try_into_bytes().context("peer id")?;
                     match PeerId::try_from(buf) {
                         Ok(id) => {
                             peer_id = Some(id);
