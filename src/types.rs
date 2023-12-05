@@ -71,14 +71,6 @@ impl TryFrom<Vec<u8>> for InfoHash {
     }
 }
 
-impl TryFrom<Bytes> for InfoHash {
-    type Error = InfoHashError;
-
-    fn try_from(bs: Bytes) -> Result<InfoHash, InfoHashError> {
-        Vec::<u8>::from(bs).try_into()
-    }
-}
-
 impl TryFromBuf for InfoHash {
     fn try_from_buf(buf: &mut Bytes) -> Result<InfoHash, PacketError> {
         if buf.len() >= InfoHash::LENGTH {
