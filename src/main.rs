@@ -164,7 +164,7 @@ impl Command {
             Command::QueryTracker { tracker, info_hash } => {
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
-                    .get_peers(Arc::new(info_hash), local, Arc::clone(&group))
+                    .get_peers(info_hash, local, Arc::clone(&group))
                     .await
                 {
                     Ok(peers) => {
@@ -182,8 +182,7 @@ impl Command {
                 r
             }
             Command::QueryPeer { peer, info_hash } => {
-                let info_hash = Arc::new(info_hash);
-                match peer.get_metadata_info(Arc::clone(&info_hash), local).await {
+                match peer.get_metadata_info(info_hash, local).await {
                     Ok(info) => {
                         let filename = format!("{info_hash}.bencode");
                         log::info!("Saving info to {filename}");

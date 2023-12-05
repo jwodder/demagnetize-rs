@@ -149,7 +149,7 @@ impl TorrentFile {
 
     pub(crate) async fn save(self, template: &PathTemplate) -> std::io::Result<()> {
         let name = sanitize(self.info.name().as_deref().unwrap_or("NONAME"));
-        let path = OutputArg::from_arg(template.format(&name, &self.info.info_hash));
+        let path = OutputArg::from_arg(template.format(&name, self.info.info_hash));
         log::info!(
             "Saving torrent for info hash {} to file {}",
             self.info.info_hash,
@@ -214,7 +214,7 @@ impl From<TorrentFile> for Bytes {
 pub(crate) struct PathTemplate(Vec<TemplateElement>);
 
 impl PathTemplate {
-    pub(crate) fn format(&self, name: &str, info_hash: &InfoHash) -> String {
+    pub(crate) fn format(&self, name: &str, info_hash: InfoHash) -> String {
         let mut buf = String::new();
         for elem in &self.0 {
             match elem {
@@ -468,7 +468,7 @@ mod tests {
             .parse::<InfoHash>()
             .unwrap();
         assert_eq!(
-            template.format("My Test Torrent", &info_hash),
+            template.format("My Test Torrent", info_hash),
             "Torrent-My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
         );
     }
@@ -482,7 +482,7 @@ mod tests {
             .parse::<InfoHash>()
             .unwrap();
         assert_eq!(
-            template.format("My Test Torrent", &info_hash),
+            template.format("My Test Torrent", info_hash),
             "Torrent-{My Test Torrent}-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
         );
     }
@@ -494,7 +494,7 @@ mod tests {
             .parse::<InfoHash>()
             .unwrap();
         assert_eq!(
-            template.format("My Test Torrent", &info_hash),
+            template.format("My Test Torrent", info_hash),
             "My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9"
         );
     }

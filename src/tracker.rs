@@ -31,7 +31,7 @@ impl Tracker {
 
     pub(crate) async fn get_peers(
         &self,
-        info_hash: Arc<InfoHash>,
+        info_hash: InfoHash,
         local: Arc<LocalPeer>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
@@ -46,11 +46,11 @@ impl Tracker {
 
     async fn _get_peers(
         &self,
-        info_hash: Arc<InfoHash>,
+        info_hash: InfoHash,
         local: Arc<LocalPeer>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
-        let mut s = self.connect(Arc::clone(&info_hash), local).await?;
+        let mut s = self.connect(info_hash, local).await?;
         let peers = s.start().await?.peers;
         let display = self.to_string();
         log::info!("{display} returned {} peers for {info_hash}", peers.len());
@@ -76,7 +76,7 @@ impl Tracker {
 
     async fn connect(
         &self,
-        info_hash: Arc<InfoHash>,
+        info_hash: InfoHash,
         local: Arc<LocalPeer>,
     ) -> Result<TrackerSession, TrackerError> {
         let inner = match self {
@@ -115,7 +115,7 @@ impl FromStr for Tracker {
 
 struct TrackerSession {
     inner: InnerTrackerSession,
-    info_hash: Arc<InfoHash>,
+    info_hash: InfoHash,
     local: Arc<LocalPeer>,
 }
 
@@ -139,7 +139,7 @@ impl TrackerSession {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash.clone(),
+            info_hash: self.info_hash,
             peer_id: self.local.id.clone(),
             downloaded: 0,
             left: LEFT,
@@ -159,7 +159,7 @@ impl TrackerSession {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: Arc::clone(&self.info_hash),
+            info_hash: self.info_hash,
             peer_id: self.local.id.clone(),
             downloaded: 0,
             left: LEFT,
@@ -249,7 +249,7 @@ impl AnnounceEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Announcement {
-    info_hash: Arc<InfoHash>,
+    info_hash: InfoHash,
     peer_id: PeerId,
     downloaded: u64,
     left: u64,

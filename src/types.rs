@@ -10,28 +10,28 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct InfoHash(Bytes);
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct InfoHash([u8; InfoHash::LENGTH]);
 
 impl InfoHash {
     const LENGTH: usize = 20;
 
     pub(crate) fn from_hex(s: &str) -> Result<InfoHash, InfoHashError> {
-        let bs = HEXLOWER_PERMISSIVE
+        HEXLOWER_PERMISSIVE
             .decode(s.as_bytes())
-            .map_err(InfoHashError::InvalidHex)?;
-        Bytes::from(bs).try_into()
+            .map_err(InfoHashError::InvalidHex)?
+            .try_into()
     }
 
     pub(crate) fn from_base32(s: &str) -> Result<InfoHash, InfoHashError> {
-        let bs = BASE32
+        BASE32
             .decode(s.as_bytes())
-            .map_err(InfoHashError::InvalidBase32)?;
-        Bytes::from(bs).try_into()
+            .map_err(InfoHashError::InvalidBase32)?
+            .try_into()
     }
 
     pub(crate) fn as_bytes(&self) -> &[u8] {
-        self.0.as_ref()
+        self.0.as_slice()
     }
 
     pub(crate) fn add_query_param(&self, url: &mut Url) {
@@ -41,7 +41,10 @@ impl InfoHash {
 
 impl fmt::Display for InfoHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.0)
+        for b in self.0 {
+            write!(f, "{b:02x}")?;
+        }
+        Ok(())
     }
 }
 
@@ -57,23 +60,31 @@ impl FromStr for InfoHash {
     }
 }
 
+impl TryFrom<Vec<u8>> for InfoHash {
+    type Error = InfoHashError;
+
+    fn try_from(bs: Vec<u8>) -> Result<InfoHash, InfoHashError> {
+        match bs.try_into() {
+            Ok(barray) => Ok(InfoHash(barray)),
+            Err(bs) => Err(InfoHashError::InvalidLength(bs.len())),
+        }
+    }
+}
+
 impl TryFrom<Bytes> for InfoHash {
     type Error = InfoHashError;
 
     fn try_from(bs: Bytes) -> Result<InfoHash, InfoHashError> {
-        if bs.len() == InfoHash::LENGTH {
-            Ok(InfoHash(bs))
-        } else {
-            Err(InfoHashError::InvalidLength(bs.len()))
-        }
+        Vec::<u8>::from(bs).try_into()
     }
 }
 
 impl TryFromBuf for InfoHash {
     fn try_from_buf(buf: &mut Bytes) -> Result<InfoHash, PacketError> {
         if buf.len() >= InfoHash::LENGTH {
-            let data = buf.copy_to_bytes(InfoHash::LENGTH);
-            Ok(InfoHash::try_from(data).expect("Info hash size should be 20"))
+            let mut data = [0u8; InfoHash::LENGTH];
+            buf.copy_to_slice(&mut data);
+            Ok(InfoHash(data))
         } else {
             Err(PacketError::Short)
         }
@@ -85,7 +96,7 @@ pub(crate) enum InfoHashError {
     #[error("info hash is invalid hexadecimal")]
     InvalidHex(#[source] DecodeError),
     #[error("info hash is invalid base32")]
-    InvalidBase32(#[from] DecodeError),
+    InvalidBase32(#[source] DecodeError),
     #[error("info hash is {0} bytes long, expected 20")]
     InvalidLength(usize),
 }
@@ -226,12 +237,12 @@ impl Distribution<Key> for Standard {
     }
 }
 
-fn add_bytes_query_param(url: &mut Url, key: &str, value: &Bytes) {
+fn add_bytes_query_param(url: &mut Url, key: &str, value: &[u8]) {
     static SENTINEL: &str = "ADD_BYTES_QUERY_PARAM";
     url.query_pairs_mut()
         .encoding_override(Some(&|s| {
             if s == SENTINEL {
-                Cow::from(Vec::<u8>::from(value.clone()))
+                Cow::from(value.to_vec())
             } else {
                 Cow::from(s.as_bytes())
             }

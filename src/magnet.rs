@@ -15,14 +15,14 @@ use url::Url;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Magnet {
-    info_hash: Arc<InfoHash>,
+    info_hash: InfoHash,
     display_name: Option<String>,
     trackers: Vec<Arc<Tracker>>,
 }
 
 impl Magnet {
-    fn info_hash(&self) -> Arc<InfoHash> {
-        Arc::clone(&self.info_hash)
+    fn info_hash(&self) -> InfoHash {
+        self.info_hash
     }
 
     fn display_name(&self) -> Option<&str> {
@@ -46,12 +46,8 @@ impl Magnet {
                 let tracker = Arc::clone(tracker);
                 let local = Arc::clone(&local);
                 let group = Arc::clone(&shutdown_group);
-                let info_hash = Arc::clone(&info_hash);
                 async move {
-                    match tracker
-                        .get_peers(Arc::clone(&info_hash), local, group)
-                        .await
-                    {
+                    match tracker.get_peers(info_hash, local, group).await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
                             log::warn!(
@@ -74,7 +70,6 @@ impl Magnet {
                 PEERS_PER_MAGNET_LIMIT,
                 peer_stream.map(|peer| {
                     let local = Arc::clone(&local);
-                    let info_hash = Arc::clone(&info_hash);
                     let sender = sender.clone();
                     async move {
                         let r = peer.get_metadata_info(info_hash, local).await;
@@ -153,7 +148,7 @@ impl FromStr for Magnet {
             return Err(MagnetError::NoTrackers);
         }
         Ok(Magnet {
-            info_hash: Arc::new(info_hash),
+            info_hash,
             display_name: dn.map(String::from),
             trackers,
         })

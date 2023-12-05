@@ -32,7 +32,7 @@ pub(crate) struct Peer {
 impl Peer {
     pub(crate) async fn get_metadata_info(
         &self,
-        info_hash: Arc<InfoHash>,
+        info_hash: InfoHash,
         local: Arc<LocalPeer>,
     ) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {info_hash} from {self}");
@@ -46,7 +46,7 @@ impl Peer {
 
     async fn connect(
         &self,
-        info_hash: Arc<InfoHash>,
+        info_hash: InfoHash,
         local: Arc<LocalPeer>,
     ) -> Result<PeerConnection<'_>, PeerError> {
         log::debug!("Connecting to {self}");
@@ -55,7 +55,7 @@ impl Peer {
             .map_err(PeerError::Connect)?;
         log::trace!("Connected to {self}");
         log::trace!("Sending handshake to {self}");
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, &info_hash, &local.id);
+        let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, &local.id);
         s.write_all_buf(&mut Bytes::from(msg))
             .await
             .map_err(PeerError::Send)?;
@@ -64,9 +64,9 @@ impl Peer {
         let _ = s.read_exact(&mut buf).await.map_err(PeerError::Recv)?;
         let msg = Handshake::try_from(buf.freeze())?;
         log::trace!("{self} sent {msg}");
-        if msg.info_hash != *info_hash {
+        if msg.info_hash != info_hash {
             return Err(PeerError::InfoHashMismatch {
-                expected: (*info_hash).clone(),
+                expected: info_hash,
                 got: msg.info_hash,
             });
         }
@@ -252,7 +252,7 @@ struct PeerConnection<'a> {
     channel: MessageChannel<'a>,
     #[allow(dead_code)]
     extensions: ExtensionSet,
-    info_hash: Arc<InfoHash>,
+    info_hash: InfoHash,
     metadata_size: Option<u32>,
 }
 
@@ -265,7 +265,7 @@ impl PeerConnection<'_> {
         let Some(metadata_size) = self.metadata_size else {
             return Err(PeerError::NoMetadataSize);
         };
-        let mut piecer = TorrentInfoBuilder::new((*self.info_hash).clone(), metadata_size)?;
+        let mut piecer = TorrentInfoBuilder::new(self.info_hash, metadata_size)?;
         while let Some(i) = piecer.next_piece() {
             let msg = Message::from(MetadataMessage::Request { piece: i });
             self.channel.send(msg).await?;
