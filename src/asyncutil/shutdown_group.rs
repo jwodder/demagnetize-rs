@@ -28,12 +28,12 @@ impl ShutdownGroup {
         self.tracker.spawn(future);
     }
 
-    async fn join(&mut self) {
+    async fn join(&self) {
         self.tracker.close();
         self.tracker.wait().await;
     }
 
-    pub(crate) async fn shutdown(mut self, duration: Duration) {
+    pub(crate) async fn shutdown(&self, duration: Duration) {
         if timeout(duration, self.join()).await.is_err() {
             self.token.cancel();
         }

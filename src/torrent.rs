@@ -12,6 +12,7 @@ use std::iter::Peekable;
 use std::ops::Range;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::fs::create_dir_all;
@@ -131,13 +132,13 @@ impl TorrentInfoBuilder {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TorrentFile {
     info: TorrentInfo,
-    trackers: Vec<Tracker>,
+    trackers: Vec<Arc<Tracker>>,
     creation_date: i64,
     created_by: String,
 }
 
 impl TorrentFile {
-    pub(crate) fn new(info: TorrentInfo, trackers: Vec<Tracker>) -> TorrentFile {
+    pub(crate) fn new(info: TorrentInfo, trackers: Vec<Arc<Tracker>>) -> TorrentFile {
         TorrentFile {
             trackers,
             created_by: CLIENT.into(),
@@ -443,8 +444,12 @@ mod tests {
             trackers: vec![
                 "http://tracker.example.com:8080/announce"
                     .parse::<Tracker>()
-                    .unwrap(),
-                "udp://bits.example.net:9001".parse::<Tracker>().unwrap(),
+                    .unwrap()
+                    .into(),
+                "udp://bits.example.net:9001"
+                    .parse::<Tracker>()
+                    .unwrap()
+                    .into(),
             ],
             creation_date: 1686939764,
             created_by: "demagnetize vDEV".into(),

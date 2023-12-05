@@ -14,6 +14,7 @@ use futures::stream::StreamExt;
 use std::fmt;
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -32,8 +33,8 @@ pub(crate) struct Peer {
 impl Peer {
     pub(crate) async fn get_metadata_info(
         &self,
-        info_hash: &InfoHash,
-        local: &LocalPeer,
+        info_hash: Arc<InfoHash>,
+        local: Arc<LocalPeer>,
     ) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {info_hash} from {self}");
         let mut conn = match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect(info_hash, local)).await {
@@ -44,18 +45,18 @@ impl Peer {
         conn.get_metadata_info().await
     }
 
-    async fn connect<'a>(
-        &'a self,
-        info_hash: &'a InfoHash,
-        local: &LocalPeer,
-    ) -> Result<PeerConnection<'a>, PeerError> {
+    async fn connect(
+        &self,
+        info_hash: Arc<InfoHash>,
+        local: Arc<LocalPeer>,
+    ) -> Result<PeerConnection<'_>, PeerError> {
         log::debug!("Connecting to {self}");
         let mut s = TcpStream::connect(&self.address)
             .await
             .map_err(PeerError::Connect)?;
         log::trace!("Connected to {self}");
         log::trace!("Sending handshake to {self}");
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, &local.id);
+        let msg = Handshake::new(SUPPORTED_EXTENSIONS, &info_hash, &local.id);
         s.write_all_buf(&mut Bytes::from(msg))
             .await
             .map_err(PeerError::Send)?;
@@ -64,9 +65,9 @@ impl Peer {
         let _ = s.read_exact(&mut buf).await.map_err(PeerError::Recv)?;
         let msg = Handshake::try_from(buf.freeze())?;
         log::trace!("{self} sent {msg}");
-        if &msg.info_hash != info_hash {
+        if msg.info_hash != *info_hash {
             return Err(PeerError::InfoHashMismatch {
-                expected: info_hash.clone(),
+                expected: (*info_hash).clone(),
                 got: msg.info_hash,
             });
         }
@@ -252,7 +253,7 @@ struct PeerConnection<'a> {
     channel: MessageChannel<'a>,
     #[allow(dead_code)]
     extensions: ExtensionSet,
-    info_hash: &'a InfoHash,
+    info_hash: Arc<InfoHash>,
     metadata_size: Option<u32>,
 }
 
@@ -265,7 +266,7 @@ impl PeerConnection<'_> {
         let Some(metadata_size) = self.metadata_size else {
             return Err(PeerError::NoMetadataSize);
         };
-        let mut piecer = TorrentInfoBuilder::new(self.info_hash.clone(), metadata_size)?;
+        let mut piecer = TorrentInfoBuilder::new((*self.info_hash).clone(), metadata_size)?;
         while let Some(i) = piecer.next_piece() {
             let msg = Message::from(MetadataMessage::Request { piece: i });
             self.channel.send(msg).await?;

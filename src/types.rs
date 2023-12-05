@@ -1,4 +1,4 @@
-use crate::asyncutil::{ShutdownGroup, UniqueExt};
+use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueExt};
 use crate::consts::{PEERS_PER_MAGNET_LIMIT, PEER_ID_PREFIX, TRACKERS_PER_MAGNET_LIMIT};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
@@ -12,7 +12,9 @@ use rand_distr::{Alphanumeric, Distribution, Standard};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::mpsc::channel;
 use url::Url;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -233,59 +235,87 @@ impl Distribution<Key> for Standard {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Magnet {
-    info_hash: InfoHash,
+    info_hash: Arc<InfoHash>,
     display_name: Option<String>,
-    trackers: Vec<Tracker>,
+    trackers: Vec<Arc<Tracker>>,
 }
 
 impl Magnet {
-    fn info_hash(&self) -> &InfoHash {
-        &self.info_hash
+    fn info_hash(&self) -> Arc<InfoHash> {
+        Arc::clone(&self.info_hash)
     }
 
     fn display_name(&self) -> Option<&str> {
         self.display_name.as_deref()
     }
 
-    fn trackers(&self) -> &[Tracker] {
+    fn trackers(&self) -> &[Arc<Tracker>] {
         &self.trackers
     }
 
     pub(crate) async fn get_torrent_file(
         &self,
-        local: &LocalPeer,
-        shutdown_group: &ShutdownGroup,
+        local: Arc<LocalPeer>,
+        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
-        let mut stream = iter(self.trackers())
-            .map(|tracker| async move {
-                match tracker
-                    .get_peers(self.info_hash(), local, shutdown_group)
-                    .await
-                {
-                    Ok(peers) => iter(peers),
-                    Err(e) => {
-                        log::warn!(
-                            "Error communicating with {} for {}: {}",
-                            tracker,
-                            self.info_hash(),
-                            ErrorChain(e)
-                        );
-                        iter(Vec::new())
+        let info_hash = self.info_hash();
+        let peer_stream = BufferedTasks::from_iter(
+            TRACKERS_PER_MAGNET_LIMIT,
+            self.trackers().iter().map(|tracker| {
+                let tracker = Arc::clone(tracker);
+                let local = Arc::clone(&local);
+                let group = Arc::clone(&shutdown_group);
+                let info_hash = Arc::clone(&info_hash);
+                async move {
+                    match tracker
+                        .get_peers(Arc::clone(&info_hash), local, group)
+                        .await
+                    {
+                        Ok(peers) => iter(peers),
+                        Err(e) => {
+                            log::warn!(
+                                "Error communicating with {} for {}: {}",
+                                tracker,
+                                info_hash,
+                                ErrorChain(e)
+                            );
+                            iter(Vec::new())
+                        }
                     }
                 }
-            })
-            .buffer_unordered(TRACKERS_PER_MAGNET_LIMIT)
-            .flatten()
-            .unique()
-            .map(|peer| async move {
-                let r = peer.get_metadata_info(self.info_hash(), local).await;
-                (peer, r)
-            })
-            .buffer_unordered(PEERS_PER_MAGNET_LIMIT);
-        while let Some((peer, r)) = stream.next().await {
+            }),
+        )
+        .flatten()
+        .unique();
+        let (sender, mut receiver) = channel(PEERS_PER_MAGNET_LIMIT);
+        let peer_job = tokio::spawn(async move {
+            let peer_tasks = BufferedTasks::from_stream(
+                PEERS_PER_MAGNET_LIMIT,
+                peer_stream.map(|peer| {
+                    let local = Arc::clone(&local);
+                    let info_hash = Arc::clone(&info_hash);
+                    let sender = sender.clone();
+                    async move {
+                        let r = peer.get_metadata_info(info_hash, local).await;
+                        let _ = sender.send((peer, r)).await;
+                    }
+                }),
+            )
+            .await;
+            drop(sender);
+            // We need to process `peer_tasks` to completion, as otherwise
+            // letting this task end here would drop `peer_tasks`, causing the
+            // tasks inside it to be aborted.
+            peer_tasks.collect::<()>().await;
+        });
+        while let Some((peer, r)) = receiver.recv().await {
             match r {
-                Ok(info) => return Ok(TorrentFile::new(info, self.trackers.clone())),
+                Ok(info) => {
+                    let tf = TorrentFile::new(info, self.trackers.clone());
+                    peer_job.abort();
+                    return Ok(tf);
+                }
                 Err(e) => log::warn!(
                     "Failed to fetch info for {} from {}: {}",
                     self,
@@ -299,12 +329,12 @@ impl Magnet {
 
     pub(crate) async fn download_torrent_file(
         &self,
-        template: &PathTemplate,
-        local: &LocalPeer,
-        shutdown_group: &ShutdownGroup,
+        template: Arc<PathTemplate>,
+        local: Arc<LocalPeer>,
+        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<(), DownloadInfoError> {
         let tf = self.get_torrent_file(local, shutdown_group).await?;
-        tf.save(template).await?;
+        tf.save(&template).await?;
         Ok(())
     }
 }
@@ -332,7 +362,7 @@ impl FromStr for Magnet {
                 "dn" => {
                     let _ = dn.insert(v);
                 }
-                "tr" => trackers.push(v.parse::<Tracker>()?),
+                "tr" => trackers.push(Arc::new(v.parse::<Tracker>()?)),
                 _ => (),
             }
         }
@@ -343,7 +373,7 @@ impl FromStr for Magnet {
             return Err(MagnetError::NoTrackers);
         }
         Ok(Magnet {
-            info_hash,
+            info_hash: Arc::new(info_hash),
             display_name: dn.map(String::from),
             trackers,
         })
@@ -517,9 +547,11 @@ mod tests {
         );
         assert_eq!(
             magnet.trackers(),
-            ["http://bttracker.debian.org:6969/announce"
-                .parse::<Tracker>()
-                .unwrap()]
+            [Arc::new(
+                "http://bttracker.debian.org:6969/announce"
+                    .parse::<Tracker>()
+                    .unwrap()
+            )]
         );
     }
 

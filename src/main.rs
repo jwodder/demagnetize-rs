@@ -5,7 +5,7 @@ mod torrent;
 mod tracker;
 mod types;
 mod util;
-use crate::asyncutil::ShutdownGroup;
+use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::peer::Peer;
 use crate::torrent::PathTemplate;
@@ -16,10 +16,11 @@ use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
-use futures::stream::{iter, StreamExt};
+use futures::stream::StreamExt;
 use log::{Level, LevelFilter};
 use patharg::InputArg;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 /// Convert magnet links to .torrent files
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
@@ -88,12 +89,14 @@ enum Command {
 
 impl Command {
     async fn run(self) -> ExitCode {
-        let local = LocalPeer::generate(rand::thread_rng());
+        let local = Arc::new(LocalPeer::generate(rand::thread_rng()));
         log::debug!("Using local peer details: {local}");
         match self {
             Command::Get { outfile, magnet } => {
-                let group = ShutdownGroup::new();
-                let r = if let Err(e) = magnet.download_torrent_file(&outfile, &local, &group).await
+                let group = Arc::new(ShutdownGroup::new());
+                let r = if let Err(e) = magnet
+                    .download_torrent_file(Arc::new(outfile), local, Arc::clone(&group))
+                    .await
                 {
                     log::error!("Failed to download torrent file: {}", ErrorChain(e));
                     ExitCode::FAILURE
@@ -115,15 +118,17 @@ impl Command {
                     log::info!("No magnet links supplied");
                     return ExitCode::SUCCESS;
                 }
-                let group = ShutdownGroup::new();
+                let group = Arc::new(ShutdownGroup::new());
                 let mut success = 0usize;
                 let mut total = 0usize;
-                {
-                    let outf = &outfile;
-                    let lc = &local;
-                    let gr = &group;
-                    let mut stream = iter(magnets)
-                        .map(|magnet| async move {
+                let outfile = Arc::new(outfile);
+                let mut tasks = BufferedTasks::from_iter(
+                    MAGNET_LIMIT,
+                    magnets.into_iter().map(|magnet| {
+                        let lc = Arc::clone(&local);
+                        let gr = Arc::clone(&group);
+                        let outf = Arc::clone(&outfile);
+                        async move {
                             if let Err(e) = magnet.download_torrent_file(outf, lc, gr).await {
                                 log::error!(
                                     "Failed to download torrent file for {magnet}: {}",
@@ -133,14 +138,14 @@ impl Command {
                             } else {
                                 true
                             }
-                        })
-                        .buffer_unordered(MAGNET_LIMIT);
-                    while let Some(b) = stream.next().await {
-                        if b {
-                            success += 1;
                         }
-                        total += 1;
+                    }),
+                );
+                while let Some(b) = tasks.next().await {
+                    if b {
+                        success += 1;
                     }
+                    total += 1;
                 }
                 log::info!(
                     "{}/{} magnet links successfully converted to torrent files",
@@ -155,8 +160,11 @@ impl Command {
                 }
             }
             Command::QueryTracker { tracker, info_hash } => {
-                let group = ShutdownGroup::new();
-                let r = match tracker.get_peers(&info_hash, &local, &group).await {
+                let group = Arc::new(ShutdownGroup::new());
+                let r = match tracker
+                    .get_peers(Arc::new(info_hash), local, Arc::clone(&group))
+                    .await
+                {
                     Ok(peers) => {
                         for p in peers {
                             println!("{p}");
@@ -172,7 +180,8 @@ impl Command {
                 r
             }
             Command::QueryPeer { peer, info_hash } => {
-                match peer.get_metadata_info(&info_hash, &local).await {
+                let info_hash = Arc::new(info_hash);
+                match peer.get_metadata_info(Arc::clone(&info_hash), local).await {
                     Ok(info) => {
                         let filename = format!("{info_hash}.bencode");
                         log::info!("Saving info to {filename}");
