@@ -5,9 +5,12 @@ use crate::types::{InfoHash, PeerId};
 use crate::util::{decode_bencode, PacketError, TryBytes, UnbencodeError};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{Encoder, SingleItemEncoder, ToBencode};
+use bendy::value::Value;
 use bytes::{BufMut, Bytes, BytesMut};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::net::IpAddr;
 use thiserror::Error;
 
 static HANDSHAKE_HEADER: &[u8; 20] = b"\x13BitTorrent protocol";
@@ -497,6 +500,7 @@ pub(super) struct ExtendedHandshake {
     pub(super) m: Option<BTreeMap<String, u8>>,
     pub(super) v: Option<String>,
     pub(super) metadata_size: Option<u32>,
+    pub(super) yourip: Option<IpAddr>,
 }
 
 impl ExtendedHandshake {
@@ -530,7 +534,10 @@ impl fmt::Display for ExtendedHandshake {
             write!(f, "; client: {v:?}")?;
         }
         if let Some(metadata_size) = self.metadata_size {
-            write!(f, "; metadata size: {metadata_size:?}")?;
+            write!(f, "; metadata size: {metadata_size}")?;
+        }
+        if let Some(yourip) = self.yourip {
+            write!(f, "; yourip: {yourip}")?;
         }
         Ok(())
     }
@@ -564,6 +571,13 @@ impl ToBencode for ExtendedHandshake {
             if let Some(v) = self.v.as_ref() {
                 e.emit_pair(b"v", v)?;
             }
+            if let Some(ip) = self.yourip {
+                let compact = match ip {
+                    IpAddr::V4(ip) => ip.octets().to_vec(),
+                    IpAddr::V6(ip) => ip.octets().to_vec(),
+                };
+                e.emit_pair(b"yourip", Value::Bytes(Cow::from(compact)))?;
+            }
             Ok(())
         })
     }
@@ -574,6 +588,7 @@ impl FromBencode for ExtendedHandshake {
         let mut m = None;
         let mut v = None;
         let mut metadata_size = None;
+        let mut yourip = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
@@ -587,6 +602,14 @@ impl FromBencode for ExtendedHandshake {
                     metadata_size =
                         Some(u32::decode_bencode_object(value).context("metadata_size")?);
                 }
+                (b"yourip", value) => {
+                    yourip = Some(
+                        value
+                            .try_into_bytes()
+                            .and_then(|bs| from_compact_ip(bs).map_err(Into::into))
+                            .context("yourip")?,
+                    );
+                }
                 _ => (),
             }
         }
@@ -594,6 +617,7 @@ impl FromBencode for ExtendedHandshake {
             m,
             v,
             metadata_size,
+            yourip,
         })
     }
 }
@@ -791,6 +815,20 @@ impl MessageError {
 #[error("no remote message ID registered for extension \"{0}\"")]
 pub(super) struct MessageEncodeError(Bep10Extension);
 
+fn from_compact_ip(compact: &[u8]) -> Result<IpAddr, CompactIpError> {
+    match <[u8; 4]>::try_from(compact) {
+        Ok(barray) => Ok(IpAddr::from(barray)),
+        Err(_) => match <[u8; 16]>::try_from(compact) {
+            Ok(barray) => Ok(IpAddr::from(barray)),
+            Err(_) => Err(CompactIpError(compact.len())),
+        },
+    }
+}
+
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
+#[error("invalid length for compact IP address: expected 4 or 16 bytes, got {0}")]
+pub(super) struct CompactIpError(usize);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -914,9 +952,10 @@ mod tests {
                 ])),
                 v: Some("qBittorrent/4.3.6".into()),
                 metadata_size: Some(5436),
+                yourip: Some(IpAddr::from([153, 162, 68, 155])),
             })
         );
-        assert_eq!(msg.to_string(), "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436");
+        assert_eq!(msg.to_string(), "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436; yourip: 153.162.68.155");
         let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
             unreachable!();
         };
@@ -935,9 +974,11 @@ mod tests {
             m: Some(registry.to_m()),
             v: Some("omicron-torrent v1.2.3".into()),
             metadata_size: None,
+            yourip: Some(IpAddr::from([127, 0, 0, 1])),
         });
         let buf = Bytes::from(
-            b"\x14\x00d1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.3e".as_slice(),
+            b"\x14\x00d1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.36:yourip4:\x7F\0\0\x01e"
+                .as_slice(),
         );
         assert_eq!(msg.encode(&Bep10Registry::new()).unwrap(), buf);
     }

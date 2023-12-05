@@ -84,6 +84,7 @@ impl Peer {
             m: Some(local_registry.to_m()),
             v: Some(CLIENT.into()),
             metadata_size: None,
+            yourip: Some(self.address.ip()),
         });
         let mut channel = MessageChannel::new(self, s, local_registry);
         channel.send(msg).await?;
