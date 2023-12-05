@@ -156,7 +156,7 @@ impl FromBencode for Peer {
             match kv {
                 (b"peer id", v) => {
                     let buf = v.try_into_bytes().context("peer id")?.to_vec();
-                    match PeerId::try_from(Bytes::from(buf)) {
+                    match PeerId::try_from(buf) {
                         Ok(id) => {
                             peer_id = Some(id);
                         }
@@ -386,10 +386,7 @@ mod tests {
             peer.address,
             "127.0.0.1:8080".parse::<SocketAddr>().unwrap()
         );
-        assert_eq!(
-            peer.id,
-            Some(PeerId::try_from(Bytes::from(b"-PRE-123-abcdefghijk".as_slice())).unwrap())
-        );
+        assert_eq!(peer.id, Some(PeerId::from(b"-PRE-123-abcdefghijk")));
     }
 
     #[test]
@@ -412,10 +409,7 @@ mod tests {
             peer.address,
             "127.0.0.1:8080".parse::<SocketAddr>().unwrap()
         );
-        assert_eq!(
-            peer.id,
-            Some(PeerId::try_from(Bytes::from(b"-PRE-123-abcdefghijk".as_slice())).unwrap())
-        );
+        assert_eq!(peer.id, Some(PeerId::from(b"-PRE-123-abcdefghijk")));
     }
 
     #[test]

@@ -155,11 +155,11 @@ impl From<&[u8; 20]> for PeerId {
     }
 }
 
-impl TryFrom<Bytes> for PeerId {
+impl TryFrom<Vec<u8>> for PeerId {
     type Error = PeerIdError;
 
-    fn try_from(bs: Bytes) -> Result<PeerId, PeerIdError> {
-        match Vec::<u8>::from(bs).try_into() {
+    fn try_from(bs: Vec<u8>) -> Result<PeerId, PeerIdError> {
+        match bs.try_into() {
             Ok(barray) => Ok(PeerId(barray)),
             Err(bs) => Err(PeerIdError(bs.len())),
         }

@@ -461,7 +461,7 @@ mod tests {
                 info_hash: "4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
                     .parse::<InfoHash>()
                     .unwrap(),
-                peer_id: PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice())).unwrap(),
+                peer_id: PeerId::from(b"-TR3000-12nig788rk3b"),
                 port: 60069,
                 key: Key::from(0x2C545EDE),
                 event: AnnounceEvent::Started,
@@ -487,7 +487,7 @@ mod tests {
                 info_hash: "4c3e215f9e50b06d708a74c9b0e66e08bce520aa"
                     .parse::<InfoHash>()
                     .unwrap(),
-                peer_id: PeerId::try_from(Bytes::from(b"-TR3000-12nig788rk3b".as_slice())).unwrap(),
+                peer_id: PeerId::from(b"-TR3000-12nig788rk3b"),
                 port: 60069,
                 key: Key::from(0x2C545EDE),
                 event: AnnounceEvent::Started,
