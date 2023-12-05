@@ -55,7 +55,7 @@ impl Peer {
             .map_err(PeerError::Connect)?;
         log::trace!("Connected to {self}");
         log::trace!("Sending handshake to {self}");
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, &local.id);
+        let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, local.id);
         s.write_all_buf(&mut Bytes::from(msg))
             .await
             .map_err(PeerError::Send)?;

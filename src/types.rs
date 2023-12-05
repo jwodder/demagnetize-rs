@@ -1,6 +1,6 @@
 use crate::consts::PEER_ID_PREFIX;
 use crate::util::{PacketError, TryFromBuf};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, Bytes};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use rand::Rng;
 use rand_distr::{Alphanumeric, Distribution, Standard};
@@ -119,37 +119,23 @@ impl fmt::Display for LocalPeer {
     }
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub(crate) struct PeerId(Bytes);
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub(crate) struct PeerId([u8; PeerId::LENGTH]);
 
 impl PeerId {
     const LENGTH: usize = 20;
 
-    pub(crate) fn generate<R: Rng>(prefix: &str, rng: R) -> PeerId {
-        let mut bs = prefix.as_bytes();
-        if bs.len() > PeerId::LENGTH {
-            bs = &bs[..PeerId::LENGTH];
-        }
-        let mut buf = BytesMut::with_capacity(PeerId::LENGTH);
-        buf.extend_from_slice(bs);
-        let needed = PeerId::LENGTH.saturating_sub(buf.len());
-        if needed > 0 {
-            for b in Alphanumeric.sample_iter(rng).take(needed) {
-                buf.put_u8(b);
-            }
-        }
-        debug_assert_eq!(
-            buf.len(),
-            PeerId::LENGTH,
-            "Newly-generated PeerId should be {} bytes long, but got {} bytes",
-            PeerId::LENGTH,
-            buf.len()
-        );
-        PeerId(buf.freeze())
+    pub(crate) fn generate<R: Rng>(prefix: &str, rng: &mut R) -> PeerId {
+        let bs = prefix.as_bytes();
+        PeerId(std::array::from_fn(|i| {
+            bs.get(i)
+                .copied()
+                .unwrap_or_else(|| Alphanumeric.sample(rng))
+        }))
     }
 
     pub(crate) fn as_bytes(&self) -> &[u8] {
-        self.0.as_ref()
+        self.0.as_slice()
     }
 
     pub(crate) fn add_query_param(&self, url: &mut Url) {
@@ -159,13 +145,13 @@ impl PeerId {
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
+        write!(f, "{:?}", Bytes::from(self.0.to_vec()))
     }
 }
 
 impl From<&[u8; 20]> for PeerId {
     fn from(bs: &[u8; 20]) -> PeerId {
-        PeerId(Bytes::from(bs.to_vec()))
+        PeerId(*bs)
     }
 }
 
@@ -173,10 +159,9 @@ impl TryFrom<Bytes> for PeerId {
     type Error = PeerIdError;
 
     fn try_from(bs: Bytes) -> Result<PeerId, PeerIdError> {
-        if bs.len() == PeerId::LENGTH {
-            Ok(PeerId(bs))
-        } else {
-            Err(PeerIdError(bs.len()))
+        match Vec::<u8>::from(bs).try_into() {
+            Ok(barray) => Ok(PeerId(barray)),
+            Err(bs) => Err(PeerIdError(bs.len())),
         }
     }
 }
@@ -184,8 +169,9 @@ impl TryFrom<Bytes> for PeerId {
 impl TryFromBuf for PeerId {
     fn try_from_buf(buf: &mut Bytes) -> Result<PeerId, PacketError> {
         if buf.len() >= PeerId::LENGTH {
-            let data = buf.copy_to_bytes(PeerId::LENGTH);
-            Ok(PeerId::try_from(data).expect("Peer ID size should be 20"))
+            let mut data = [0u8; PeerId::LENGTH];
+            buf.copy_to_slice(&mut data);
+            Ok(PeerId(data))
         } else {
             Err(PacketError::Short)
         }
@@ -289,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_generate_peer_id() {
-        let peer_id = PeerId::generate("-PRE-123-", rand::thread_rng());
+        let peer_id = PeerId::generate("-PRE-123-", &mut rand::thread_rng());
         assert_eq!(peer_id.as_bytes().len(), 20);
         let s = std::str::from_utf8(peer_id.as_bytes()).unwrap();
         let suffix = s.strip_prefix("-PRE-123-").unwrap();
@@ -301,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_generate_peer_id_long_prefix() {
-        let peer_id = PeerId::generate("-PRE-123-abcdefghijé-", rand::thread_rng());
+        let peer_id = PeerId::generate("-PRE-123-abcdefghijé-", &mut rand::thread_rng());
         assert_eq!(peer_id.as_bytes(), b"-PRE-123-abcdefghij\xC3");
         assert_eq!(peer_id.to_string(), "b\"-PRE-123-abcdefghij\\xc3\"");
     }

@@ -21,14 +21,14 @@ pub(super) struct Handshake {
 impl Handshake {
     pub(super) const LENGTH: usize = 20 + 8 + 20 + 20;
 
-    pub(super) fn new<I>(extensions: I, info_hash: InfoHash, peer_id: &PeerId) -> Handshake
+    pub(super) fn new<I>(extensions: I, info_hash: InfoHash, peer_id: PeerId) -> Handshake
     where
         I: IntoIterator<Item = Extension>,
     {
         Handshake {
             extensions: extensions.into_iter().collect(),
             info_hash,
-            peer_id: peer_id.clone(),
+            peer_id,
         }
     }
 }

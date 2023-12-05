@@ -140,7 +140,7 @@ impl TrackerSession {
         );
         self.announce(Announcement {
             info_hash: self.info_hash,
-            peer_id: self.local.id.clone(),
+            peer_id: self.local.id,
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
@@ -160,7 +160,7 @@ impl TrackerSession {
         );
         self.announce(Announcement {
             info_hash: self.info_hash,
-            peer_id: self.local.id.clone(),
+            peer_id: self.local.id,
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
