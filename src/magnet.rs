@@ -45,6 +45,7 @@ impl Magnet {
             self.trackers().iter().map(|tracker| {
                 let tracker = Arc::clone(tracker);
                 let group = Arc::clone(&shutdown_group);
+                let display = self.to_string();
                 async move {
                     match tracker.get_peers(info_hash, local, group).await {
                         Ok(peers) => iter(peers),
@@ -52,7 +53,7 @@ impl Magnet {
                             log::warn!(
                                 "Error communicating with {} for {}: {}",
                                 tracker,
-                                info_hash,
+                                display,
                                 ErrorChain(e)
                             );
                             iter(Vec::new())
