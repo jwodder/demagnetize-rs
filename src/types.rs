@@ -5,7 +5,7 @@ use crate::tracker::{Tracker, TrackerUrlError};
 use crate::util::{ErrorChain, PacketError, TryFromBuf};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
-use futures::stream::{iter, StreamExt};
+use futures_util::stream::{iter, StreamExt};
 use patharg::InputArg;
 use rand::Rng;
 use rand_distr::{Alphanumeric, Distribution, Standard};

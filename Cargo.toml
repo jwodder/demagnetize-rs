@@ -21,7 +21,7 @@ chrono = { version = "0.4.31", default-features = false, features = ["clock", "s
 clap = { version = "4.4.10", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.5.0"
 fern = "0.6.2"
-futures = { version = "0.3.29", default-features = false }
+futures-util = { version = "0.3.29", default-features = false, features = ["sink"] }
 log = "0.4.20"
 patharg = { version = "0.3.0", features = ["tokio"] }
 pin-project-lite = "0.2.13"

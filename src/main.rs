@@ -16,7 +16,7 @@ use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
-use futures::stream::StreamExt;
+use futures_util::StreamExt;
 use log::{Level, LevelFilter};
 use patharg::InputArg;
 use std::process::ExitCode;

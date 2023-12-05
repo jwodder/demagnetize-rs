@@ -1,4 +1,4 @@
-use futures::stream::Stream;
+use futures_util::Stream;
 use pin_project_lite::pin_project;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -63,7 +63,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::stream::{iter, StreamExt};
+    use futures_util::stream::{iter, StreamExt};
 
     #[tokio::test]
     async fn test_unique_stream() {

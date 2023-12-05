@@ -1,4 +1,4 @@
-use futures::stream::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
