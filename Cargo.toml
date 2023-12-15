@@ -26,7 +26,6 @@ log = "0.4.20"
 patharg = { version = "0.3.0", features = ["tokio"] }
 pin-project-lite = "0.2.13"
 rand = "0.8.5"
-rand_distr = "0.4.3"
 reqwest = "0.11.22"
 sha1 = "0.10.6"
 strum = "0.25.0"

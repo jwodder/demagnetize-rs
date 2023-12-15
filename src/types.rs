@@ -2,8 +2,10 @@ use crate::consts::PEER_ID_PREFIX;
 use crate::util::{PacketError, TryFromBuf};
 use bytes::{Buf, Bytes};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
-use rand::Rng;
-use rand_distr::{Alphanumeric, Distribution, Standard};
+use rand::{
+    distributions::{Alphanumeric, Distribution, Standard},
+    Rng,
+};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
