@@ -1,5 +1,5 @@
-v0.2.0 (in development)
------------------------
+v0.2.0 (2023-12-29)
+-------------------
 - Increased MSRV to 1.70
 - "Error communicating with {tracker}" warning messages now include the display
   name of the corresponding magnet, if known
