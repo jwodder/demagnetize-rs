@@ -17,7 +17,7 @@ anstream = "0.6.11"
 anstyle = "1.0.4"
 bendy = "0.3.3"
 bytes = "1.5.0"
-chrono = { version = "0.4.31", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4.33", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.4.18", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.5.0"
 fern = "0.6.2"
@@ -28,8 +28,8 @@ pin-project-lite = "0.2.13"
 rand = "0.8.5"
 reqwest = "0.11.23"
 sha1 = "0.10.6"
-strum = "0.25.0"
-strum_macros = "0.25.3"
+strum = "0.26.1"
+strum_macros = "0.26.1"
 thiserror = "1.0.56"
 tokio = { version = "1.35.1", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.10", features = ["codec", "rt"] }
