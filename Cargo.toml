@@ -14,7 +14,7 @@ exclude = ["/.*"]
 
 [dependencies]
 anstream = "0.6.11"
-anstyle = "1.0.4"
+anstyle = "1.0.5"
 bendy = "0.3.3"
 bytes = "1.5.0"
 chrono = { version = "0.4.33", default-features = false, features = ["clock", "std"] }
@@ -26,12 +26,12 @@ log = "0.4.20"
 patharg = { version = "0.4.0", features = ["tokio"] }
 pin-project-lite = "0.2.13"
 rand = "0.8.5"
-reqwest = "0.11.23"
+reqwest = "0.11.24"
 sha1 = "0.10.6"
 strum = "0.26.1"
 strum_macros = "0.26.1"
 thiserror = "1.0.56"
-tokio = { version = "1.35.1", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
+tokio = { version = "1.36.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.10", features = ["codec", "rt"] }
 url = "2.5.0"
 
