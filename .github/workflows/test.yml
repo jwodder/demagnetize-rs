@@ -54,7 +54,7 @@ jobs:
           toolchain: ${{ steps.minimal-version.outputs.msrv }}
 
       - name: Activate cache
-        if: github.actor != 'dependabot[bot]'
+        if: "!startsWith(github.head_ref, 'dependabot/')"
         uses: Swatinem/rust-cache@v2
 
       - name: Build crate
@@ -78,7 +78,7 @@ jobs:
           components: llvm-tools
 
       - name: Activate cache
-        if: github.actor != 'dependabot[bot]'
+        if: "!startsWith(github.head_ref, 'dependabot/')"
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
@@ -109,7 +109,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Activate cache
-        if: github.actor != 'dependabot[bot]'
+        if: "!startsWith(github.head_ref, 'dependabot/')"
         uses: Swatinem/rust-cache@v2
 
       - name: Check code
