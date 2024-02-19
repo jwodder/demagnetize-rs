@@ -1,6 +1,7 @@
-use super::*;
+use super::{AnnounceResponse, Announcement, TrackerError, TrackerUrlError};
 use crate::consts::UDP_PACKET_LEN;
-use crate::util::TryBytes;
+use crate::peer::Peer;
+use crate::util::{PacketError, TryBytes};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rand::random;
 use std::fmt;
@@ -431,6 +432,8 @@ pub(crate) enum UdpTrackerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tracker::AnnounceEvent;
+    use crate::types::{InfoHash, Key, PeerId};
 
     #[test]
     fn test_make_connection_request() {

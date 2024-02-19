@@ -6,7 +6,7 @@ use crate::asyncutil::ShutdownGroup;
 use crate::consts::{LEFT, NUMWANT, TRACKER_TIMEOUT};
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, LocalPeer, PeerId};
-use crate::util::{comma_list, ErrorChain, PacketError};
+use crate::util::{comma_list, ErrorChain};
 use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;

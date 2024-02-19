@@ -1,4 +1,5 @@
-use super::*;
+use super::{AnnounceResponse, Announcement, TrackerError, TrackerUrlError};
+use crate::peer::Peer;
 use crate::util::{decode_bencode, TryBytes, UnbencodeError};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use reqwest::Client;
@@ -174,7 +175,7 @@ impl FromBencode for HttpAnnounceResponse {
                     min_interval = Some(u32::decode_bencode_object(v).context("min interval")?);
                 }
                 (b"tracker id", v) => {
-                    tracker_id = Some(Bytes::from(
+                    tracker_id = Some(bytes::Bytes::from(
                         v.try_into_bytes().context("tracker id")?.to_vec(),
                     ));
                 }
@@ -219,6 +220,7 @@ pub(crate) enum HttpTrackerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::PeerId;
     use bytes::{BufMut, BytesMut};
     use std::net::SocketAddr;
 

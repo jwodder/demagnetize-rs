@@ -377,7 +377,6 @@ pub(crate) enum BencodeDictError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::BufMut;
 
     #[test]
     fn test_check_good_bencode_dict() {
