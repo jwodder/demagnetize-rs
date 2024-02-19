@@ -13,12 +13,12 @@ categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
 [dependencies]
-anstream = "0.6.11"
+anstream = "0.6.12"
 anstyle = "1.0.6"
 bendy = "0.3.3"
 bytes = "1.5.0"
 chrono = { version = "0.4.34", default-features = false, features = ["clock", "std"] }
-clap = { version = "4.5.0", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
+clap = { version = "4.5.1", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.5.0"
 fern = "0.6.2"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink"] }
