@@ -16,7 +16,7 @@ exclude = ["/.*"]
 anstream = "0.6.13"
 anstyle = "1.0.6"
 bendy = "0.3.3"
-bytes = "1.5.0"
+bytes = "1.6.0"
 chrono = { version = "0.4.35", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.3", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.5.0"
@@ -26,7 +26,7 @@ log = "0.4.21"
 patharg = { version = "0.4.0", features = ["tokio"] }
 pin-project-lite = "0.2.13"
 rand = "0.8.5"
-reqwest = "0.11.26"
+reqwest = "0.12.1"
 sha1 = "0.10.6"
 strum = "0.26.2"
 strum_macros = "0.26.2"
