@@ -13,8 +13,8 @@ categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
 [dependencies]
-anstream = "0.6.13"
-anstyle = "1.0.6"
+anstream = "0.6.14"
+anstyle = "1.0.7"
 bendy = "0.3.3"
 bytes = "1.6.0"
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
@@ -32,7 +32,7 @@ strum = "0.26.2"
 strum_macros = "0.26.2"
 thiserror = "1.0.59"
 tokio = { version = "1.37.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
-tokio-util = { version = "0.7.10", features = ["codec", "rt"] }
+tokio-util = { version = "0.7.11", features = ["codec", "rt"] }
 url = "2.5.0"
 
 [dev-dependencies]
