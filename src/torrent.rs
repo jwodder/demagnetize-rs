@@ -336,7 +336,7 @@ fn sanitize(s: &str) -> String {
 
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 pub(crate) enum ConstructError {
-    #[error("metadata size of {0} exceeds {} limit", MAX_INFO_LENGTH)]
+    #[error("metadata size of {0} exceeds {max} limit", max = MAX_INFO_LENGTH)]
     TooLarge(u32),
 }
 

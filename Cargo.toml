@@ -30,7 +30,7 @@ reqwest = "0.12.4"
 sha1 = "0.10.6"
 strum = "0.26.2"
 strum_macros = "0.26.2"
-thiserror = "1.0.59"
+thiserror = "2.0.0"
 tokio = { version = "1.37.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
 tokio-util = { version = "0.7.11", features = ["codec", "rt"] }
 url = "2.5.0"
