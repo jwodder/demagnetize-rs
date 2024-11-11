@@ -193,8 +193,8 @@ impl TryFromBuf for PeerId {
 
 #[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 #[error(
-    "invalid length for peer id: expected {} bytes, got {0}",
-    PeerId::LENGTH
+    "invalid length for peer id: expected {len} bytes, got {0}",
+    len = PeerId::LENGTH
 )]
 pub(crate) struct PeerIdError(usize);
 
