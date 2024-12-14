@@ -1,6 +1,7 @@
 v0.3.0 (in development)
 -----------------------
 - Increased MSRV to 1.74
+- Fixed build error due to changes in linting
 
 v0.2.0 (2023-12-29)
 -------------------
