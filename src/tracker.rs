@@ -38,13 +38,13 @@ impl Tracker {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
             TRACKER_TIMEOUT,
-            self._get_peers(info_hash, local, shutdown_group),
+            self.inner_get_peers(info_hash, local, shutdown_group),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
     }
 
-    async fn _get_peers(
+    async fn inner_get_peers(
         &self,
         info_hash: InfoHash,
         local: LocalPeer,
