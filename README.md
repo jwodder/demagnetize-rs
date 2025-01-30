@@ -48,9 +48,11 @@ Usage
 
     demagnetize [<global options>] <subcommand> ...
 
-The `demagnetize` command has two subcommands, `get` (for converting a single
-magnet link) and `batch` (for converting a file of magnet links), both detailed
-below.
+The `demagnetize` command has two main general-purpose subcommands, `get` (for
+converting a single magnet link) and `batch` (for converting a file of magnet
+links).  There are also two low-level commands, `query-tracker` (for getting a
+list of peers from a single tracker) and `query-peer` (for getting torrent
+metadata from a single peer).
 
 Global Options
 --------------
@@ -99,4 +101,41 @@ the `--outfile` option.
   The path may contain a `{name}` placeholder, which will be replaced by the
   (sanitized) name of each torrent, and/or a `{hash}` placeholder, which will
   be replaced by each torrent's info hash in hexadecimal.  [default:
+  `{name}.torrent`]
+
+
+`demagnetize query-tracker`
+---------------------------
+
+    demagnetize [<global options>] query-tracker <tracker> <info-hash>
+
+Query the given tracker (specified as an HTTP or UDP URL) for peers serving the
+torrent with the given info hash (specified as a 40-character hex string or
+32-character base32 string), and print out the the retrieved peers' addresses
+in the form "IP:PORT".
+
+
+`demagnetize query-peer`
+------------------------
+
+    demagnetize [<global options>] query-peer [<options>] <peer> <info-hash>
+
+Query the given peer (specified as an address in "IPv4:PORT" or "[IPv6]:PORT"
+format) for the metadata of the torrent with the given info hash (specified as
+a 40-character hex string or 32-character base32 string), and save the metadata
+to a file.  By default, the file is saved at `{name}.torrent`, where `{name}`
+is replaced by the value of the `name` field from the torrent info, but a
+different path can be set via the `--outfile` option.
+
+Note that, unlike the `.torrent` files produced by the `get` and `batch`
+commands, the files produced by this command will not contain tracker
+information.
+
+### Options
+
+- `-o PATH`, `--outfile PATH` — Save the `.torrent` file to the given path.
+  The path may contain a `{name}` placeholder, which will be replaced by the
+  (sanitized) name of the torrent, and/or a `{hash}` placeholder, which will be
+  replaced by the torrent's info hash in hexadecimal.  Specifying `-` will
+  cause the torrent to be written to standard output.  [default:
   `{name}.torrent`]
