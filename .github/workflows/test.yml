@@ -12,9 +12,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref_name }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.os }}, ${{ matrix.toolchain }})
     strategy:
       fail-fast: false
       matrix:
@@ -28,8 +33,10 @@ jobs:
         include:
           - os: macos-latest
             toolchain: stable
+            exclude: --exclude-features native-tls-vendored
           - os: windows-latest
             toolchain: stable
+            exclude: --exclude-features native-tls-vendored
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -57,11 +64,24 @@ jobs:
         if: "!startsWith(github.head_ref, 'renovate/')"
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
       - name: Build crate
-        run: cargo build --all-targets --verbose
+        run: |
+          cargo hack \
+            --each-feature \
+            --exclude-no-default-features \
+            --exclude-all-features ${{ matrix.exclude }} \
+            build --all-targets --verbose
 
       - name: Test crate
-        run: cargo test --verbose
+        run: |
+          cargo hack \
+            --each-feature \
+            --exclude-no-default-features \
+            --exclude-all-features ${{ matrix.exclude }} \
+            test --verbose
 
   minimal-versions:
     runs-on: ubuntu-latest
@@ -87,11 +107,21 @@ jobs:
         with:
           tool: cargo-hack,cargo-minimal-versions
 
-      - name: Build crate
-        run: cargo minimal-versions --direct build --all-targets --verbose
+      - name: Test crate
+        run: |
+          cargo minimal-versions --direct \
+            --each-feature \
+            --exclude-no-default-features \
+            --exclude-all-features \
+            build --all-targets --verbose
 
       - name: Test crate
-        run: cargo minimal-versions --direct test --verbose
+        run: |
+          cargo minimal-versions --direct \
+            --each-feature \
+            --exclude-no-default-features \
+            --exclude-all-features \
+            test --verbose
 
   coverage:
     # This is separate from the main tests because cargo-llvm-cov doesn't run
