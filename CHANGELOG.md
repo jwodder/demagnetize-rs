@@ -1,3 +1,7 @@
+v0.3.0 (in development)
+-----------------------
+- Publicly expose & document the `query-tracker` and `query-peer` subcommands
+
 v0.2.1 (2024-12-13)
 -------------------
 - Increased MSRV to 1.74

@@ -10,13 +10,12 @@ use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::Peer;
-use crate::torrent::PathTemplate;
+use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, LocalPeer};
 use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
-use bytes::Bytes;
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use log::{Level, LevelFilter};
@@ -78,15 +77,40 @@ enum Command {
         /// starting with '#' are ignored.
         file: InputArg,
     },
-    /// Fetch peers for an info hash from a tracker
-    #[command(hide = true)]
+    /// Fetch peers for an info hash from a specific tracker
     QueryTracker {
+        /// The tracker to scrape, as an HTTP or UDP URL.
         tracker: Tracker,
+
+        /// The info hash of the torrent to get peers for.
+        ///
+        /// This must be either a 40-character hex string or a 32-character
+        /// base32 string.
         info_hash: InfoHash,
     },
-    /// Fetch torrent metadata for an info hash from a peer
-    #[command(hide = true)]
-    QueryPeer { peer: Peer, info_hash: InfoHash },
+    /// Fetch torrent metadata for an info hash from a specific peer
+    ///
+    /// Note that the resulting .torrent file will not contain any trackers.
+    QueryPeer {
+        /// Save the .torrent file to the given path.
+        ///
+        /// The path may contain a `{name}` placeholder, which will be replaced
+        /// by the (sanitized) name of the torrent, and/or a `{hash}`
+        /// placeholder, which will be replaced by the torrent's info hash in
+        /// hexadecimal.
+        #[arg(short, long, default_value = "{name}.torrent")]
+        outfile: PathTemplate,
+
+        /// The peer to get metadata from, in the form "IP:PORT" (or
+        /// "[IP]:PORT" for IPv6).
+        peer: Peer,
+
+        /// The info hash of the torrent to get metadata for.
+        ///
+        /// This must be either a 40-character hex string or a 32-character
+        /// base32 string.
+        info_hash: InfoHash,
+    },
 }
 
 impl Command {
@@ -168,7 +192,7 @@ impl Command {
                 {
                     Ok(peers) => {
                         for p in peers {
-                            println!("{p}");
+                            println!("{}", p.address);
                         }
                         ExitCode::SUCCESS
                     }
@@ -180,24 +204,25 @@ impl Command {
                 group.shutdown(TRACKER_STOP_TIMEOUT).await;
                 r
             }
-            Command::QueryPeer { peer, info_hash } => {
-                match peer.get_metadata_info(info_hash, local).await {
-                    Ok(info) => {
-                        let filename = format!("{info_hash}.bencode");
-                        log::info!("Saving info to {filename}");
-                        if let Err(e) = std::fs::write(filename, Bytes::from(info)) {
-                            log::error!("Failed to write to file: {}", ErrorChain(e));
-                            ExitCode::FAILURE
-                        } else {
-                            ExitCode::SUCCESS
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
+            Command::QueryPeer {
+                outfile,
+                peer,
+                info_hash,
+            } => match peer.get_metadata_info(info_hash, local).await {
+                Ok(info) => {
+                    let tf = TorrentFile::new(info, Vec::new());
+                    if let Err(e) = tf.save(&outfile).await {
+                        log::error!("Failed to write to file: {}", ErrorChain(e));
                         ExitCode::FAILURE
+                    } else {
+                        ExitCode::SUCCESS
                     }
                 }
-            }
+                Err(e) => {
+                    log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
+                    ExitCode::FAILURE
+                }
+            },
         }
     }
 }
