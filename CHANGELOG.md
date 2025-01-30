@@ -1,6 +1,7 @@
 v0.3.0 (in development)
 -----------------------
 - Publicly expose & document the `query-tracker` and `query-peer` subcommands
+- Add `native-tls`, `native-tls-vendored`, and `rustls` features
 
 v0.2.1 (2024-12-13)
 -------------------

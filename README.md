@@ -42,6 +42,23 @@ latest release of `demagnetize` and install it in `~/.cargo/bin` by running:
 
     cargo install demagnetize
 
+`demagnetize` has the following Cargo features, selectable via the `--features
+<LIST>` option to `cargo install`:
+
+- `native-tls` — Use [`native-tls`](https://github.com/sfackler/rust-native-tls)
+  for TLS support.  This feature is enabled by default.
+
+- `native-tls-vendored` — Like `native-tls`, but compile a vendored copy of
+  OpenSSL into `demagnetize` instead of using the platform's copy at runtime.
+  This makes it possible to build `demagnetize` on one system and run it on
+  another system that has a different version of OpenSSL.
+
+  This feature has no effect on Windows and macOS, where OpenSSL is not used.
+
+- `rustls` — Use [`rustls`](https://github.com/rustls/rustls) for TLS support.
+  When selecting this feature, be sure to also supply the
+  `--no-default-features` option in order to disable `native-tls`.
+
 
 Usage
 =====
