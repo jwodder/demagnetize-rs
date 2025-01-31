@@ -1,0 +1,20 @@
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.28.0"
+ci = "github"
+default-features = false
+features = ["rustls"]
+include = ["THIRDPARTY.toml"]
+install-path = "CARGO_HOME"
+install-updater = false
+installers = ["shell", "powershell"]
+pr-run-mode = "upload"
+targets = [
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]

@@ -49,6 +49,10 @@ rustls = [
     "reqwest/rustls-tls-webpki-roots",
 ]
 
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [lints.rust]
 # Lint groups:
 deprecated_safe = { level = "deny", priority = -1 }

@@ -1,0 +1,45 @@
+[graph]
+targets = []
+all-features = true
+no-default-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # Advisories stemming from bendy's use of "failure" (can't do anything
+    # about that):
+    "RUSTSEC-2019-0036",
+    "RUSTSEC-2020-0036",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+]
+unused-allowed-license = "allow"
+
+[[licenses.clarify]]
+name = "ring"
+expression = "ISC AND OpenSSL AND MIT"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 }
+]
+
+[sources]
+unknown-git = "deny"
+unknown-registry = "deny"

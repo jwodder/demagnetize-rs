@@ -178,4 +178,30 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run `cargo deny check`
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+  thirdparty:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install cargo-bundle-licenses
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-bundle-licenses
+          locked: false  # Ensure we get the latest version of the spdx crate
+
+      - name: Check that third party licenses haven't changed
+        run: |
+          cargo bundle-licenses --check-previous \
+            -f toml -o CI.toml -p THIRDPARTY.toml
+
 # vim:set et sts=2:

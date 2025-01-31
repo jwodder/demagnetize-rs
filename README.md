@@ -36,9 +36,28 @@ find the Python version at <https://github.com/jwodder/demagnetize>.
 Installation
 ============
 
-In order to install `demagnetize`, you first need to have [Rust and Cargo
-installed](https://www.rust-lang.org/tools/install).  You can then build the
-latest release of `demagnetize` and install it in `~/.cargo/bin` by running:
+Release Assets
+--------------
+
+Prebuilt binaries for the most common platforms are available as GitHub release
+assets.  [The page for the latest
+release](https://github.com/jwodder/demagnetize/releases/latest) lists these
+under "Assets", along with installer scripts for both Unix-like systems and
+Windows.
+
+As an alternative to the installer scripts, if you have
+[`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall) on your
+system, you can use it to download & install the appropriate release asset for
+your system for the latest version of `demagnetize` by running `cargo binstall
+demagnetize`.
+
+Installing from Source
+----------------------
+
+If you have [Rust and Cargo
+installed](https://www.rust-lang.org/tools/install), you can build the latest
+release of `demagnetize` from source and install it in `~/.cargo/bin` by
+running:
 
     cargo install demagnetize
 
@@ -58,6 +77,8 @@ latest release of `demagnetize` and install it in `~/.cargo/bin` by running:
 - `rustls` — Use [`rustls`](https://github.com/rustls/rustls) for TLS support.
   When selecting this feature, be sure to also supply the
   `--no-default-features` option in order to disable `native-tls`.
+
+    - The release assets are built using this feature.
 
 
 Usage
