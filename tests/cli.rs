@@ -59,16 +59,11 @@ fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
 }
 
 #[test]
-fn get_magnet_http_udp_trackers() {
+fn get_magnet_udp_trackers() {
     test_get(
         concat!(
             "magnet:?xt=urn:btih:63a04291a8b266d968aa7ab8a276543fa63a9e84",
             "&dn=libgen-rs-r_000",
-            "&tr=http%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce",
-            "&tr=http%3A%2F%2Fopen.acgnxtracker.com%3A80%2Fannounce",
-            "&tr=http%3A%2F%2Ftracker.bt4g.com%3A2095%2Fannounce",
-            "&tr=http%3A%2F%2Ftracker.files.fm%3A6969%2Fannounce",
-            "&tr=http%3A%2F%2Ftracker.gbitt.info%2Fannounce",
             "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce",
             "&tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce",
             "&tr=udp%3A%2F%2Fipv4.tracker.harry.lu%3A80%2Fannounce",
@@ -77,11 +72,6 @@ fn get_magnet_http_udp_trackers() {
         ),
         "63a04291a8b266d968aa7ab8a276543fa63a9e84",
         [
-            "http://tracker.opentrackr.org:1337/announce",
-            "http://open.acgnxtracker.com/announce",
-            "http://tracker.bt4g.com:2095/announce",
-            "http://tracker.files.fm:6969/announce",
-            "http://tracker.gbitt.info/announce",
             "udp://tracker.opentrackr.org:1337/announce",
             "udp://exodus.desync.com:6969/announce",
             "udp://ipv4.tracker.harry.lu:80/announce",
@@ -93,7 +83,7 @@ fn get_magnet_http_udp_trackers() {
 }
 
 #[test]
-fn get_magnet_multipiece_info() {
+fn get_magnet_http_trackers_multipiece_info() {
     test_get(
         concat!(
             "magnet:?xt=urn:btih:b851474b74f65cd19f981c723590e3e520242b97",
