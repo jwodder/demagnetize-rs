@@ -21,8 +21,8 @@ static USER_AGENT: &str = concat!(
 pub(crate) struct HttpTracker(Url);
 
 impl HttpTracker {
-    pub(crate) fn url_str(&self) -> &str {
-        self.0.as_str()
+    pub(crate) fn url_string(&self) -> String {
+        self.0.to_string()
     }
 
     pub(super) fn connect(&self) -> Result<HttpTrackerSession, TrackerError> {

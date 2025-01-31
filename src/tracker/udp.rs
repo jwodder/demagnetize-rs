@@ -18,19 +18,15 @@ const ANNOUNCE_ACTION: u32 = 1;
 const ERROR_ACTION: u32 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct UdpTracker(Url);
+pub(crate) struct UdpTracker(UdpUrl);
 
 impl UdpTracker {
-    pub(crate) fn url_str(&self) -> &str {
-        self.0.as_str()
+    pub(crate) fn url_string(&self) -> String {
+        self.0.to_string()
     }
+
     pub(super) async fn connect(&self) -> Result<UdpTrackerSession, TrackerError> {
-        let host = self
-            .0
-            .host_str()
-            .expect("UDP tracker host should not be None");
-        let port = self.0.port().expect("UDP tracker port should not be None");
-        let socket = ConnectedUdpSocket::connect(host, port).await?;
+        let socket = ConnectedUdpSocket::connect(&self.0.host, self.0.port).await?;
         Ok(UdpTrackerSession::new(self, socket))
     }
 }
@@ -45,17 +41,54 @@ impl TryFrom<Url> for UdpTracker {
     type Error = TrackerUrlError;
 
     fn try_from(url: Url) -> Result<UdpTracker, TrackerUrlError> {
+        UdpUrl::try_from(url).map(UdpTracker)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct UdpUrl {
+    host: String,
+    port: u16,
+    urldata: String,
+}
+
+impl fmt::Display for UdpUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "udp://")?;
+        if self.host.contains(':') {
+            write!(f, "[{}]", self.host)?;
+        } else {
+            write!(f, "{}", self.host)?;
+        }
+        write!(f, ":{}{}", self.port, self.urldata)?;
+        Ok(())
+    }
+}
+
+impl TryFrom<Url> for UdpUrl {
+    type Error = TrackerUrlError;
+
+    fn try_from(url: Url) -> Result<UdpUrl, TrackerUrlError> {
         let sch = url.scheme();
         if sch != "udp" {
             return Err(TrackerUrlError::UnsupportedScheme(sch.into()));
         }
-        if url.host().is_none() {
+        let Some(host) = url.host_str().map(ToOwned::to_owned) else {
             return Err(TrackerUrlError::NoHost);
-        }
-        if url.port().is_none() {
+        };
+        let Some(port) = url.port() else {
             return Err(TrackerUrlError::NoUdpPort);
+        };
+        let mut urldata = String::from(url.path());
+        if let Some(query) = url.query() {
+            urldata.push('?');
+            urldata.push_str(query);
         }
-        Ok(UdpTracker(url))
+        Ok(UdpUrl {
+            host,
+            port,
+            urldata,
+        })
     }
 }
 
@@ -81,16 +114,11 @@ impl UdpTrackerSession {
         loop {
             let conn = self.get_connection().await?;
             let transaction_id = self.make_transaction_id();
-            let mut urldata = String::from(self.tracker.0.path());
-            if let Some(query) = self.tracker.0.query() {
-                urldata.push('?');
-                urldata.push_str(query);
-            }
             let msg = Bytes::from(UdpAnnounceRequest {
                 connection_id: conn.id,
                 transaction_id,
                 announcement: announcement.clone(),
-                urldata,
+                urldata: self.tracker.0.urldata.clone(),
             });
             // TODO: Should communication be retried on parse errors and
             // mismatched transaction IDs?
@@ -612,5 +640,37 @@ mod tests {
         assert_eq!(res.response.tracker_id, None);
         assert_eq!(res.response.complete, None);
         assert_eq!(res.response.incomplete, None);
+    }
+
+    #[test]
+    fn test_udp_url_from_url() {
+        let url = "udp://tracker.opentrackr.org:1337/announce"
+            .parse::<Url>()
+            .unwrap();
+        let uu = UdpUrl::try_from(url).unwrap();
+        assert_eq!(
+            uu,
+            UdpUrl {
+                host: "tracker.opentrackr.org".into(),
+                port: 1337,
+                urldata: "/announce".into(),
+            }
+        );
+        assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337/announce");
+    }
+
+    #[test]
+    fn test_udp_url_from_url_no_urldata() {
+        let url = "udp://tracker.opentrackr.org:1337".parse::<Url>().unwrap();
+        let uu = UdpUrl::try_from(url).unwrap();
+        assert_eq!(
+            uu,
+            UdpUrl {
+                host: "tracker.opentrackr.org".into(),
+                port: 1337,
+                urldata: String::new(),
+            }
+        );
+        assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337");
     }
 }
