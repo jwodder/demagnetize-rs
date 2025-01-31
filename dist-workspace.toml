@@ -4,6 +4,8 @@ members = ["cargo:."]
 [dist]
 cargo-dist-version = "0.28.0"
 ci = "github"
+default-features = false
+features = ["rustls"]
 include = ["THIRDPARTY.toml"]
 install-path = "CARGO_HOME"
 install-updater = false
