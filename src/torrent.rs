@@ -192,7 +192,7 @@ impl From<TorrentFile> for Bytes {
                 torrent
                     .trackers
                     .into_iter()
-                    .map(|tr| vec![tr.url_str().to_string()])
+                    .map(|tr| vec![tr.url_string()])
                     .collect::<Vec<Vec<String>>>()
             );
         }

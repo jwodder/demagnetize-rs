@@ -1,3 +1,6 @@
+v0.4.0 (in development)
+-----------------------
+
 v0.3.0 (2025-01-30)
 -------------------
 - Publicly expose & document the `query-tracker` and `query-peer` subcommands

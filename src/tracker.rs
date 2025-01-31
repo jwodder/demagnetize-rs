@@ -22,10 +22,10 @@ pub(crate) enum Tracker {
 }
 
 impl Tracker {
-    pub(crate) fn url_str(&self) -> &str {
+    pub(crate) fn url_string(&self) -> String {
         match self {
-            Tracker::Http(tr) => tr.url_str(),
-            Tracker::Udp(tr) => tr.url_str(),
+            Tracker::Http(tr) => tr.url_string(),
+            Tracker::Udp(tr) => tr.url_string(),
         }
     }
 
