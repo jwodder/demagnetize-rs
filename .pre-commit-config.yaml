@@ -3,11 +3,13 @@ repos:
     rev: v4.4.0
     hooks:
       - id: check-added-large-files
+        exclude: THIRDPARTY.toml
       - id: check-json
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        exclude: THIRDPARTY.toml
 
   - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0

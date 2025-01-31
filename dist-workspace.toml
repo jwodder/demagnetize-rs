@@ -4,7 +4,7 @@ members = ["cargo:."]
 [dist]
 cargo-dist-version = "0.28.0"
 ci = "github"
-#include = ["THIRDPARTY.toml"]
+include = ["THIRDPARTY.toml"]
 install-path = "CARGO_HOME"
 install-updater = false
 installers = ["shell", "powershell"]
