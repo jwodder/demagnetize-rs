@@ -18441,7 +18441,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "openssl"
-package_version = "0.10.68"
+package_version = "0.10.70"
 repository = "https://github.com/sfackler/rust-openssl"
 license = "Apache-2.0"
 
@@ -18946,7 +18946,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "openssl-sys"
-package_version = "0.9.104"
+package_version = "0.9.105"
 repository = "https://github.com/sfackler/rust-openssl"
 license = "MIT"
 
