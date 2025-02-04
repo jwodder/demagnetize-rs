@@ -41,7 +41,7 @@ Release Assets
 
 Prebuilt binaries for the most common platforms are available as GitHub release
 assets.  [The page for the latest
-release](https://github.com/jwodder/demagnetize/releases/latest) lists these
+release](https://github.com/jwodder/demagnetize-rs/releases/latest) lists these
 under "Assets", along with installer scripts for both Unix-like systems and
 Windows.
 
