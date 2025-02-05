@@ -3,7 +3,7 @@ use crate::util::{PacketError, TryFromBuf};
 use bytes::{Buf, Bytes};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
 use rand::{
-    distributions::{Alphanumeric, Distribution, Standard},
+    distr::{Alphanumeric, Distribution, StandardUniform},
     Rng,
 };
 use std::borrow::Cow;
@@ -105,8 +105,8 @@ pub(crate) struct LocalPeer {
 impl LocalPeer {
     pub(crate) fn generate<R: Rng>(mut rng: R) -> LocalPeer {
         let id = PeerId::generate(PEER_ID_PREFIX, &mut rng);
-        let key = rng.gen::<Key>();
-        let port = rng.gen_range::<u16, _>(1025..=65535);
+        let key = rng.random::<Key>();
+        let port = rng.random_range::<u16, _>(1025..=65535);
         LocalPeer { id, key, port }
     }
 }
@@ -222,9 +222,9 @@ impl From<Key> for u32 {
     }
 }
 
-impl Distribution<Key> for Standard {
+impl Distribution<Key> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Key {
-        Key(Standard.sample(rng))
+        Key(StandardUniform.sample(rng))
     }
 }
 
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_generate_peer_id() {
-        let peer_id = PeerId::generate("-PRE-123-", &mut rand::thread_rng());
+        let peer_id = PeerId::generate("-PRE-123-", &mut rand::rng());
         assert_eq!(peer_id.as_bytes().len(), 20);
         let s = std::str::from_utf8(peer_id.as_bytes()).unwrap();
         let suffix = s.strip_prefix("-PRE-123-").unwrap();
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_generate_peer_id_long_prefix() {
-        let peer_id = PeerId::generate("-PRE-123-abcdefghijé-", &mut rand::thread_rng());
+        let peer_id = PeerId::generate("-PRE-123-abcdefghijé-", &mut rand::rng());
         assert_eq!(peer_id.as_bytes(), b"-PRE-123-abcdefghij\xC3");
         assert_eq!(peer_id.to_string(), "b\"-PRE-123-abcdefghij\\xc3\"");
     }

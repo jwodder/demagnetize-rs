@@ -115,7 +115,7 @@ enum Command {
 
 impl Command {
     async fn run(self) -> ExitCode {
-        let local = LocalPeer::generate(rand::thread_rng());
+        let local = LocalPeer::generate(rand::rng());
         log::debug!("Using local peer details: {local}");
         match self {
             Command::Get { outfile, magnet } => {
