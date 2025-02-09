@@ -147,7 +147,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Test with coverage
-        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -172,11 +172,17 @@ jobs:
         if: "!startsWith(github.head_ref, 'renovate/')"
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
       - name: Check code
-        run: cargo clippy --all-features --all-targets -- -Dwarnings
+        run: cargo hack --workspace --feature-powerset clippy -- -Dwarnings
+
+      - name: Check tests & examples
+        run: cargo hack --workspace --feature-powerset clippy --tests --examples -- -Dwarnings
 
       - name: Check formatting
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
   deny:
     runs-on: ubuntu-latest
