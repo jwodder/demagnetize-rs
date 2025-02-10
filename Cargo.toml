@@ -8,7 +8,7 @@ authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
 repository = "https://github.com/jwodder/demagnetize-rs"
 documentation = "https://github.com/jwodder/demagnetize-rs"
 license = "MIT"
-keywords = ["bittorent", "magnet-link", "torrent"]
+keywords = ["bittorrent", "magnet-link", "torrent"]
 categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
