@@ -26109,7 +26109,7 @@ SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "strum"
-package_version = "0.26.3"
+package_version = "0.27.0"
 repository = "https://github.com/Peternator7/strum"
 license = "MIT"
 
@@ -26141,7 +26141,7 @@ SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "strum_macros"
-package_version = "0.26.4"
+package_version = "0.27.0"
 repository = "https://github.com/Peternator7/strum"
 license = "MIT"
 
