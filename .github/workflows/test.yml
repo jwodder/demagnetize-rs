@@ -199,6 +199,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # This is necessary as of 2025-02-23 because cargo seems to have changed
+      # its algorithm for the digest in registry paths in 1.85, yet GitHub
+      # Actions uses an older version of rust by default, leading to mismatches
+      # for crates like `ring` that don't specify "license" metadata.
+      - name: Install latest stable Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
       - name: Install cargo-bundle-licenses
         uses: taiki-e/cache-cargo-install-action@v2
         with:
@@ -208,6 +217,7 @@ jobs:
       - name: Check that third party licenses haven't changed
         run: |
           cargo bundle-licenses --check-previous \
+            --features rustls \
             -f toml -o CI.toml -p THIRDPARTY.toml
 
 # vim:set et sts=2:
