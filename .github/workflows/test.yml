@@ -208,6 +208,7 @@ jobs:
       - name: Check that third party licenses haven't changed
         run: |
           cargo bundle-licenses --check-previous \
+            --features rustls \
             -f toml -o CI.toml -p THIRDPARTY.toml
 
 # vim:set et sts=2:
