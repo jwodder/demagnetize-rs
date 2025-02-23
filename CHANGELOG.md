@@ -1,5 +1,5 @@
-v0.3.1 (in development)
------------------------
+v0.3.1 (2025-02-23)
+-------------------
 - Fix license bundle distributed with release assets
 
 v0.3.0 (2025-01-30)
