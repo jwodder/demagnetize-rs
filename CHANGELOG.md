@@ -1,3 +1,7 @@
+v0.4.0 (in development)
+-----------------------
+- Increased MSRV to 1.81
+
 v0.3.1 (2025-02-23)
 -------------------
 - Fix license bundle distributed with release assets

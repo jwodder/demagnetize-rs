@@ -316,7 +316,7 @@ checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
 name = "demagnetize"
-version = "0.3.1"
+version = "0.4.0-dev"
 dependencies = [
  "anstream",
  "anstyle",
