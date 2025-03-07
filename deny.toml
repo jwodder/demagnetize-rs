@@ -11,8 +11,6 @@ ignore = [
     # about that):
     "RUSTSEC-2019-0036",
     "RUSTSEC-2020-0036",
-    # `ring` is unmaintained (Don't care):
-    "RUSTSEC-2025-0007",
 ]
 
 [bans]
