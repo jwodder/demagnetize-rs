@@ -173,9 +173,7 @@ impl Command {
                     total += 1;
                 }
                 log::info!(
-                    "{}/{} magnet links successfully converted to torrent files",
-                    success,
-                    total
+                    "{success}/{total} magnet links successfully converted to torrent files"
                 );
                 group.shutdown(TRACKER_STOP_TIMEOUT).await;
                 if success == total {
