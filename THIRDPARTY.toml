@@ -29919,7 +29919,7 @@ freely, subject to the following restrictions:
 
 [[third_party_libraries]]
 package_name = "tokio"
-package_version = "1.44.1"
+package_version = "1.44.2"
 repository = "https://github.com/tokio-rs/tokio"
 license = "MIT"
 
