@@ -1,5 +1,6 @@
 pub(crate) mod extensions;
 mod messages;
+mod msepe;
 use self::extensions::*;
 use self::messages::*;
 use crate::app::App;
@@ -22,7 +23,7 @@ use tokio_util::codec::{
     Framed,
 };
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct Peer {
     pub(crate) address: SocketAddr,
     pub(crate) id: Option<PeerId>,
@@ -361,6 +362,8 @@ pub(crate) enum PeerError {
     Disconnect,
     #[error(transparent)]
     Handshake(#[from] HandshakeError),
+    #[error(transparent)]
+    CryptoHandshake(#[from] msepe::HandshakeError),
     #[error("peer sent invalid message")]
     Message(#[from] MessageError),
     #[error("peer sent extended handshake with inconsistent \"m\" dict")]

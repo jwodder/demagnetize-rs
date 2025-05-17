@@ -15,7 +15,7 @@ use url::Url;
 pub(crate) struct InfoHash([u8; InfoHash::LENGTH]);
 
 impl InfoHash {
-    const LENGTH: usize = 20;
+    pub(crate) const LENGTH: usize = 20;
 
     pub(crate) fn from_hex(s: &str) -> Result<InfoHash, InfoHashError> {
         HEXLOWER_PERMISSIVE
