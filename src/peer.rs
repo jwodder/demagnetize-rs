@@ -10,7 +10,7 @@ use crate::types::{InfoHash, LocalPeer, PeerId};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
-use std::fmt;
+use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
 use thiserror::Error;
@@ -110,6 +110,10 @@ impl Peer {
             info_hash,
             metadata_size,
         })
+    }
+
+    pub(crate) fn display_json(&self) -> DisplayJson<'_> {
+        DisplayJson(self)
     }
 }
 
@@ -371,10 +375,61 @@ pub(crate) enum PeerError {
     Unexpected(String),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub(crate) struct DisplayJson<'a>(&'a Peer);
+
+impl fmt::Display for DisplayJson<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"{{"host": "{}", "port": {}, "id": "#,
+            self.0.address.ip(),
+            self.0.address.port()
+        )?;
+        if let Some(ref pid) = self.0.id {
+            f.write_char('"')?;
+            for chunk in pid.as_bytes().utf8_chunks() {
+                write_json_str(chunk.valid(), f)?;
+                if !chunk.invalid().is_empty() {
+                    write!(f, "\\ufffd")?;
+                }
+            }
+            f.write_char('"')?;
+        } else {
+            write!(f, "null")?;
+        }
+        f.write_char('}')?;
+        Ok(())
+    }
+}
+
+fn write_json_str<W: Write>(s: &str, writer: &mut W) -> fmt::Result {
+    for c in s.chars() {
+        match c {
+            '"' => writer.write_str("\\\"")?,
+            '\\' => writer.write_str(r"\\")?,
+            '\x08' => writer.write_str("\\b")?,
+            '\x0C' => writer.write_str("\\f")?,
+            '\n' => writer.write_str("\\n")?,
+            '\r' => writer.write_str("\\r")?,
+            '\t' => writer.write_str("\\t")?,
+            ' '..='~' => writer.write_char(c)?,
+            c => {
+                let mut buf = [0u16; 2];
+                for b in c.encode_utf16(&mut buf) {
+                    write!(writer, "\\u{b:04x}")?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util::{decode_bencode, UnbencodeError};
+    use rstest::rstest;
 
     #[test]
     fn test_unbencode_peer() {
@@ -434,5 +489,70 @@ mod tests {
             b"d2:ip9:127.0.0.17:peer id20:-PRE-123-abcdefghijk4:porti8080eeqqq",
         );
         assert!(matches!(r, Err(UnbencodeError::TrailingData)));
+    }
+
+    mod display_json {
+        use super::*;
+
+        #[test]
+        fn no_id() {
+            let peer = "127.0.0.1:8080".parse::<Peer>().unwrap();
+            let s = peer.display_json().to_string();
+            assert_eq!(s, r#"{"host": "127.0.0.1", "port": 8080, "id": null}"#);
+        }
+
+        #[test]
+        fn simple_id() {
+            let peer = decode_bencode::<Peer>(
+                b"d2:ip9:127.0.0.17:peer id20:-PRE-123-abcdefghijk4:porti8080ee",
+            )
+            .unwrap();
+            let s = peer.display_json().to_string();
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefghijk"}"#
+            );
+        }
+
+        #[test]
+        fn non_ascii_id() {
+            let peer = decode_bencode::<Peer>(
+                b"d2:ip9:127.0.0.17:peer id20:-PRE-123-abcdefgh\xC3\xAEj4:porti8080ee",
+            )
+            .unwrap();
+            let s = peer.display_json().to_string();
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\u00eej"}"#
+            );
+        }
+
+        #[test]
+        fn non_utf8_id() {
+            let peer = decode_bencode::<Peer>(
+                b"d2:ip9:127.0.0.17:peer id20:-PRE-123-abcdefgh\xEEjk4:porti8080ee",
+            )
+            .unwrap();
+            let s = peer.display_json().to_string();
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\ufffdjk"}"#
+            );
+        }
+    }
+
+    #[rstest]
+    #[case("foobar", "foobar")]
+    #[case("foo / bar", "foo / bar")]
+    #[case("foo\"bar", r#"foo\"bar"#)]
+    #[case("foo\\bar", r"foo\\bar")]
+    #[case("foo\x08\x0C\n\r\tbar", r"foo\b\f\n\r\tbar")]
+    #[case("foo\x0B\x1B\x7Fbar", r"foo\u000b\u001b\u007fbar")]
+    #[case("foo—bar", r"foo\u2014bar")]
+    #[case("foo🐐bar", r"foo\ud83d\udc10bar")]
+    fn test_write_json_str(#[case] s: &str, #[case] json: String) {
+        let mut buf = String::new();
+        write_json_str(s, &mut buf).unwrap();
+        assert_eq!(buf, json);
     }
 }

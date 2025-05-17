@@ -145,12 +145,16 @@ the `--outfile` option.
 `demagnetize query-tracker`
 ---------------------------
 
-    demagnetize [<global options>] query-tracker <tracker> <info-hash>
+    demagnetize [<global options>] query-tracker [<options>] <tracker> <info-hash>
 
 Query the given tracker (specified as an HTTP or UDP URL) for peers serving the
 torrent with the given info hash (specified as a 40-character hex string or
 32-character base32 string), and print out the the retrieved peers' addresses
 in the form "IP:PORT".
+
+### Options
+
+- `-J`, `--json` — Print out the peers as JSON objects, one per line
 
 
 `demagnetize query-peer`
