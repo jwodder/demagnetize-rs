@@ -79,6 +79,10 @@ enum Command {
     },
     /// Fetch peers for an info hash from a specific tracker
     QueryTracker {
+        /// Output peers as JSON objects, one per line
+        #[arg(short = 'J', long)]
+        json: bool,
+
         /// The tracker to scrape, as an HTTP or UDP URL.
         tracker: Tracker,
 
@@ -182,7 +186,11 @@ impl Command {
                     ExitCode::FAILURE
                 }
             }
-            Command::QueryTracker { tracker, info_hash } => {
+            Command::QueryTracker {
+                json,
+                tracker,
+                info_hash,
+            } => {
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
                     .get_peers(info_hash, local, Arc::clone(&group))
@@ -190,7 +198,11 @@ impl Command {
                 {
                     Ok(peers) => {
                         for p in peers {
-                            println!("{}", p.address);
+                            if json {
+                                println!("{}", p.display_json());
+                            } else {
+                                println!("{}", p.address);
+                            }
                         }
                         ExitCode::SUCCESS
                     }
