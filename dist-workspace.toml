@@ -14,6 +14,15 @@ targets = [
     "aarch64-apple-darwin",
     "aarch64-unknown-linux-gnu",
     "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
     "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
 ]
+
+[dist.github-custom-runners]
+global = "ubuntu-22.04"
+
+[dist.github-custom-runners.aarch64-unknown-linux-gnu]
+runner = "ubuntu-22.04"
+
+[dist.github-custom-runners.x86_64-unknown-linux-gnu]
+runner = "ubuntu-22.04"
