@@ -35,6 +35,9 @@ tokio = { version = "1.37.0", features = ["fs", "io-util", "macros", "sync", "rt
 tokio-util = { version = "0.7.11", features = ["codec", "rt"] }
 url = "2.5.0"
 
+[build-dependencies]
+thiserror = "2.0.0"
+
 [dev-dependencies]
 assert_cmd = "2.0.14"
 tempfile = "3.10.1"

@@ -14,8 +14,8 @@ pub(crate) const TRACKER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 /// the magnet link of
 pub(crate) const LEFT: u64 = 65535;
 
-/// Prefix for generated peer IDs
-pub(crate) static PEER_ID_PREFIX: &str = "-DM-0031-";
+/// Prefix for generated peer IDs (calculated from package version by `build.rs` script)
+pub(crate) static PEER_ID_PREFIX: &str = env!("PEER_ID_PREFIX");
 
 /// Size of buffer for receiving incoming UDP packets.  Any packets longer than
 /// this are truncated.
