@@ -1,6 +1,6 @@
 v0.4.0 (in development)
 -----------------------
-- Increased MSRV to 1.81
+- Increased MSRV to 1.82
 - Linux release artifacts are now built on Ubuntu 22.04 (up from Ubuntu 20.04),
   which may result in a more recent glibc being required
 - Added a `--json` option to `query-tracker`
