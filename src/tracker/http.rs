@@ -80,7 +80,8 @@ impl HttpTrackerSession {
             .append_pair("left", &announcement.left.to_string())
             .append_pair("numwant", &announcement.numwant.to_string())
             .append_pair("key", &announcement.key.to_string())
-            .append_pair("compact", "1");
+            .append_pair("compact", "1")
+            .append_pair("supportcrypto", "1");
         let buf = self
             .client
             .get(url)
@@ -122,6 +123,7 @@ impl FromBencode for HttpAnnounceResponse {
         let mut tracker_id = None;
         let mut complete = None;
         let mut incomplete = None;
+        let mut crypto_flags = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
@@ -134,7 +136,17 @@ impl FromBencode for HttpAnnounceResponse {
                 (b"interval", v) => {
                     interval = Some(u32::decode_bencode_object(v).context("interval")?);
                 }
+                (b"crypto_flags", v) => {
+                    crypto_flags = Some(
+                        v.try_into_bytes()
+                            .context("crypto_flags")?
+                            .iter()
+                            .map(|&b| b != 0)
+                            .collect::<Vec<bool>>(),
+                    );
+                }
                 (b"peers", v) => {
+                    debug_assert!(peers.is_empty(), "peers should not be populated before reaching `peers` field of HTTP tracker response");
                     if matches!(v, Object::List(_)) {
                         // Original, non-compact format (BEP 3)
                         peers.extend(Vec::<Peer>::decode_bencode_object(v).context("peers")?);
@@ -150,6 +162,13 @@ impl FromBencode for HttpAnnounceResponse {
                             }
                         };
                         peers.extend(addrs.into_iter().map(Peer::from));
+                    }
+                    if let Some(ref flags) = crypto_flags {
+                        for (pr, &flag) in std::iter::zip(&mut peers, flags) {
+                            if flag {
+                                pr.requires_crypto = true;
+                            }
+                        }
                     }
                 }
                 (b"peers6", v) => {
@@ -445,6 +464,59 @@ mod tests {
                 tracker_id: None,
                 complete: None,
                 incomplete: None,
+                leechers: None,
+                seeders: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_decode_response_with_crypto_flags() {
+        let mut buf = BytesMut::new();
+        buf.put(b"d8:completei47e12:crypto_flags5:\x00\x01\x01\x00\x0110:in".as_slice());
+        buf.put(b"completei5e8:intervali1800e12:min intervali1800e5:peers30".as_slice());
+        buf.put(b":w\x94bls\xdf\xd8\xb4C,\x1a\xe1\xba\x16\xdf\xe8\x0f0\xc1(".as_slice());
+        buf.put(b"\r\xab\xc8\xd5\xb32\xe9\xec\x86~e".as_slice());
+        let res = decode_bencode::<HttpAnnounceResponse>(&buf).unwrap();
+        let HttpAnnounceResponse::Success(announcement) = res else {
+            panic!("Announcement failed");
+        };
+        assert_eq!(
+            announcement,
+            AnnounceResponse {
+                interval: 1800,
+                peers: vec![
+                    Peer {
+                        address: "119.148.98.108:29663".parse::<SocketAddr>().unwrap(),
+                        id: None,
+                        requires_crypto: false,
+                    },
+                    Peer {
+                        address: "216.180.67.44:6881".parse::<SocketAddr>().unwrap(),
+                        id: None,
+                        requires_crypto: true,
+                    },
+                    Peer {
+                        address: "186.22.223.232:3888".parse::<SocketAddr>().unwrap(),
+                        id: None,
+                        requires_crypto: true,
+                    },
+                    Peer {
+                        address: "193.40.13.171:51413".parse::<SocketAddr>().unwrap(),
+                        id: None,
+                        requires_crypto: false,
+                    },
+                    Peer {
+                        address: "179.50.233.236:34430".parse::<SocketAddr>().unwrap(),
+                        id: None,
+                        requires_crypto: true,
+                    },
+                ],
+                warning_message: None,
+                min_interval: Some(1800),
+                tracker_id: None,
+                complete: Some(47),
+                incomplete: Some(5),
                 leechers: None,
                 seeders: None,
             }
