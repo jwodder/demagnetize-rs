@@ -232,6 +232,7 @@ impl<'a> InfoGetter<'a> {
             registry
         };
         let msg = Message::from(ExtendedHandshake {
+            e: None,
             m: Some(local_registry.to_m()),
             v: Some(CLIENT.into()),
             metadata_size: None,

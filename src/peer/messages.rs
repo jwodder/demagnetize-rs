@@ -497,6 +497,7 @@ impl fmt::Display for ExtendedMessage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ExtendedHandshake {
+    pub(super) e: Option<bool>,
     pub(super) m: Option<BTreeMap<String, u8>>,
     pub(super) v: Option<String>,
     pub(super) metadata_size: Option<u32>,
@@ -530,6 +531,13 @@ impl fmt::Display for ExtendedHandshake {
         } else {
             write!(f, "no extensions")?;
         }
+        if let Some(e) = self.e {
+            if e {
+                write!(f, "; prefers encryption")?;
+            } else {
+                write!(f, "; does not prefer encryption")?;
+            }
+        }
         if let Some(v) = self.v.as_ref() {
             write!(f, "; client: {v:?}")?;
         }
@@ -562,6 +570,9 @@ impl ToBencode for ExtendedHandshake {
 
     fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
         encoder.emit_dict(|mut e| {
+            if let Some(eflag) = self.e {
+                e.emit_pair(b"e", u8::from(eflag))?;
+            }
             if let Some(m) = self.m.as_ref() {
                 e.emit_pair(b"m", m)?;
             }
@@ -585,6 +596,7 @@ impl ToBencode for ExtendedHandshake {
 
 impl FromBencode for ExtendedHandshake {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<ExtendedHandshake, BendyError> {
+        let mut e = None;
         let mut m = None;
         let mut v = None;
         let mut metadata_size = None;
@@ -592,6 +604,9 @@ impl FromBencode for ExtendedHandshake {
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
+                (b"e", value) => {
+                    e = Some(u8::decode_bencode_object(value).context("e")? != 0);
+                }
                 (b"m", value) => {
                     m = Some(BTreeMap::<String, u8>::decode_bencode_object(value).context("m")?);
                 }
@@ -614,6 +629,7 @@ impl FromBencode for ExtendedHandshake {
             }
         }
         Ok(ExtendedHandshake {
+            e,
             m,
             v,
             metadata_size,
@@ -942,6 +958,7 @@ mod tests {
         assert_eq!(
             msg,
             Message::from(ExtendedHandshake {
+                e: None,
                 m: Some(BTreeMap::from([
                     ("lt_donthave".into(), 7),
                     ("share_mode".into(), 8),
@@ -967,17 +984,48 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_extended_handshake_with_e() {
+        let registry = Bep10Registry::new();
+        let mut buf = BytesMut::new();
+        buf.put(b"\x14\x00d1:ei1e1:md11:ut_metadatai2ee13:metadata".as_slice());
+        buf.put(b"_sizei5436e1:v15:A Client v1.2.36:yourip4:\x99".as_slice());
+        buf.put(b"\xa2D\x9be".as_slice());
+        let buf = buf.freeze();
+        let msg = Message::decode(buf, &registry).unwrap();
+        assert_eq!(
+            msg,
+            Message::from(ExtendedHandshake {
+                e: Some(true),
+                m: Some(BTreeMap::from([("ut_metadata".into(), 2),])),
+                v: Some("A Client v1.2.3".into()),
+                metadata_size: Some(5436),
+                yourip: Some(IpAddr::from([153, 162, 68, 155])),
+            })
+        );
+        assert_eq!(msg.to_string(), "extended handshake: extensions: \"ut_metadata\"; prefers encryption; client: \"A Client v1.2.3\"; metadata size: 5436; yourip: 153.162.68.155");
+        let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
+            unreachable!();
+        };
+        let mut their_registry = Bep10Registry::new();
+        their_registry
+            .register(Bep10Extension::Metadata, 2)
+            .unwrap();
+        assert_eq!(msg.into_bep10_registry(), Ok(their_registry));
+    }
+
+    #[test]
     fn test_encode_extended_handshake() {
         let mut registry = Bep10Registry::new();
         registry.register(Bep10Extension::Metadata, 23).unwrap();
         let msg = Message::from(ExtendedHandshake {
+            e: Some(true),
             m: Some(registry.to_m()),
             v: Some("omicron-torrent v1.2.3".into()),
             metadata_size: None,
             yourip: Some(IpAddr::from([127, 0, 0, 1])),
         });
         let buf = Bytes::from(
-            b"\x14\x00d1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.36:yourip4:\x7F\0\0\x01e"
+            b"\x14\x00d1:ei1e1:md11:ut_metadatai23ee1:v22:omicron-torrent v1.2.36:yourip4:\x7F\0\0\x01e"
                 .as_slice(),
         );
         assert_eq!(msg.encode(&Bep10Registry::new()).unwrap(), buf);
