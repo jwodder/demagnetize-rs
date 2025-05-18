@@ -195,7 +195,10 @@ impl<'a> InfoGetter<'a> {
                 .await
                 {
                     Ok(s) => Either::Right(s),
-                    Err(e) if crypto_strategy == CryptoStrategy::Fallback => {
+                    Err(e)
+                        if crypto_strategy == CryptoStrategy::Fallback
+                            && !self.peer.requires_crypto =>
+                    {
                         log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
                         Either::Left(self.tcp_connect().await?)
                     }
