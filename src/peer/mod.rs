@@ -470,7 +470,15 @@ impl fmt::Display for DisplayJson<'_> {
         } else {
             write!(f, "null")?;
         }
-        f.write_char('}')?;
+        write!(
+            f,
+            r#", "requires_crypto": {}}}"#,
+            if self.0.requires_crypto {
+                "true"
+            } else {
+                "false"
+            }
+        )?;
         Ok(())
     }
 }
@@ -570,7 +578,10 @@ mod tests {
         fn no_id() {
             let peer = "127.0.0.1:8080".parse::<Peer>().unwrap();
             let s = peer.display_json().to_string();
-            assert_eq!(s, r#"{"host": "127.0.0.1", "port": 8080, "id": null}"#);
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": null, "requires_crypto": false}"#
+            );
         }
 
         #[test]
@@ -582,7 +593,7 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefghijk"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefghijk", "requires_crypto": false}"#
             );
         }
 
@@ -595,7 +606,7 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\u00eej"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\u00eej", "requires_crypto": false}"#
             );
         }
 
@@ -608,7 +619,21 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\ufffdjk"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\ufffdjk", "requires_crypto": false}"#
+            );
+        }
+
+        #[test]
+        fn requires_crypto() {
+            let peer = Peer {
+                address: "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+                id: None,
+                requires_crypto: true,
+            };
+            let s = peer.display_json().to_string();
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": null, "requires_crypto": true}"#
             );
         }
     }
