@@ -7,9 +7,11 @@ use crate::app::App;
 use crate::consts::{CLIENT, MAX_PEER_MSG_LEN, SUPPORTED_EXTENSIONS, UT_METADATA};
 use crate::torrent::*;
 use crate::types::{InfoHash, PeerId};
+use crate::util::ErrorChain;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
+use rand::{rngs::StdRng, SeedableRng};
 use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
@@ -18,10 +20,22 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tokio_util::codec::{
-    length_delimited::{Builder, LengthDelimitedCodec},
-    Framed,
+use tokio_util::{
+    codec::{
+        length_delimited::{Builder, LengthDelimitedCodec},
+        Framed,
+    },
+    either::Either,
 };
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[expect(unused)]
+pub(crate) enum CryptoStrategy {
+    Always,
+    #[default]
+    Fallback,
+    Never,
+}
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct Peer {
@@ -39,6 +53,7 @@ impl Peer {
             peer: self,
             info_hash,
             app,
+            crypto_strategy: None,
         }
     }
 }
@@ -136,9 +151,20 @@ pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
     app: Arc<App>,
+    crypto_strategy: Option<CryptoStrategy>,
 }
 
 impl<'a> InfoGetter<'a> {
+    #[expect(unused)]
+    pub(crate) fn crypto_strategy(mut self, strategy: CryptoStrategy) -> Self {
+        self.crypto_strategy = Some(strategy);
+        self
+    }
+
+    fn get_crypto_strategy(&self) -> CryptoStrategy {
+        self.crypto_strategy.unwrap_or_default()
+    }
+
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
         match timeout(self.app.cfg.peers.handshake_timeout, self.connect()).await {
@@ -149,11 +175,27 @@ impl<'a> InfoGetter<'a> {
     }
 
     async fn connect(self) -> Result<PeerConnection<'a>, PeerError> {
-        log::debug!("Connecting to {}", self.peer);
-        let mut s = TcpStream::connect(&self.peer.address)
-            .await
-            .map_err(PeerError::Connect)?;
-        log::trace!("Connected to {}", self.peer);
+        let crypto_strategy = self.get_crypto_strategy();
+        let mut s = match crypto_strategy {
+            CryptoStrategy::Always | CryptoStrategy::Fallback => {
+                let inner = self.tcp_connect().await?;
+                log::debug!("Encrypting connection to {} ...", self.peer);
+                match msepe::EncryptedStream::handshake(
+                    inner,
+                    msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng()),
+                )
+                .await
+                {
+                    Ok(s) => Either::Right(s),
+                    Err(e) if crypto_strategy == CryptoStrategy::Fallback => {
+                        log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
+                        Either::Left(self.tcp_connect().await?)
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            CryptoStrategy::Never => Either::Left(self.tcp_connect().await?),
+        };
         log::trace!("Sending handshake to {}", self.peer);
         let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
         s.write_all_buf(&mut Bytes::from(msg))
@@ -212,18 +254,30 @@ impl<'a> InfoGetter<'a> {
             metadata_size,
         })
     }
+
+    async fn tcp_connect(&self) -> Result<TcpStream, PeerError> {
+        log::debug!("Connecting to {}", self.peer);
+        let s = TcpStream::connect(&self.peer.address)
+            .await
+            .map_err(PeerError::Connect)?;
+        log::trace!("Connected to {}", self.peer);
+        Ok(s)
+    }
 }
 
-#[derive(Debug)]
 struct MessageChannel<'a> {
     peer: &'a Peer,
-    inner: Framed<TcpStream, LengthDelimitedCodec>,
+    inner: Framed<Either<TcpStream, msepe::EncryptedStream>, LengthDelimitedCodec>,
     local_registry: Bep10Registry,
     remote_registry: Bep10Registry,
 }
 
 impl<'a> MessageChannel<'a> {
-    fn new(peer: &'a Peer, s: TcpStream, local_registry: Bep10Registry) -> Self {
+    fn new(
+        peer: &'a Peer,
+        s: Either<TcpStream, msepe::EncryptedStream>,
+        local_registry: Bep10Registry,
+    ) -> Self {
         let inner = Builder::new()
             .big_endian()
             .max_frame_length(MAX_PEER_MSG_LEN)
@@ -260,7 +314,6 @@ impl<'a> MessageChannel<'a> {
     }
 }
 
-#[derive(Debug)]
 struct PeerConnection<'a> {
     channel: MessageChannel<'a>,
     #[allow(dead_code)]

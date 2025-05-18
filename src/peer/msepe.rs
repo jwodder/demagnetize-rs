@@ -78,6 +78,7 @@ impl<R: Rng> HandshakeBuilder<R> {
         }
     }
 
+    /*
     pub(super) fn crypto_provide<I: IntoIterator<Item = CryptoMethod>>(
         mut self,
         methods: I,
@@ -85,13 +86,15 @@ impl<R: Rng> HandshakeBuilder<R> {
         self.crypto_provide = CryptoMethodSet::from_iter(methods);
         self
     }
+    */
 
+    #[expect(unused)]
     pub(super) fn timeout(mut self, d: Duration) -> Self {
         self.timeout = d;
         self
     }
 
-    pub(super) fn build(self) -> Handshaker {
+    fn build(self) -> Handshaker {
         let mut rng = self.rng;
         let pada_len = rng.random_range(..=512);
         let padc_len = rng.random_range(..=512);
@@ -113,7 +116,7 @@ impl<R: Rng> HandshakeBuilder<R> {
     }
 }
 
-pub(super) struct Handshaker {
+struct Handshaker {
     peer: Peer,
     state: HandshakeState,
     output_packet: Option<Bytes>,
@@ -355,6 +358,7 @@ pub(crate) enum HandshakeError {
 }
 
 #[derive(Default)]
+#[allow(clippy::large_enum_variant)]
 enum Keystream {
     #[default]
     Plaintext,
@@ -366,6 +370,7 @@ enum Keystream {
 
 impl Keystream {
     /// Encode data before sending it to the server
+    #[expect(unused)]
     fn encode(&mut self, bs: &mut [u8]) {
         if let Keystream::Rc4 {
             ref mut outgoing, ..
@@ -387,7 +392,7 @@ impl Keystream {
 }
 
 pin_project_lite::pin_project! {
-    struct EncryptedStream {
+    pub(super) struct EncryptedStream {
         #[pin]
         inner: TcpStream,
         keystream: Keystream,
@@ -474,6 +479,7 @@ impl AsyncRead for EncryptedStream {
 }
 
 impl AsyncWrite for EncryptedStream {
+    #[expect(unused)]
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
