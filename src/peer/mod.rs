@@ -41,6 +41,7 @@ pub(crate) enum CryptoStrategy {
 pub(crate) struct Peer {
     pub(crate) address: SocketAddr,
     pub(crate) id: Option<PeerId>,
+    pub(crate) requires_crypto: bool,
 }
 
 impl Peer {
@@ -63,7 +64,11 @@ impl FromStr for Peer {
 
     fn from_str(s: &str) -> Result<Peer, AddrParseError> {
         let address = s.parse::<SocketAddr>()?;
-        Ok(Peer { address, id: None })
+        Ok(Peer {
+            address,
+            id: None,
+            requires_crypto: false,
+        })
     }
 }
 
@@ -78,6 +83,7 @@ impl From<SocketAddrV4> for Peer {
         Peer {
             address: addr.into(),
             id: None,
+            requires_crypto: false,
         }
     }
 }
@@ -87,6 +93,7 @@ impl From<SocketAddrV6> for Peer {
         Peer {
             address: addr.into(),
             id: None,
+            requires_crypto: false,
         }
     }
 }
@@ -142,6 +149,7 @@ impl FromBencode for Peer {
         Ok(Peer {
             address: SocketAddr::new(ip, port),
             id: peer_id,
+            requires_crypto: false,
         })
     }
 }

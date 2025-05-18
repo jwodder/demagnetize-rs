@@ -384,26 +384,31 @@ mod tests {
                             .parse::<SocketAddr>()
                             .unwrap(),
                         id: Some(PeerId::from(b"-TR3000-23xhfykztwo8")),
+                        requires_crypto: false,
                     },
                     Peer {
                         address: "[2001:41d0:e:907::1]:12179".parse::<SocketAddr>().unwrap(),
                         id: Some(PeerId::from(
                             b"-lt0D80-\xf8\x01\x92N+!{\x06\xcc\x15\xf0\xc4"
                         )),
+                        requires_crypto: false,
                     },
                     Peer {
                         address: "185.125.190.59:6892".parse::<SocketAddr>().unwrap(),
                         id: Some(PeerId::from(b"T03I--00N4b1YqQdAWh4")),
+                        requires_crypto: false,
                     },
                     Peer {
                         address: "[2403:5812:a03e::222]:51413".parse::<SocketAddr>().unwrap(),
                         id: Some(PeerId::from(b"-TR3000-83e2ltycmh6c")),
+                        requires_crypto: false,
                     },
                     Peer {
                         address: "[2003:f1:6f0f:dd00:c0ab:7cff:febd:274a]:51413"
                             .parse::<SocketAddr>()
                             .unwrap(),
                         id: Some(PeerId::from(b"-TR3000-9e0zt0knchh4")),
+                        requires_crypto: false,
                     },
                 ],
                 warning_message: None,
