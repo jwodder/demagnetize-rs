@@ -1,4 +1,3 @@
-use directories::ProjectDirs;
 use rand::Rng;
 use serde::{
     de::{Deserializer, Unexpected},
@@ -24,8 +23,8 @@ impl Config {
     // Returns `None` if $HOME cannot be determined
     pub(crate) fn default_path() -> Option<PathBuf> {
         Some(
-            ProjectDirs::from("", "jwodder", "demagnetize")?
-                .config_local_dir()
+            dirs::config_local_dir()?
+                .join("demagnetize")
                 .join("config.toml"),
         )
     }

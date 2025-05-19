@@ -95,9 +95,15 @@ metadata from a single peer).
 Global Options
 --------------
 
+- `-c <file>`, `--config <file>` — Specify the configuration file to use.  See
+  "Configuration" below for the default config file location.
+
 - `-l <level>`, `--log-level <level>` — Set the log level to the given value.
   Possible values are "`OFF`", "`ERROR`", "`WARN`", "`INFO`", "`DEBUG`", and
   "`TRACE`" (all case-insensitive).  [default value: `INFO`]
+
+- `--no-config` — Use the default configuration settings and do not read from
+  any configuration files
 
 
 `demagnetize get`
@@ -181,3 +187,52 @@ information.
   replaced by the torrent's info hash in hexadecimal.  Specifying `-` will
   cause the torrent to be written to standard output.  [default:
   `{name}.torrent`]
+
+
+Configuration
+=============
+
+`demagnetize` can be configured via a [TOML](https://toml.io) file whose
+default location depends on your OS:
+
+- Linux — `~/.config/demagnetize/config.toml` or `$XDG_CONFIG_HOME/demagnetize/config.toml`
+- macOS — `~/Library/Application Support/demagnetize/config.toml`
+- Windows — `%USERPROFILE%\AppData\Local\demagnetize\config.toml`
+
+This file may contain the following tables & keys, all of which are optional:
+
+- `[general]` — settings that don't fit anywhere more specific
+    - `batch-jobs` (positive integer; default 50) — the maximum number of
+      magnet links that the `batch` command will operate on at once
+
+- `[peers]` — settings for interacting with peers
+    - `handshake-timeout` (nonnegative integer; default 60) — When connecting
+      to a peer, if the TCP connection and BitTorrent handshake are not both
+      completed within this many seconds, the peer is abandoned.
+    - `jobs-per-magnet` (positive integer; default 30) — the maximum number of
+      peers per magnet link that `demagnetize` will communicate with at once
+
+- `[trackers]` — settings for interacting with trackers
+    - `announce-timeout` (nonnegative integer; default 30) — When sending a
+      "started" announcement to a tracker & receiving a list of peers in
+      response, if the task does not complete within this many seconds, the
+      tracker is abandoned.
+    - `jobs-per-magnet` (positive integer; default 30) — the maximum number of
+      trackers per magnet link that `demagnetize` will communicate with at once
+    - `local-port` — the port number that `demagnetize` will tell trackers it's
+      receiving peer connections on
+        - This can be either a port number or a string containing two port
+          numbers separated by a hyphen (in which case a port in the given
+          inclusive range will be chosen at random).  The default is
+          `"1025-65535"`, which selects any nonprivileged port at random.
+        - Note that `demagnetize` does not actually use the port in question,
+          and no attempt is made to ensure the port is not already in use.  On
+          the other hand, `demagnetize` sends a "stop" announcement to each
+          tracker immediately after receiving the list of peers, so hopefully
+          no other peers will see the port number.
+    - `numwant` (positive integer; default 50) — the number of peers to request
+      from each tracker
+    - `shutdown-timeout` (nonnegative integer; default 3) — At the end of
+      program operation, wait this many seconds for any outstanding "stopped"
+      announcements to complete; any tasks still running after the timeout are
+      forcibly cancelled.
