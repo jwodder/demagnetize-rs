@@ -375,7 +375,6 @@ enum Keystream {
 
 impl Keystream {
     /// Encode data before sending it to the server
-    #[expect(unused)]
     fn encode(&mut self, bs: &mut [u8]) {
         if let Keystream::Rc4 {
             ref mut outgoing, ..
@@ -405,6 +404,8 @@ pin_project_lite::pin_project! {
         // handshake and that now need to be decrypted & returned via the
         // `AsyncRead` impl
         read_buffer: Bytes,
+        // Encoded bytes to send to the server on flush
+        write_buffer: BytesMut,
     }
 }
 
@@ -456,6 +457,7 @@ impl EncryptedStream {
             inner: conn,
             keystream,
             read_buffer,
+            write_buffer: BytesMut::new(),
         })
     }
 }
@@ -484,17 +486,29 @@ impl AsyncRead for EncryptedStream {
 }
 
 impl AsyncWrite for EncryptedStream {
-    #[expect(unused)]
     fn poll_write(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        todo!()
+        let this = self.project();
+        let prelen = this.write_buffer.len();
+        this.write_buffer.extend_from_slice(buf);
+        this.keystream
+            .encode(&mut this.write_buffer.as_mut()[prelen..]);
+        Ok(buf.len()).into()
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.project().inner.poll_flush(cx)
+        let mut this = self.project();
+        while !this.write_buffer.is_empty() {
+            let written = ready!(this
+                .inner
+                .as_mut()
+                .poll_write(cx, this.write_buffer.as_ref()))?;
+            let _ = this.write_buffer.split_to(written);
+        }
+        this.inner.poll_flush(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
