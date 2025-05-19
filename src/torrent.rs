@@ -150,11 +150,18 @@ impl TorrentFile {
     pub(crate) async fn save(self, template: &PathTemplate) -> std::io::Result<()> {
         let name = sanitize(self.info.name().as_deref().unwrap_or("NONAME"));
         let path = OutputArg::from_arg(template.format(&name, self.info.info_hash));
-        log::info!(
-            "Saving torrent for info hash {} to file {}",
-            self.info.info_hash,
-            path
-        );
+        if path.is_stdout() {
+            log::info!(
+                "Writing torrent for info hash {} to stdout",
+                self.info.info_hash
+            );
+        } else {
+            log::info!(
+                "Saving torrent for info hash {} to file {}",
+                self.info.info_hash,
+                path
+            );
+        }
         if let Some(parent) = path.path_ref().and_then(|p| p.parent()) {
             if parent != Path::new("") {
                 create_dir_all(parent).await?;

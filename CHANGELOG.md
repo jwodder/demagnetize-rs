@@ -1,3 +1,8 @@
+v0.5.0 (in development)
+-----------------------
+- Fix "Saving torrent to file" message when torrent is actually being written
+  to stdout
+
 v0.4.0 (2025-05-17)
 -------------------
 - Increased MSRV to 1.82
