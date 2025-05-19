@@ -40,7 +40,7 @@ impl Config {
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct GeneralConfig {
     #[serde(default = "default_batch_jobs")]
-    batch_jobs: NonZeroUsize,
+    pub(crate) batch_jobs: NonZeroUsize,
 }
 
 impl Default for GeneralConfig {
@@ -55,25 +55,25 @@ impl Default for GeneralConfig {
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct TrackersConfig {
     #[serde(default)]
-    local_port: LocalPort,
+    pub(crate) local_port: LocalPort,
 
     #[serde(default = "default_numwant")]
-    numwant: NonZeroU32,
+    pub(crate) numwant: NonZeroU32,
 
     #[serde(default = "default_tracker_jobs_per_magnet")]
-    jobs_per_magnet: NonZeroUsize,
+    pub(crate) jobs_per_magnet: NonZeroUsize,
 
     #[serde(
         default = "default_announce_timeout",
         deserialize_with = "deserialize_seconds"
     )]
-    announce_timeout: Duration,
+    pub(crate) announce_timeout: Duration,
 
     #[serde(
         default = "default_shutdown_timeout",
         deserialize_with = "deserialize_seconds"
     )]
-    shutdown_timeout: Duration,
+    pub(crate) shutdown_timeout: Duration,
 }
 
 impl Default for TrackersConfig {
@@ -92,13 +92,13 @@ impl Default for TrackersConfig {
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PeersConfig {
     #[serde(default = "default_peer_jobs_per_magnet")]
-    jobs_per_magnet: NonZeroUsize,
+    pub(crate) jobs_per_magnet: NonZeroUsize,
 
     #[serde(
         default = "default_handshake_timeout",
         deserialize_with = "deserialize_seconds"
     )]
-    handshake_timeout: Duration,
+    pub(crate) handshake_timeout: Duration,
 }
 
 impl Default for PeersConfig {
@@ -229,9 +229,9 @@ impl<'de> Deserialize<'de> for LocalPort {
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
-    #[error("failed to read configuration file")]
+    #[error("error reading configuration file")]
     Read(#[from] std::io::Error),
-    #[error("failed to parse configuration file")]
+    #[error("error parsing configuration file")]
     Parse(#[from] toml::de::Error),
 }
 

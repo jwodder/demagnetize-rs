@@ -1,3 +1,4 @@
+mod app;
 mod asyncutil;
 mod config;
 mod consts;
@@ -7,13 +8,15 @@ mod torrent;
 mod tracker;
 mod types;
 mod util;
+use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup};
+use crate::config::{Config, ConfigError};
 use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::Peer;
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::Tracker;
-use crate::types::{InfoHash, LocalPeer};
+use crate::types::InfoHash;
 use crate::util::ErrorChain;
 use anstream::AutoStream;
 use anstyle::{AnsiColor, Style};
@@ -21,6 +24,7 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use log::{Level, LevelFilter};
 use patharg::InputArg;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -28,6 +32,9 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(version)]
 struct Arguments {
+    #[arg(short, long, value_name = "FILE")]
+    config: Option<PathBuf>,
+
     /// Set logging level
     #[arg(
         short,
@@ -37,14 +44,48 @@ struct Arguments {
     )]
     log_level: LevelFilter,
 
+    #[arg(long, conflicts_with = "config")]
+    no_config: bool,
+
     #[command(subcommand)]
     command: Command,
 }
 
 impl Arguments {
-    async fn run(self) -> ExitCode {
+    async fn run(mut self) -> ExitCode {
         init_logging(self.log_level);
-        self.command.run().await
+        let cfg = if self.no_config {
+            Config::default()
+        } else {
+            let (cfgpath, defpath) = match self.config.take() {
+                Some(p) => (p, false),
+                None => (Config::default_path(), true),
+            };
+            log::debug!(
+                "Reading program configuration from {} ...",
+                cfgpath.display()
+            );
+            match Config::load(&cfgpath) {
+                Ok(cfg) => cfg,
+                Err(ConfigError::Read(e))
+                    if e.kind() == std::io::ErrorKind::NotFound && defpath =>
+                {
+                    log::debug!("Configuration file is default setting, and file does not exist; using default configuration");
+                    Config::default()
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to get program configuration from file {}: {}",
+                        cfgpath.display(),
+                        ErrorChain(e)
+                    );
+                    return ExitCode::FAILURE;
+                }
+            }
+        };
+        let app = Arc::new(App::new(cfg, rand::rng()));
+        log::debug!("Using local peer details: {}", app.local);
+        self.command.run(app).await
     }
 }
 
@@ -119,14 +160,12 @@ enum Command {
 }
 
 impl Command {
-    async fn run(self) -> ExitCode {
-        let local = LocalPeer::generate(rand::rng());
-        log::debug!("Using local peer details: {local}");
+    async fn run(self, app: Arc<App>) -> ExitCode {
         match self {
             Command::Get { outfile, magnet } => {
                 let group = Arc::new(ShutdownGroup::new());
                 let r = if let Err(e) = magnet
-                    .download_torrent_file(Arc::new(outfile), local, Arc::clone(&group))
+                    .download_torrent_file(Arc::new(outfile), Arc::clone(&app), Arc::clone(&group))
                     .await
                 {
                     log::error!("Failed to download torrent file: {}", ErrorChain(e));
@@ -157,9 +196,10 @@ impl Command {
                     MAGNET_LIMIT,
                     magnets.into_iter().map(|magnet| {
                         let gr = Arc::clone(&group);
+                        let app = Arc::clone(&app);
                         let outf = Arc::clone(&outfile);
                         async move {
-                            if let Err(e) = magnet.download_torrent_file(outf, local, gr).await {
+                            if let Err(e) = magnet.download_torrent_file(outf, app, gr).await {
                                 log::error!(
                                     "Failed to download torrent file for {magnet}: {}",
                                     ErrorChain(e)
@@ -194,7 +234,7 @@ impl Command {
             } => {
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
-                    .get_peers(info_hash, local, Arc::clone(&group))
+                    .get_peers(info_hash, Arc::clone(&app), Arc::clone(&group))
                     .await
                 {
                     Ok(peers) => {
@@ -219,7 +259,7 @@ impl Command {
                 outfile,
                 peer,
                 info_hash,
-            } => match peer.info_getter(info_hash, local).run().await {
+            } => match peer.info_getter(info_hash, Arc::clone(&app)).run().await {
                 Ok(info) => {
                     let tf = TorrentFile::new(info, Vec::new());
                     if let Err(e) = tf.save(&outfile).await {
