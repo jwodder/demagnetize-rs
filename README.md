@@ -133,11 +133,12 @@ option.
 
     demagnetize [<global options>] batch [<options>] <file>
 
-Read magnet links from `<file>`, one per line (ignoring empty lines and lines
-that start with `#`), and convert each one to a `.torrent` file.  By default,
-each file is saved at `{name}.torrent`, where `{name}` is replaced by the value
-of the `name` field from the torrent info, but a different path can be set via
-the `--outfile` option.
+Read magnet links from `<file>` (or from standard input if `<file>` is `-`),
+one per line (ignoring empty lines and lines that start with `#`), and convert
+each one to a `.torrent` file.  By default, each file is saved at
+`{name}.torrent`, where `{name}` is replaced by the value of the `name` field
+from the torrent info, but a different path can be set via the `--outfile`
+option.
 
 ### Options
 
