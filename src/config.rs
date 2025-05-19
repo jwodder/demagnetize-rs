@@ -21,13 +21,13 @@ pub(crate) struct Config {
 }
 
 impl Config {
-    pub(crate) fn default_path() -> PathBuf {
-        let Some(projdirs) = ProjectDirs::from("", "jwodder", "demagnetize") else {
-            // Return something almost reasonable if $HOME can't be determined
-            // TODO: Error instead?
-            return ".config/demagnetize/config.toml".into();
-        };
-        projdirs.config_local_dir().join("config.toml")
+    // Returns `None` if $HOME cannot be determined
+    pub(crate) fn default_path() -> Option<PathBuf> {
+        Some(
+            ProjectDirs::from("", "jwodder", "demagnetize")?
+                .config_local_dir()
+                .join("config.toml"),
+        )
     }
 
     pub(crate) fn load<P: AsRef<Path>>(path: P) -> Result<Config, ConfigError> {

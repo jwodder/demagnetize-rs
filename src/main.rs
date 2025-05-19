@@ -56,9 +56,13 @@ impl Arguments {
         let cfg = if self.no_config {
             Config::default()
         } else {
-            let (cfgpath, defpath) = match self.config.take() {
-                Some(p) => (p, false),
-                None => (Config::default_path(), true),
+            let (cfgpath, defpath) = if let Some(p) = self.config.take() {
+                (p, false)
+            } else if let Some(p) = Config::default_path() {
+                (p, true)
+            } else {
+                log::error!("Failed to locate configuration file: could not determine user's home directory");
+                return ExitCode::FAILURE;
             };
             log::debug!(
                 "Reading program configuration from {} ...",
