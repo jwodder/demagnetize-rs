@@ -2,10 +2,11 @@ pub(crate) mod http;
 pub(crate) mod udp;
 use self::http::*;
 use self::udp::*;
+use crate::app::App;
 use crate::asyncutil::ShutdownGroup;
-use crate::consts::{LEFT, NUMWANT, TRACKER_TIMEOUT};
+use crate::consts::LEFT;
 use crate::peer::Peer;
-use crate::types::{InfoHash, Key, LocalPeer, PeerId};
+use crate::types::{InfoHash, Key, PeerId};
 use crate::util::{comma_list, ErrorChain};
 use bytes::Bytes;
 use std::fmt;
@@ -32,13 +33,13 @@ impl Tracker {
     pub(crate) async fn get_peers(
         &self,
         info_hash: InfoHash,
-        local: LocalPeer,
+        app: Arc<App>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
-            TRACKER_TIMEOUT,
-            self.inner_get_peers(info_hash, local, shutdown_group),
+            app.cfg.trackers.announce_timeout,
+            self.inner_get_peers(info_hash, app, shutdown_group),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
@@ -47,10 +48,10 @@ impl Tracker {
     async fn inner_get_peers(
         &self,
         info_hash: InfoHash,
-        local: LocalPeer,
+        app: Arc<App>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<Vec<Peer>, TrackerError> {
-        let mut s = self.connect(info_hash, local).await?;
+        let mut s = self.connect(info_hash, app).await?;
         let peers = s.start().await?.peers;
         let display = self.to_string();
         log::info!("{display} returned {} peers for {info_hash}", peers.len());
@@ -77,7 +78,7 @@ impl Tracker {
     async fn connect(
         &self,
         info_hash: InfoHash,
-        local: LocalPeer,
+        app: Arc<App>,
     ) -> Result<TrackerSession, TrackerError> {
         let inner = match self {
             Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
@@ -86,7 +87,7 @@ impl Tracker {
         Ok(TrackerSession {
             inner,
             info_hash,
-            local,
+            app,
         })
     }
 }
@@ -116,7 +117,7 @@ impl FromStr for Tracker {
 struct TrackerSession {
     inner: InnerTrackerSession,
     info_hash: InfoHash,
-    local: LocalPeer,
+    app: Arc<App>,
 }
 
 enum InnerTrackerSession {
@@ -140,14 +141,14 @@ impl TrackerSession {
         );
         self.announce(Announcement {
             info_hash: self.info_hash,
-            peer_id: self.local.id,
+            peer_id: self.app.local.id,
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
             event: AnnounceEvent::Started,
-            key: self.local.key,
-            numwant: NUMWANT,
-            port: self.local.port,
+            key: self.app.local.key,
+            numwant: self.app.cfg.trackers.numwant.get(),
+            port: self.app.local.port,
         })
         .await
     }
@@ -160,14 +161,14 @@ impl TrackerSession {
         );
         self.announce(Announcement {
             info_hash: self.info_hash,
-            peer_id: self.local.id,
+            peer_id: self.app.local.id,
             downloaded: 0,
             left: LEFT,
             uploaded: 0,
             event: AnnounceEvent::Stopped,
-            key: self.local.key,
-            numwant: NUMWANT,
-            port: self.local.port,
+            key: self.app.local.key,
+            numwant: self.app.cfg.trackers.numwant.get(),
+            port: self.app.local.port,
         })
         .await
     }

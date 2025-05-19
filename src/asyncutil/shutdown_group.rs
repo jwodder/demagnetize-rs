@@ -3,7 +3,6 @@ use std::time::Duration;
 use tokio::time::timeout;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-// TODO: Should there be a limit on the number of tasks running at once?
 #[derive(Debug, Default)]
 pub(crate) struct ShutdownGroup {
     tracker: TaskTracker,

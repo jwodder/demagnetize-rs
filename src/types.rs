@@ -1,4 +1,3 @@
-use crate::consts::PEER_ID_PREFIX;
 use crate::util::{PacketError, TryFromBuf};
 use bytes::{Buf, Bytes};
 use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
@@ -93,32 +92,6 @@ pub(crate) enum InfoHashError {
     InvalidBase32(#[source] DecodeError),
     #[error("info hash is {0} bytes long, expected 20")]
     InvalidLength(usize),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct LocalPeer {
-    pub(crate) id: PeerId,
-    pub(crate) key: Key,
-    pub(crate) port: u16,
-}
-
-impl LocalPeer {
-    pub(crate) fn generate<R: Rng>(mut rng: R) -> LocalPeer {
-        let id = PeerId::generate(PEER_ID_PREFIX, &mut rng);
-        let key = rng.random::<Key>();
-        let port = rng.random_range::<u16, _>(1025..=65535);
-        LocalPeer { id, key, port }
-    }
-}
-
-impl fmt::Display for LocalPeer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "id = {}, key = {}, port = {}",
-            self.id, self.key, self.port
-        )
-    }
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]

@@ -12,6 +12,7 @@ fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
     Command::cargo_bin("demagnetize")
         .unwrap()
         .arg("--log-level=TRACE")
+        .arg("--no-config")
         .arg("get")
         .arg("-o")
         .arg(tmp_path.path().join("{hash}.torrent"))

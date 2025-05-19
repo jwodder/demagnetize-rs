@@ -1,8 +1,8 @@
+use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueExt};
-use crate::consts::{PEERS_PER_MAGNET_LIMIT, TRACKERS_PER_MAGNET_LIMIT};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
-use crate::types::{InfoHash, InfoHashError, LocalPeer};
+use crate::types::{InfoHash, InfoHashError};
 use crate::util::ErrorChain;
 use futures_util::stream::{iter, StreamExt};
 use patharg::InputArg;
@@ -35,19 +35,20 @@ impl Magnet {
 
     pub(crate) async fn get_torrent_file(
         &self,
-        local: LocalPeer,
+        app: Arc<App>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
         let info_hash = self.info_hash();
         let peer_stream = BufferedTasks::from_iter(
-            TRACKERS_PER_MAGNET_LIMIT,
+            app.cfg.trackers.jobs_per_magnet.get(),
             self.trackers().iter().map(|tracker| {
                 let tracker = Arc::clone(tracker);
+                let app = Arc::clone(&app);
                 let group = Arc::clone(&shutdown_group);
                 let display = self.to_string();
                 async move {
-                    match tracker.get_peers(info_hash, local, group).await {
+                    match tracker.get_peers(info_hash, app, group).await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
                             log::warn!(
@@ -64,14 +65,15 @@ impl Magnet {
         )
         .flatten()
         .unique();
-        let (sender, mut receiver) = channel(PEERS_PER_MAGNET_LIMIT);
+        let (sender, mut receiver) = channel(app.cfg.peers.jobs_per_magnet.get());
         let peer_job = tokio::spawn(async move {
             let peer_tasks = BufferedTasks::from_stream(
-                PEERS_PER_MAGNET_LIMIT,
+                app.cfg.peers.jobs_per_magnet.get(),
                 peer_stream.map(|peer| {
+                    let app = Arc::clone(&app);
                     let sender = sender.clone();
                     async move {
-                        let r = peer.info_getter(info_hash, local).run().await;
+                        let r = peer.info_getter(info_hash, app).run().await;
                         let _ = sender.send((peer, r)).await;
                     }
                 }),
@@ -104,10 +106,10 @@ impl Magnet {
     pub(crate) async fn download_torrent_file(
         &self,
         template: Arc<PathTemplate>,
-        local: LocalPeer,
+        app: Arc<App>,
         shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<(), DownloadInfoError> {
-        let tf = self.get_torrent_file(local, shutdown_group).await?;
+        let tf = self.get_torrent_file(app, shutdown_group).await?;
         tf.save(&template).await?;
         Ok(())
     }

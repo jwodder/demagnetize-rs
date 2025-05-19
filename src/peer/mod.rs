@@ -2,17 +2,17 @@ pub(crate) mod extensions;
 mod messages;
 use self::extensions::*;
 use self::messages::*;
-use crate::consts::{
-    CLIENT, MAX_PEER_MSG_LEN, PEER_HANDSHAKE_TIMEOUT, SUPPORTED_EXTENSIONS, UT_METADATA,
-};
+use crate::app::App;
+use crate::consts::{CLIENT, MAX_PEER_MSG_LEN, SUPPORTED_EXTENSIONS, UT_METADATA};
 use crate::torrent::*;
-use crate::types::{InfoHash, LocalPeer, PeerId};
+use crate::types::{InfoHash, PeerId};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
 use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -33,11 +33,11 @@ impl Peer {
         DisplayJson(self)
     }
 
-    pub(crate) fn info_getter(&self, info_hash: InfoHash, local: LocalPeer) -> InfoGetter<'_> {
+    pub(crate) fn info_getter(&self, info_hash: InfoHash, app: Arc<App>) -> InfoGetter<'_> {
         InfoGetter {
             peer: self,
             info_hash,
-            local,
+            app,
         }
     }
 }
@@ -134,13 +134,13 @@ impl FromBencode for Peer {
 pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
-    local: LocalPeer,
+    app: Arc<App>,
 }
 
 impl<'a> InfoGetter<'a> {
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
-        match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect()).await {
+        match timeout(self.app.cfg.peers.handshake_timeout, self.connect()).await {
             Ok(Ok(mut conn)) => conn.get_metadata_info().await,
             Ok(Err(e)) => Err(e),
             Err(_) => Err(PeerError::ConnectTimeout),
@@ -154,7 +154,7 @@ impl<'a> InfoGetter<'a> {
             .map_err(PeerError::Connect)?;
         log::trace!("Connected to {}", self.peer);
         log::trace!("Sending handshake to {}", self.peer);
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.local.id);
+        let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
         s.write_all_buf(&mut Bytes::from(msg))
             .await
             .map_err(PeerError::Send)?;
