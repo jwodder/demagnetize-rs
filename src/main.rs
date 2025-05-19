@@ -1,4 +1,5 @@
 mod asyncutil;
+mod config;
 mod consts;
 mod magnet;
 mod peer;
