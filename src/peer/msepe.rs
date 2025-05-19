@@ -157,7 +157,9 @@ impl Handshaker {
                     }
                     (Packet4State::Select, 0..4) => break,
                     (Packet4State::Select, _) => {
-                        let cs = self.input_buffer.split_to(4).get_u32();
+                        let mut cs = self.input_buffer.split_to(4);
+                        rc4_keystream.decode(cs.as_mut());
+                        let cs = cs.get_u32();
                         let selections = cs.count_ones();
                         if selections != 1 {
                             return Err(HandshakeError::SelectNotSingle(selections));
@@ -173,7 +175,9 @@ impl Handshaker {
                     }
                     (Packet4State::LenPadD { .. }, 0..2) => break,
                     (Packet4State::LenPadD { crypto_select }, _) => {
-                        let bytes_needed = usize::from(self.input_buffer.split_to(2).get_u16());
+                        let mut buf = self.input_buffer.split_to(2);
+                        rc4_keystream.decode(buf.as_mut());
+                        let bytes_needed = usize::from(buf.get_u16());
                         *substate = Packet4State::PadD {
                             crypto_select: *crypto_select,
                             bytes_needed,
@@ -187,7 +191,8 @@ impl Handshaker {
                         bytes_avail,
                     ) => {
                         let sz = (*bytes_needed).min(bytes_avail);
-                        let _padd = self.input_buffer.split_to(sz);
+                        let mut padd = self.input_buffer.split_to(sz);
+                        rc4_keystream.decode(padd.as_mut());
                         *bytes_needed -= sz;
                         if *bytes_needed == 0 {
                             let keystream = match crypto_select {
