@@ -24,6 +24,7 @@ impl Config {
     pub(crate) fn default_path() -> PathBuf {
         let Some(projdirs) = ProjectDirs::from("", "jwodder", "demagnetize") else {
             // Return something almost reasonable if $HOME can't be determined
+            // TODO: Error instead?
             return ".config/demagnetize/config.toml".into();
         };
         projdirs.config_local_dir().join("config.toml")
@@ -133,6 +134,42 @@ impl Default for LocalPort {
     }
 }
 
+macro_rules! try_visit_int {
+    ($($t:ty, $visit:ident),* $(,)?) => {
+        $(
+            fn $visit<E>(self, p: $t) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                u16::try_from(p).map(LocalPort::Constant).map_err(|_| {
+                    E::invalid_value(
+                        Unexpected::Signed(p.into()),
+                        &"port number out of range; must be from 0 to 65535",
+                    )
+                })
+            }
+        )*
+    }
+}
+
+macro_rules! try_visit_uint {
+    ($($t:ty, $visit:ident),* $(,)?) => {
+        $(
+            fn $visit<E>(self, p: $t) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                u16::try_from(p).map(LocalPort::Constant).map_err(|_| {
+                    E::invalid_value(
+                        Unexpected::Unsigned(p.into()),
+                        &"port number out of range; must be from 0 to 65535",
+                    )
+                })
+            }
+        )*
+    }
+}
+
 impl<'de> Deserialize<'de> for LocalPort {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -146,12 +183,22 @@ impl<'de> Deserialize<'de> for LocalPort {
                 )
             }
 
+            fn visit_u8<E>(self, p: u8) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(LocalPort::Constant(u16::from(p)))
+            }
+
             fn visit_u16<E>(self, p: u16) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
                 Ok(LocalPort::Constant(p))
             }
+
+            try_visit_int!(i8, visit_i8, i16, visit_i16, i32, visit_i32, i64, visit_i64);
+            try_visit_uint!(u32, visit_u32, u64, visit_u64);
 
             fn visit_str<E>(self, input: &str) -> Result<Self::Value, E>
             where
@@ -221,4 +268,203 @@ where
     D: Deserializer<'de>,
 {
     u64::deserialize(deserializer).map(Duration::from_secs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn default_config() {
+        let cfg = Config::default();
+        assert_eq!(
+            cfg,
+            Config {
+                general: GeneralConfig {
+                    batch_jobs: NonZeroUsize::new(50).unwrap(),
+                },
+                trackers: TrackersConfig {
+                    local_port: LocalPort::default(),
+                    numwant: NonZeroU32::new(50).unwrap(),
+                    jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
+                    announce_timeout: Duration::from_secs(30),
+                    shutdown_timeout: Duration::from_secs(3),
+                },
+                peers: PeersConfig {
+                    jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
+                    handshake_timeout: Duration::from_secs(60),
+                }
+            }
+        );
+    }
+
+    fn load_config(cfg: &str) -> Result<Config, ConfigError> {
+        let mut tmpfile = NamedTempFile::new().unwrap();
+        tmpfile.write_all(cfg.as_bytes()).unwrap();
+        tmpfile.flush().unwrap();
+        Config::load(tmpfile.path())
+    }
+
+    #[test]
+    fn empty_config() {
+        let cfg = load_config("").unwrap();
+        assert_eq!(cfg, Config::default());
+    }
+
+    #[test]
+    fn int_local_port() {
+        let cfg = load_config("[trackers]\nlocal-port = 60069\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Constant(60069),
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn int_str_local_port() {
+        let cfg = load_config("[trackers]\nlocal-port = \"60069\"\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Constant(60069),
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn local_port_range() {
+        let cfg = load_config("[trackers]\nlocal-port = \"3000-4000\"\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Range {
+                        low: 3000,
+                        high: 4000
+                    },
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn local_port_spaced_range() {
+        let cfg = load_config("[trackers]\nlocal-port = \"3000 - 4000\"\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Range {
+                        low: 3000,
+                        high: 4000
+                    },
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn local_port_eq_range() {
+        let cfg = load_config("[trackers]\nlocal-port = \"3000-3000\"\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Range {
+                        low: 3000,
+                        high: 3000
+                    },
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn descending_local_port_range() {
+        assert!(load_config("[trackers]\nlocal-port = \"4000-3000\"\n").is_err());
+    }
+
+    #[test]
+    fn zero_duration() {
+        let cfg = load_config("[trackers]\nshutdown-timeout = 0\n").unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                trackers: TrackersConfig {
+                    shutdown_timeout: Duration::from_secs(0),
+                    ..TrackersConfig::default()
+                },
+                ..Config::default()
+            }
+        );
+    }
+
+    #[test]
+    fn full_config() {
+        let cfg = load_config(concat!(
+            "[general]\n",
+            "batch-jobs = 100\n",
+            "\n",
+            "[trackers]\n",
+            "local-port = \"10000-65535\"\n",
+            "numwant = 75\n",
+            "jobs-per-magnet = 42\n",
+            "announce-timeout = 45\n",
+            "shutdown-timeout = 5\n",
+            "\n",
+            "[peers]\n",
+            "jobs-per-magnet = 23\n",
+            "handshake-timeout = 120\n",
+        ))
+        .unwrap();
+        assert_eq!(
+            cfg,
+            Config {
+                general: GeneralConfig {
+                    batch_jobs: NonZeroUsize::new(100).unwrap(),
+                },
+                trackers: TrackersConfig {
+                    local_port: LocalPort::Range {
+                        low: 10000,
+                        high: 65535
+                    },
+                    numwant: NonZeroU32::new(75).unwrap(),
+                    jobs_per_magnet: NonZeroUsize::new(42).unwrap(),
+                    announce_timeout: Duration::from_secs(45),
+                    shutdown_timeout: Duration::from_secs(5),
+                },
+                peers: PeersConfig {
+                    jobs_per_magnet: NonZeroUsize::new(23).unwrap(),
+                    handshake_timeout: Duration::from_secs(120),
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn generate_local_port_single_range() {
+        let lp = LocalPort::Range {
+            low: 1025,
+            high: 1025,
+        };
+        assert_eq!(lp.generate(rand::rng()), 1025);
+    }
 }
