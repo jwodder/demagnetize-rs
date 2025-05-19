@@ -11,7 +11,6 @@ mod util;
 use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::config::{Config, ConfigError};
-use crate::consts::{MAGNET_LIMIT, TRACKER_STOP_TIMEOUT};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::Peer;
 use crate::torrent::{PathTemplate, TorrentFile};
@@ -173,7 +172,7 @@ impl Command {
                 } else {
                     ExitCode::SUCCESS
                 };
-                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
                 r
             }
             Command::Batch { outfile, file } => {
@@ -193,7 +192,7 @@ impl Command {
                 let mut total = 0usize;
                 let outfile = Arc::new(outfile);
                 let mut tasks = BufferedTasks::from_iter(
-                    MAGNET_LIMIT,
+                    app.cfg.general.batch_jobs.get(),
                     magnets.into_iter().map(|magnet| {
                         let gr = Arc::clone(&group);
                         let app = Arc::clone(&app);
@@ -220,7 +219,7 @@ impl Command {
                 log::info!(
                     "{success}/{total} magnet links successfully converted to torrent files"
                 );
-                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
                 if success == total {
                     ExitCode::SUCCESS
                 } else {
@@ -252,7 +251,7 @@ impl Command {
                         ExitCode::FAILURE
                     }
                 };
-                group.shutdown(TRACKER_STOP_TIMEOUT).await;
+                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
                 r
             }
             Command::QueryPeer {

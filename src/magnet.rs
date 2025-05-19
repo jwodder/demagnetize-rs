@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueExt};
-use crate::consts::{PEERS_PER_MAGNET_LIMIT, TRACKERS_PER_MAGNET_LIMIT};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::types::{InfoHash, InfoHashError};
@@ -42,7 +41,7 @@ impl Magnet {
         log::info!("Fetching metadata info for {self}");
         let info_hash = self.info_hash();
         let peer_stream = BufferedTasks::from_iter(
-            TRACKERS_PER_MAGNET_LIMIT,
+            app.cfg.trackers.jobs_per_magnet.get(),
             self.trackers().iter().map(|tracker| {
                 let tracker = Arc::clone(tracker);
                 let app = Arc::clone(&app);
@@ -66,10 +65,10 @@ impl Magnet {
         )
         .flatten()
         .unique();
-        let (sender, mut receiver) = channel(PEERS_PER_MAGNET_LIMIT);
+        let (sender, mut receiver) = channel(app.cfg.peers.jobs_per_magnet.get());
         let peer_job = tokio::spawn(async move {
             let peer_tasks = BufferedTasks::from_stream(
-                PEERS_PER_MAGNET_LIMIT,
+                app.cfg.peers.jobs_per_magnet.get(),
                 peer_stream.map(|peer| {
                     let app = Arc::clone(&app);
                     let sender = sender.clone();

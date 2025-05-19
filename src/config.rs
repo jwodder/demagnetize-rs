@@ -39,6 +39,7 @@ impl Config {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct GeneralConfig {
+    /// Maximum number of magnet links to operate on at once in batch mode
     #[serde(default = "default_batch_jobs")]
     pub(crate) batch_jobs: NonZeroUsize,
 }
@@ -57,18 +58,22 @@ pub(crate) struct TrackersConfig {
     #[serde(default)]
     pub(crate) local_port: LocalPort,
 
+    /// Number of peers to request per tracker
     #[serde(default = "default_numwant")]
     pub(crate) numwant: NonZeroU32,
 
+    /// Maximum number of trackers per magnet link to communicate with at once
     #[serde(default = "default_tracker_jobs_per_magnet")]
     pub(crate) jobs_per_magnet: NonZeroUsize,
 
+    /// Overall timeout for interacting with a tracker
     #[serde(
         default = "default_announce_timeout",
         deserialize_with = "deserialize_seconds"
     )]
     pub(crate) announce_timeout: Duration,
 
+    /// Timeout for sending & receiving a "stopped" announcement to a tracker
     #[serde(
         default = "default_shutdown_timeout",
         deserialize_with = "deserialize_seconds"
@@ -91,9 +96,12 @@ impl Default for TrackersConfig {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PeersConfig {
+    /// Maximum number of peers per magnet link to interact with at once
     #[serde(default = "default_peer_jobs_per_magnet")]
     pub(crate) jobs_per_magnet: NonZeroUsize,
 
+    /// Timeout for connecting to a peer and performing the BitTorrent
+    /// handshake and extended handshake
     #[serde(
         default = "default_handshake_timeout",
         deserialize_with = "deserialize_seconds"

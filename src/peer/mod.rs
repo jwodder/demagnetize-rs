@@ -3,9 +3,7 @@ mod messages;
 use self::extensions::*;
 use self::messages::*;
 use crate::app::App;
-use crate::consts::{
-    CLIENT, MAX_PEER_MSG_LEN, PEER_HANDSHAKE_TIMEOUT, SUPPORTED_EXTENSIONS, UT_METADATA,
-};
+use crate::consts::{CLIENT, MAX_PEER_MSG_LEN, SUPPORTED_EXTENSIONS, UT_METADATA};
 use crate::torrent::*;
 use crate::types::{InfoHash, PeerId};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
@@ -142,7 +140,7 @@ pub(crate) struct InfoGetter<'a> {
 impl<'a> InfoGetter<'a> {
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
-        match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect()).await {
+        match timeout(self.app.cfg.peers.handshake_timeout, self.connect()).await {
             Ok(Ok(mut conn)) => conn.get_metadata_info().await,
             Ok(Err(e)) => Err(e),
             Err(_) => Err(PeerError::ConnectTimeout),

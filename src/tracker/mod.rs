@@ -4,7 +4,7 @@ use self::http::*;
 use self::udp::*;
 use crate::app::App;
 use crate::asyncutil::ShutdownGroup;
-use crate::consts::{LEFT, NUMWANT, TRACKER_TIMEOUT};
+use crate::consts::LEFT;
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, PeerId};
 use crate::util::{comma_list, ErrorChain};
@@ -38,7 +38,7 @@ impl Tracker {
     ) -> Result<Vec<Peer>, TrackerError> {
         log::info!("Requesting peers for {info_hash} from {self}");
         timeout(
-            TRACKER_TIMEOUT,
+            app.cfg.trackers.announce_timeout,
             self.inner_get_peers(info_hash, app, shutdown_group),
         )
         .await
@@ -147,7 +147,7 @@ impl TrackerSession {
             uploaded: 0,
             event: AnnounceEvent::Started,
             key: self.app.local.key,
-            numwant: NUMWANT,
+            numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
         })
         .await
@@ -167,7 +167,7 @@ impl TrackerSession {
             uploaded: 0,
             event: AnnounceEvent::Stopped,
             key: self.app.local.key,
-            numwant: NUMWANT,
+            numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
         })
         .await
