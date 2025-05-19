@@ -218,7 +218,7 @@ impl Command {
                 outfile,
                 peer,
                 info_hash,
-            } => match peer.get_metadata_info(info_hash, local).await {
+            } => match peer.info_getter(info_hash, local).run().await {
                 Ok(info) => {
                     let tf = TorrentFile::new(info, Vec::new());
                     if let Err(e) = tf.save(&outfile).await {

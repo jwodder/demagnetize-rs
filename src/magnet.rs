@@ -71,7 +71,7 @@ impl Magnet {
                 peer_stream.map(|peer| {
                     let sender = sender.clone();
                     async move {
-                        let r = peer.get_metadata_info(info_hash, local).await;
+                        let r = peer.info_getter(info_hash, local).run().await;
                         let _ = sender.send((peer, r)).await;
                     }
                 }),
