@@ -73,7 +73,9 @@ impl Arguments {
                 Err(ConfigError::Read(e))
                     if e.kind() == std::io::ErrorKind::NotFound && defpath =>
                 {
-                    log::debug!("Configuration file is default setting, and file does not exist; using default configuration");
+                    log::debug!(
+                        "Default configuration file does not exist; using default settings"
+                    );
                     Config::default()
                 }
                 Err(e) => {
