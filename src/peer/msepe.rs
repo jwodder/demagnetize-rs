@@ -448,6 +448,7 @@ impl EncryptedStream {
                         "Finished receiving encryption handshake packet 2 from {}",
                         handshaker.peer
                     );
+                    timeout_time = None;
                     handshaker.handle_timeout()?;
                 }
             }
