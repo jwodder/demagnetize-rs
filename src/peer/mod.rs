@@ -205,7 +205,13 @@ impl<'a> InfoGetter<'a> {
                     Err(e) => return Err(e),
                 }
             }
-            CryptoStrategy::Never => Either::Left(self.tcp_connect().await?),
+            CryptoStrategy::Never => {
+                if self.peer.requires_crypto {
+                    return Err(PeerError::CantRequireCrypto);
+                } else {
+                    Either::Left(self.tcp_connect().await?)
+                }
+            }
         };
         log::trace!("Sending handshake to {}", self.peer);
         let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
@@ -407,6 +413,8 @@ impl PeerConnection<'_> {
 
 #[derive(Debug, Error)]
 pub(crate) enum PeerError {
+    #[error("peer requires encryption, but encryption is disabled")]
+    CantRequireCrypto,
     #[error("could not connect to peer")]
     Connect(#[source] std::io::Error),
     #[error("timed out trying to connect to peer and complete handshake")]
