@@ -29,91 +29,16 @@ pub(crate) struct Peer {
 }
 
 impl Peer {
-    pub(crate) async fn get_metadata_info(
-        &self,
-        info_hash: InfoHash,
-        local: LocalPeer,
-    ) -> Result<TorrentInfo, PeerError> {
-        log::info!("Requesting info for {info_hash} from {self}");
-        let mut conn = match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect(info_hash, local)).await {
-            Ok(Ok(conn)) => conn,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => return Err(PeerError::ConnectTimeout),
-        };
-        conn.get_metadata_info().await
-    }
-
-    async fn connect(
-        &self,
-        info_hash: InfoHash,
-        local: LocalPeer,
-    ) -> Result<PeerConnection<'_>, PeerError> {
-        log::debug!("Connecting to {self}");
-        let mut s = TcpStream::connect(&self.address)
-            .await
-            .map_err(PeerError::Connect)?;
-        log::trace!("Connected to {self}");
-        log::trace!("Sending handshake to {self}");
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, info_hash, local.id);
-        s.write_all_buf(&mut Bytes::from(msg))
-            .await
-            .map_err(PeerError::Send)?;
-        s.flush().await.map_err(PeerError::Send)?;
-        let mut buf = BytesMut::zeroed(Handshake::LENGTH);
-        let _ = s.read_exact(&mut buf).await.map_err(PeerError::Recv)?;
-        let msg = Handshake::try_from(buf.freeze())?;
-        log::trace!("{self} sent {msg}");
-        if msg.info_hash != info_hash {
-            return Err(PeerError::InfoHashMismatch {
-                expected: info_hash,
-                got: msg.info_hash,
-            });
-        }
-        let extensions = ExtensionSet::from_iter(SUPPORTED_EXTENSIONS) & msg.extensions;
-        if !extensions.has(Extension::Bep10) {
-            return Err(PeerError::NoBep10);
-        }
-        let local_registry = {
-            let mut registry = Bep10Registry::new();
-            registry
-                .register(Bep10Extension::Metadata, UT_METADATA)
-                .expect("registering a non-zero code in a new registry should not fail");
-            registry
-        };
-        let msg = Message::from(ExtendedHandshake {
-            m: Some(local_registry.to_m()),
-            v: Some(CLIENT.into()),
-            metadata_size: None,
-            yourip: Some(self.address.ip()),
-        });
-        let mut channel = MessageChannel::new(self, s, local_registry);
-        channel.send(msg).await?;
-        let msg = channel.recv().await?;
-        // TODO: Look into how acceptable/widespread it is for the extended
-        // handshake to not be the packet immediately after the protocol
-        // handshake
-        let Message::Extended(ExtendedMessage::Handshake(shake)) = msg else {
-            return Err(PeerError::NoExtendedHandshake);
-        };
-        let metadata_size = shake.metadata_size;
-        let remote_registry = shake.into_bep10_registry()?;
-        if !remote_registry.contains(Bep10Extension::Metadata) {
-            return Err(PeerError::NoMetadataExt);
-        }
-        channel.set_remote_registry(remote_registry);
-        if extensions.has(Extension::Fast) {
-            channel.send(Message::Core(CoreMessage::HaveNone)).await?;
-        }
-        Ok(PeerConnection {
-            channel,
-            extensions,
-            info_hash,
-            metadata_size,
-        })
-    }
-
     pub(crate) fn display_json(&self) -> DisplayJson<'_> {
         DisplayJson(self)
+    }
+
+    pub(crate) fn info_getter(&self, info_hash: InfoHash, local: LocalPeer) -> InfoGetter<'_> {
+        InfoGetter {
+            peer: self,
+            info_hash,
+            local,
+        }
     }
 }
 
@@ -201,6 +126,89 @@ impl FromBencode for Peer {
         Ok(Peer {
             address: SocketAddr::new(ip, port),
             id: peer_id,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct InfoGetter<'a> {
+    peer: &'a Peer,
+    info_hash: InfoHash,
+    local: LocalPeer,
+}
+
+impl<'a> InfoGetter<'a> {
+    pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
+        log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
+        match timeout(PEER_HANDSHAKE_TIMEOUT, self.connect()).await {
+            Ok(Ok(mut conn)) => conn.get_metadata_info().await,
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(PeerError::ConnectTimeout),
+        }
+    }
+
+    async fn connect(self) -> Result<PeerConnection<'a>, PeerError> {
+        log::debug!("Connecting to {}", self.peer);
+        let mut s = TcpStream::connect(&self.peer.address)
+            .await
+            .map_err(PeerError::Connect)?;
+        log::trace!("Connected to {}", self.peer);
+        log::trace!("Sending handshake to {}", self.peer);
+        let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.local.id);
+        s.write_all_buf(&mut Bytes::from(msg))
+            .await
+            .map_err(PeerError::Send)?;
+        s.flush().await.map_err(PeerError::Send)?;
+        let mut buf = BytesMut::zeroed(Handshake::LENGTH);
+        let _ = s.read_exact(&mut buf).await.map_err(PeerError::Recv)?;
+        let msg = Handshake::try_from(buf.freeze())?;
+        log::trace!("{} sent {msg}", self.peer);
+        if msg.info_hash != self.info_hash {
+            return Err(PeerError::InfoHashMismatch {
+                expected: self.info_hash,
+                got: msg.info_hash,
+            });
+        }
+        let extensions = ExtensionSet::from_iter(SUPPORTED_EXTENSIONS) & msg.extensions;
+        if !extensions.has(Extension::Bep10) {
+            return Err(PeerError::NoBep10);
+        }
+        let local_registry = {
+            let mut registry = Bep10Registry::new();
+            registry
+                .register(Bep10Extension::Metadata, UT_METADATA)
+                .expect("registering a non-zero code in a new registry should not fail");
+            registry
+        };
+        let msg = Message::from(ExtendedHandshake {
+            m: Some(local_registry.to_m()),
+            v: Some(CLIENT.into()),
+            metadata_size: None,
+            yourip: Some(self.peer.address.ip()),
+        });
+        let mut channel = MessageChannel::new(self.peer, s, local_registry);
+        channel.send(msg).await?;
+        let msg = channel.recv().await?;
+        // TODO: Look into how acceptable/widespread it is for the extended
+        // handshake to not be the packet immediately after the protocol
+        // handshake
+        let Message::Extended(ExtendedMessage::Handshake(shake)) = msg else {
+            return Err(PeerError::NoExtendedHandshake);
+        };
+        let metadata_size = shake.metadata_size;
+        let remote_registry = shake.into_bep10_registry()?;
+        if !remote_registry.contains(Bep10Extension::Metadata) {
+            return Err(PeerError::NoMetadataExt);
+        }
+        channel.set_remote_registry(remote_registry);
+        if extensions.has(Extension::Fast) {
+            channel.send(Message::Core(CoreMessage::HaveNone)).await?;
+        }
+        Ok(PeerConnection {
+            channel,
+            extensions,
+            info_hash: self.info_hash,
+            metadata_size,
         })
     }
 }
