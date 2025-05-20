@@ -568,8 +568,6 @@ fn biguint2bytes(bi: &BigUint) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha12Rng;
 
     #[test]
     fn test_prime_modulus() {
@@ -577,57 +575,72 @@ mod tests {
         let _ = prime_modulus();
     }
 
-    #[test]
-    fn test_build_handshaker() {
-        let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
-        let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
-            .parse::<InfoHash>()
-            .unwrap();
-        let builder = HandshakeBuilder::new(
-            peer,
-            info_hash,
-            ChaCha12Rng::seed_from_u64(0x0123456789ABCDEF),
-        );
-        let shaker = builder.build();
-        assert_eq!(shaker.peer, peer);
-        let HandshakeState::Packet2 { private_key } = shaker.state else {
-            panic!("Handshaker state is not Packet2");
-        };
-        assert_eq!(
-            private_key,
-            BigUint::parse_bytes(b"a068078feb542e953c13e4dacece2b6730a2b512".as_slice(), 16)
-                .unwrap()
-        );
-        let packet1 = shaker.output_packet.unwrap();
-        let pubkey = BigUint::from_bytes_be(&packet1[..MODULUS_BYTES]);
-        assert_eq!(
-            pubkey,
-            BigUint::from(2usize).modpow(&private_key, &prime_modulus())
-        );
-        assert!(((MODULUS_BYTES)..(MODULUS_BYTES + 512)).contains(&packet1.len()));
-        assert_eq!(shaker.padc_len, 379);
-        assert_eq!(shaker.skey, info_hash);
-        assert_eq!(shaker.timeout, Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
-        assert_eq!(shaker.input_buffer, BytesMut::new());
-        assert_eq!(
-            shaker.crypto_provide,
-            CryptoMethodSet::from_iter(DEFAULT_CRYPTO_PROVIDE)
-        );
-    }
+    mod handshake {
+        use super::*;
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha12Rng;
 
-    #[test]
-    fn test_build_handshaker_custom_timeout() {
-        let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
-        let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
-            .parse::<InfoHash>()
-            .unwrap();
-        let builder = HandshakeBuilder::new(
-            peer,
-            info_hash,
-            ChaCha12Rng::seed_from_u64(0x0123456789ABCDEF),
-        )
-        .dh_exchange_timeout(Duration::from_secs(5));
-        let shaker = builder.build();
-        assert_eq!(shaker.timeout, Some(Duration::from_secs(5)));
+        const RNG_SEED: u64 = 0x0123456789ABCDEF;
+        static PRIVATE_KEY: &str = "a068078feb542e953c13e4dacece2b6730a2b512";
+        static PUBLIC_KEY: &str = "fe0ffefc8a55947c7054729257d361deffc0f235bd0401acf283c4a34d0d38b7fc183fc4b172e74eed2226c9b58337605448b8217a036b740886c49578963c8ef1e1211da94f3e1386a9a6f82e8e54156de0fc5897b3a84a6d8108492cc38b6a";
+        static INFO_HASH: &str = "28C55196F57753C40ACEB6FB58617E6995A7EDDB";
+
+        #[test]
+        fn test_build() {
+            let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
+            let info_hash = INFO_HASH.parse::<InfoHash>().unwrap();
+            let builder =
+                HandshakeBuilder::new(peer, info_hash, ChaCha12Rng::seed_from_u64(RNG_SEED));
+            let mut shaker = builder.build();
+            assert_eq!(shaker.peer, peer);
+            let HandshakeState::Packet2 { ref private_key } = shaker.state else {
+                panic!("Handshaker state is not Packet2");
+            };
+            assert_eq!(
+                private_key,
+                &BigUint::parse_bytes(PRIVATE_KEY.as_bytes(), 16).unwrap()
+            );
+            let output1 = shaker.output_packet.clone();
+            assert_eq!(shaker.get_output(), output1);
+            assert_eq!(shaker.output_packet, None);
+            assert_eq!(shaker.get_output(), None);
+            let packet1 = output1.unwrap();
+            let pubkey = BigUint::from_bytes_be(&packet1[..MODULUS_BYTES]);
+            assert_eq!(
+                pubkey,
+                BigUint::parse_bytes(PUBLIC_KEY.as_bytes(), 16).unwrap()
+            );
+            assert!(((MODULUS_BYTES)..(MODULUS_BYTES + 512)).contains(&packet1.len()));
+            assert_eq!(shaker.padc_len, 379);
+            assert_eq!(shaker.skey, info_hash);
+            assert_eq!(shaker.timeout, Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
+            assert_eq!(shaker.get_timeout(), Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
+            assert_eq!(shaker.timeout, None);
+            assert_eq!(shaker.get_timeout(), None);
+            assert_eq!(shaker.input_buffer, BytesMut::new());
+            assert_eq!(
+                shaker.crypto_provide,
+                CryptoMethodSet::from_iter(DEFAULT_CRYPTO_PROVIDE)
+            );
+        }
+
+        #[test]
+        fn test_build_custom_timeout() {
+            let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
+            let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
+                .parse::<InfoHash>()
+                .unwrap();
+            let builder = HandshakeBuilder::new(
+                peer,
+                info_hash,
+                ChaCha12Rng::seed_from_u64(0x0123456789ABCDEF),
+            )
+            .dh_exchange_timeout(Duration::from_secs(5));
+            let mut shaker = builder.build();
+            assert_eq!(shaker.timeout, Some(Duration::from_secs(5)));
+            assert_eq!(shaker.get_timeout(), Some(Duration::from_secs(5)));
+            assert_eq!(shaker.timeout, None);
+            assert_eq!(shaker.get_timeout(), None);
+        }
     }
 }
