@@ -149,6 +149,7 @@ impl TrackerSession {
             key: self.app.local.key,
             numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
+            crypto: self.app.get_tracker_crypto(),
         })
         .await
     }
@@ -169,6 +170,7 @@ impl TrackerSession {
             key: self.app.local.key,
             numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
+            crypto: self.app.get_tracker_crypto(),
         })
         .await
     }
@@ -259,6 +261,7 @@ struct Announcement {
     key: Key,
     numwant: u32,
     port: u16,
+    crypto: TrackerCrypto,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -272,4 +275,28 @@ struct AnnounceResponse {
     incomplete: Option<u32>,
     leechers: Option<u32>,
     seeders: Option<u32>,
+}
+
+/// Possible levels of encryption support to include in tracker announcements;
+/// only used by HTTP trackers
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum TrackerCrypto {
+    Required,
+    #[default]
+    Supported,
+    Nil,
+}
+
+impl TrackerCrypto {
+    fn add_query_param(&self, url: &mut Url) {
+        match self {
+            TrackerCrypto::Required => {
+                url.query_pairs_mut().append_pair("requirecrypto", "1");
+            }
+            TrackerCrypto::Supported => {
+                url.query_pairs_mut().append_pair("supportcrypto", "1");
+            }
+            TrackerCrypto::Nil => (),
+        }
+    }
 }

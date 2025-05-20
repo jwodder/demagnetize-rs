@@ -460,7 +460,7 @@ pub(crate) enum UdpTrackerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tracker::AnnounceEvent;
+    use crate::tracker::{AnnounceEvent, TrackerCrypto};
     use crate::types::{InfoHash, Key, PeerId};
 
     #[test]
@@ -500,6 +500,7 @@ mod tests {
                 uploaded: 0,
                 left: (1 << 63) - 1,
                 numwant: 80,
+                crypto: TrackerCrypto::default(),
             },
             urldata: String::new(),
         };
@@ -526,6 +527,7 @@ mod tests {
                 uploaded: 0,
                 left: (1 << 63) - 1,
                 numwant: 80,
+                crypto: TrackerCrypto::default(),
             },
             urldata: "/announce".into(),
         };

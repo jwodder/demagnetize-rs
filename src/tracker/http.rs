@@ -73,6 +73,7 @@ impl HttpTrackerSession {
         announcement.event.add_query_param(&mut url);
         announcement.info_hash.add_query_param(&mut url);
         announcement.peer_id.add_query_param(&mut url);
+        announcement.crypto.add_query_param(&mut url);
         url.query_pairs_mut()
             .append_pair("port", &announcement.port.to_string())
             .append_pair("uploaded", &announcement.uploaded.to_string())
@@ -80,8 +81,7 @@ impl HttpTrackerSession {
             .append_pair("left", &announcement.left.to_string())
             .append_pair("numwant", &announcement.numwant.to_string())
             .append_pair("key", &announcement.key.to_string())
-            .append_pair("compact", "1")
-            .append_pair("supportcrypto", "1");
+            .append_pair("compact", "1");
         let buf = self
             .client
             .get(url)

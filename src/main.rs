@@ -14,7 +14,7 @@ use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::Peer;
 use crate::torrent::{PathTemplate, TorrentFile};
-use crate::tracker::Tracker;
+use crate::tracker::{Tracker, TrackerCrypto};
 use crate::types::InfoHash;
 use crate::util::ErrorChain;
 use anstream::AutoStream;
@@ -90,7 +90,7 @@ impl Arguments {
                 }
             }
         };
-        let app = Arc::new(App::new(cfg, rand::rng()));
+        let app = App::new(cfg, rand::rng());
         log::debug!("Using local peer details: {}", app.local);
         self.command.run(app).await
     }
@@ -132,6 +132,22 @@ enum Command {
         #[arg(short = 'J', long)]
         json: bool,
 
+        /// Do not tell the tracker anything about our encryption support
+        #[arg(
+            long,
+            conflicts_with = "require_crypto",
+            conflicts_with = "support_crypto"
+        )]
+        no_crypto: bool,
+
+        /// Tell the tracker that we require peers with encryption support
+        #[arg(long)]
+        require_crypto: bool,
+
+        /// Tell the tracker that we support the encrypted peer protocol
+        #[arg(long, conflicts_with = "require_crypto")]
+        support_crypto: bool,
+
         /// The tracker to scrape, as an HTTP or UDP URL.
         tracker: Tracker,
 
@@ -167,9 +183,10 @@ enum Command {
 }
 
 impl Command {
-    async fn run(self, app: Arc<App>) -> ExitCode {
+    async fn run(self, mut app: App) -> ExitCode {
         match self {
             Command::Get { outfile, magnet } => {
+                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let r = if let Err(e) = magnet
                     .download_torrent_file(Arc::new(outfile), Arc::clone(&app), Arc::clone(&group))
@@ -195,6 +212,7 @@ impl Command {
                     log::info!("No magnet links supplied");
                     return ExitCode::SUCCESS;
                 }
+                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let mut success = 0usize;
                 let mut total = 0usize;
@@ -238,7 +256,18 @@ impl Command {
                 json,
                 tracker,
                 info_hash,
+                no_crypto,
+                require_crypto,
+                support_crypto,
             } => {
+                let tracker_crypto = match (require_crypto, support_crypto, no_crypto) {
+                    (true, _, _) => Some(TrackerCrypto::Required),
+                    (false, true, _) => Some(TrackerCrypto::Supported),
+                    (false, false, true) => Some(TrackerCrypto::Nil),
+                    (false, false, false) => None,
+                };
+                app.tracker_crypto = tracker_crypto;
+                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
                     .get_peers(info_hash, Arc::clone(&app), Arc::clone(&group))
@@ -266,7 +295,7 @@ impl Command {
                 outfile,
                 peer,
                 info_hash,
-            } => match peer.info_getter(info_hash, Arc::clone(&app)).run().await {
+            } => match peer.info_getter(info_hash, Arc::new(app)).run().await {
                 Ok(info) => {
                     let tf = TorrentFile::new(info, Vec::new());
                     if let Err(e) = tf.save(&outfile).await {
