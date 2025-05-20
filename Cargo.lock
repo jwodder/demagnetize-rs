@@ -349,6 +349,7 @@ dependencies = [
  "patharg",
  "pin-project-lite",
  "rand",
+ "rand_chacha",
  "rc4",
  "reqwest",
  "rstest",

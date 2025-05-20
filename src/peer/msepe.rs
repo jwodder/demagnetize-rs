@@ -568,10 +568,96 @@ fn biguint2bytes(bi: &BigUint) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha12Rng;
 
     #[test]
     fn test_prime_modulus() {
         // Test that it doesn't panic
         let _ = prime_modulus();
+    }
+
+    #[test]
+    fn test_build_handshaker() {
+        let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
+        let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
+            .parse::<InfoHash>()
+            .unwrap();
+        let builder = HandshakeBuilder::new(
+            peer,
+            info_hash,
+            ChaCha12Rng::seed_from_u64(0x0123456789ABCDEF),
+        );
+        let shaker = builder.build();
+        assert_eq!(shaker.peer, peer);
+        let HandshakeState::Packet2 { private_key } = shaker.state else {
+            panic!("Handshaker state is not Packet2");
+        };
+        assert_eq!(
+            private_key,
+            BigUint::parse_bytes(b"a068078feb542e953c13e4dacece2b6730a2b512".as_slice(), 16)
+                .unwrap()
+        );
+        let mut packet1 = BytesMut::new();
+        packet1.put(b"\xfe\x0f\xfe\xfc\x8aU\x94|pTr\x92W\xd3a\xde".as_slice());
+        packet1.put(b"\xff\xc0\xf25\xbd\x04\x01\xac\xf2\x83\xc4".as_slice());
+        packet1.put(b"\xa3M\r8\xb7\xfc\x18?\xc4\xb1r\xe7N\xed\"&".as_slice());
+        packet1.put(b"\xc9\xb5\x837`TH\xb8!z\x03kt\x08\x86\xc4".as_slice());
+        packet1.put(b"\x95x\x96<\x8e\xf1\xe1!\x1d\xa9O>\x13\x86".as_slice());
+        packet1.put(b"\xa9\xa6\xf8.\x8eT\x15m\xe0\xfcX\x97\xb3".as_slice());
+        packet1.put(b"\xa8Jm\x81\x08I,\xc3\x8bjr\xca\x1a\xf2'b".as_slice());
+        packet1.put(b"\xf1\"\x8a\xbc,\xe2\0\xc8\xe7\x90\xf6\xc4".as_slice());
+        packet1.put(b"\x81\x1c\xda\xab\x9d\xb4\xf5\xe4}\xd5\xd0".as_slice());
+        packet1.put(b"\x98q~\xef]\x13\xf9\x07\x97\x15'C\x06\x0fUR".as_slice());
+        packet1.put(b"\xb7=\xc9\x9f\x9d\x89\xc5:\x0fU\xe1s\xa76".as_slice());
+        packet1.put(b"\xb0\xc1\x11\x0b\xb3\xf3T_\xa2\xbbM\x19A".as_slice());
+        packet1.put(b"\xab\xd1\xe2\"\xff\xbf\x07X\xa9\xfb\xf3\x0c".as_slice());
+        packet1.put(b"\xca\"u\xc2\xb3\x86\xa1\xf2u\"X\xafy \x01".as_slice());
+        packet1.put(b"\x18\xe8\xc2\xb3\x1fh\x91\xd8\xb2{\xc8\x08".as_slice());
+        packet1.put(b"\xd700*\xea#\x1d\x88p\xdf_\xc0L\x06\xb6wn".as_slice());
+        packet1.put(b"\xadD+r\x11T\x9e*%\xeaT\xe4\x7f\x1f(\x93".as_slice());
+        packet1.put(b"\x1dzn\x9a-\xff\xfaE\x83\x98\xd1\xc3\xacC".as_slice());
+        packet1.put(b"\xd9\x9b)\xee&\xcf\xcf\r\xe2\xbf\x9c\xe2".as_slice());
+        packet1.put(b"\xedgJ\x87\x1c8\xf9\x175\x0f\n\xa4\xf5c$H".as_slice());
+        packet1.put(b"\xf2ak&\xc8\xad\x01\xf9\xd5\x87\xea\x1f\xcc".as_slice());
+        packet1.put(b"<\xf3aN\xd9U/\xd1\xed\xcbT9dY+\x066\x14\xd3".as_slice());
+        packet1.put(b"b\xe8\xa2\x90h(\x1a\xa2A\xefj\t\x90p\xdfd\x03".as_slice());
+        packet1.put(b"\x92W\x99\xb3\xd2!\xd5\n\xe2W\xfd\xef\xf2\xf5".as_slice());
+        packet1.put(b"\x92\xbc\xe2%v\xa6J\xcfv@9m\x8br0\xcagV=\x9d&".as_slice());
+        packet1.put(b"\xce\x1fF*\rGD\xa8\xf61\xd0[E\xf2\x8c;^\x16f_".as_slice());
+        packet1.put(b"k+\xfdF\xe3\xbcS\x07\x91N\x94\"\xae\xb5V\xedG".as_slice());
+        packet1.put(b"\x13\xb9\xec\xb0\0]^A\xfd\x94\xef\xbc\x7fk".as_slice());
+        packet1.put(b"\x7f\xe0\x93f:k\x85\xbb\x13xo\x16v\xf4\x15".as_slice());
+        packet1.put(b"\x1b\"U.XM\\\xfb\xe0\xf7\x13\xb9\xdc\r)\xf8;".as_slice());
+        packet1.put(b"\xdb\x0b\xd8\xb1\xc8f\x06\xd5\xa5EH\xe1<v\x02".as_slice());
+        packet1.put(b"\x96\xc3\xf0\xe6\xfd\xc5\xf1-\xf9^\xf3`\x1b".as_slice());
+        packet1.put(b"\xf9\x16(\xe5\x0ev\xf9\r\xaaK\xb3e\xbd\xca".as_slice());
+        packet1.put(b"\x0c\xe5\x1f\x81\x91\xda`\x97k\x88\xc5\xc4".as_slice());
+        packet1.put(b"\x97\x8e".as_slice());
+        assert_eq!(shaker.output_packet, Some(packet1.freeze()));
+        assert_eq!(shaker.padc_len, 379);
+        assert_eq!(shaker.skey, info_hash);
+        assert_eq!(shaker.timeout, Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
+        assert_eq!(shaker.input_buffer, BytesMut::new());
+        assert_eq!(
+            shaker.crypto_provide,
+            CryptoMethodSet::from_iter(DEFAULT_CRYPTO_PROVIDE)
+        );
+    }
+
+    #[test]
+    fn test_build_handshaker_custom_timeout() {
+        let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
+        let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
+            .parse::<InfoHash>()
+            .unwrap();
+        let builder = HandshakeBuilder::new(
+            peer,
+            info_hash,
+            ChaCha12Rng::seed_from_u64(0x0123456789ABCDEF),
+        )
+        .dh_exchange_timeout(Duration::from_secs(5));
+        let shaker = builder.build();
+        assert_eq!(shaker.timeout, Some(Duration::from_secs(5)));
     }
 }
