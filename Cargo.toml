@@ -15,6 +15,7 @@ exclude = ["/.*"]
 [dependencies]
 anstream = "0.6.14"
 anstyle = "1.0.7"
+async-channel = "2.3.1"
 bendy = "0.3.3"
 bytes = "1.7.0"
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
