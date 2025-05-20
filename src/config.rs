@@ -42,12 +42,16 @@ pub(crate) struct GeneralConfig {
     /// Maximum number of magnet links to operate on at once in batch mode
     #[serde(default = "default_batch_jobs")]
     pub(crate) batch_jobs: NonZeroUsize,
+
+    #[serde(default)]
+    pub(crate) encrypt: CryptoPreference,
 }
 
 impl Default for GeneralConfig {
     fn default() -> GeneralConfig {
         GeneralConfig {
             batch_jobs: default_batch_jobs(),
+            encrypt: CryptoPreference::default(),
         }
     }
 }
@@ -114,9 +118,6 @@ pub(crate) struct PeersConfig {
         deserialize_with = "deserialize_seconds"
     )]
     pub(crate) dh_exchange_timeout: Duration,
-
-    #[serde(default)]
-    pub(crate) encryption_preference: CryptoPreference,
 }
 
 impl Default for PeersConfig {
@@ -125,7 +126,6 @@ impl Default for PeersConfig {
             jobs_per_magnet: default_peer_jobs_per_magnet(),
             handshake_timeout: default_handshake_timeout(),
             dh_exchange_timeout: default_dh_exchange_timeout(),
-            encryption_preference: CryptoPreference::default(),
         }
     }
 }
@@ -328,6 +328,7 @@ mod tests {
             Config {
                 general: GeneralConfig {
                     batch_jobs: NonZeroUsize::new(50).unwrap(),
+                    encrypt: CryptoPreference::Prefer,
                 },
                 trackers: TrackersConfig {
                     local_port: LocalPort::default(),
@@ -340,7 +341,6 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
                     handshake_timeout: Duration::from_secs(60),
                     dh_exchange_timeout: Duration::from_secs(30),
-                    encryption_preference: CryptoPreference::Prefer,
                 }
             }
         );
@@ -468,6 +468,7 @@ mod tests {
         let cfg = load_config(concat!(
             "[general]\n",
             "batch-jobs = 100\n",
+            "encrypt = \"if-required\"\n",
             "\n",
             "[trackers]\n",
             "announce-timeout = 45\n",
@@ -478,7 +479,6 @@ mod tests {
             "\n",
             "[peers]\n",
             "dh-exchange-timeout = 10\n",
-            "encryption-preference = \"if-required\"\n",
             "handshake-timeout = 120\n",
             "jobs-per-magnet = 23\n",
         ))
@@ -488,6 +488,7 @@ mod tests {
             Config {
                 general: GeneralConfig {
                     batch_jobs: NonZeroUsize::new(100).unwrap(),
+                    encrypt: CryptoPreference::IfRequired,
                 },
                 trackers: TrackersConfig {
                     local_port: LocalPort::Range {
@@ -503,7 +504,6 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(23).unwrap(),
                     handshake_timeout: Duration::from_secs(120),
                     dh_exchange_timeout: Duration::from_secs(10),
-                    encryption_preference: CryptoPreference::IfRequired,
                 }
             }
         );

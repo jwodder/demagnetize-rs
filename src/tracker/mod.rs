@@ -151,13 +151,8 @@ enum InnerTrackerSession {
 
 impl TrackerSession {
     fn get_tracker_crypto(&self) -> TrackerCrypto {
-        self.tracker_crypto.unwrap_or_else(|| {
-            self.app
-                .cfg
-                .peers
-                .encryption_preference
-                .get_tracker_crypto()
-        })
+        self.tracker_crypto
+            .unwrap_or_else(|| self.app.cfg.general.encrypt.get_tracker_crypto())
     }
 
     fn tracker_display(&self) -> String {
