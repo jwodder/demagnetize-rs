@@ -17,7 +17,7 @@ use tokio::{
     time::{timeout_at, Instant},
 };
 
-const DEFAULT_PACKET2_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const DEFAULT_DH_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(30);
 
 const DEFAULT_CRYPTO_PROVIDE: [CryptoMethod; 1] = [CryptoMethod::Rc4];
 
@@ -74,7 +74,7 @@ impl<R: Rng> HandshakeBuilder<R> {
             skey,
             rng,
             crypto_provide: CryptoMethodSet::from_iter(DEFAULT_CRYPTO_PROVIDE),
-            timeout: DEFAULT_PACKET2_TIMEOUT,
+            timeout: DEFAULT_DH_EXCHANGE_TIMEOUT,
         }
     }
 
@@ -88,8 +88,7 @@ impl<R: Rng> HandshakeBuilder<R> {
     }
     */
 
-    #[expect(unused)]
-    pub(super) fn timeout(mut self, d: Duration) -> Self {
+    pub(super) fn dh_exchange_timeout(mut self, d: Duration) -> Self {
         self.timeout = d;
         self
     }

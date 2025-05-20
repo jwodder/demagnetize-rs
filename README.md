@@ -207,9 +207,14 @@ This file may contain the following tables & keys, all of which are optional:
       magnet links that the `batch` command will operate on at once
 
 - `[peers]` — settings for interacting with peers
+    - `dh-exchange-timeout` (nonnegative integer; default 30) — When performing
+      the handshake for an encrypted peer connection, wait this many seconds
+      for the remote peer to send its portion of the Diffie-Hellman key
+      exchange.
     - `handshake-timeout` (nonnegative integer; default 60) — When connecting
-      to a peer, if the TCP connection and BitTorrent handshake are not both
-      completed within this many seconds, the peer is abandoned.
+      to a peer, if the TCP connection, encryption handshake, and BitTorrent
+      handshake are not all completed within this many seconds, the peer is
+      abandoned.
     - `jobs-per-magnet` (positive integer; default 30) — the maximum number of
       peers per magnet link that `demagnetize` will communicate with at once
 

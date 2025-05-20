@@ -106,6 +106,13 @@ pub(crate) struct PeersConfig {
         deserialize_with = "deserialize_seconds"
     )]
     pub(crate) handshake_timeout: Duration,
+
+    /// Timeout for receiving packet 2 from server during encryption handshake
+    #[serde(
+        default = "default_dh_exchange_timeout",
+        deserialize_with = "deserialize_seconds"
+    )]
+    pub(crate) dh_exchange_timeout: Duration,
 }
 
 impl Default for PeersConfig {
@@ -113,6 +120,7 @@ impl Default for PeersConfig {
         PeersConfig {
             jobs_per_magnet: default_peer_jobs_per_magnet(),
             handshake_timeout: default_handshake_timeout(),
+            dh_exchange_timeout: default_dh_exchange_timeout(),
         }
     }
 }
@@ -270,6 +278,10 @@ fn default_handshake_timeout() -> Duration {
     Duration::from_secs(60)
 }
 
+fn default_dh_exchange_timeout() -> Duration {
+    crate::peer::msepe::DEFAULT_DH_EXCHANGE_TIMEOUT
+}
+
 fn deserialize_seconds<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
@@ -302,6 +314,7 @@ mod tests {
                 peers: PeersConfig {
                     jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
                     handshake_timeout: Duration::from_secs(60),
+                    dh_exchange_timeout: Duration::from_secs(30),
                 }
             }
         );
@@ -431,15 +444,16 @@ mod tests {
             "batch-jobs = 100\n",
             "\n",
             "[trackers]\n",
+            "announce-timeout = 45\n",
+            "jobs-per-magnet = 42\n",
             "local-port = \"10000-65535\"\n",
             "numwant = 75\n",
-            "jobs-per-magnet = 42\n",
-            "announce-timeout = 45\n",
             "shutdown-timeout = 5\n",
             "\n",
             "[peers]\n",
-            "jobs-per-magnet = 23\n",
+            "dh-exchange-timeout = 10\n",
             "handshake-timeout = 120\n",
+            "jobs-per-magnet = 23\n",
         ))
         .unwrap();
         assert_eq!(
@@ -461,6 +475,7 @@ mod tests {
                 peers: PeersConfig {
                     jobs_per_magnet: NonZeroUsize::new(23).unwrap(),
                     handshake_timeout: Duration::from_secs(120),
+                    dh_exchange_timeout: Duration::from_secs(10),
                 }
             }
         );

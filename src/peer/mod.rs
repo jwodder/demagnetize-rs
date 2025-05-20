@@ -1,6 +1,6 @@
 pub(crate) mod extensions;
 mod messages;
-mod msepe;
+pub(crate) mod msepe;
 use self::extensions::*;
 use self::messages::*;
 use crate::app::App;
@@ -190,7 +190,8 @@ impl<'a> InfoGetter<'a> {
                 log::debug!("Encrypting connection to {} ...", self.peer);
                 match msepe::EncryptedStream::handshake(
                     inner,
-                    msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng()),
+                    msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng())
+                        .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
                 )
                 .await
                 {
