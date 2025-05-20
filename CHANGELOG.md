@@ -1,5 +1,5 @@
-v0.5.0 (in development)
------------------------
+v0.5.0 (2025-05-20)
+-------------------
 - Fix "Saving torrent to file" message when torrent is actually being written
   to stdout
 - Added support for configuration files
