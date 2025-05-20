@@ -1,14 +1,17 @@
 pub(crate) mod extensions;
 mod messages;
+pub(crate) mod msepe;
 use self::extensions::*;
 use self::messages::*;
 use crate::app::App;
 use crate::consts::{CLIENT, MAX_PEER_MSG_LEN, SUPPORTED_EXTENSIONS, UT_METADATA};
 use crate::torrent::*;
 use crate::types::{InfoHash, PeerId};
+use crate::util::ErrorChain;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
+use rand::{rngs::StdRng, SeedableRng};
 use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
@@ -17,15 +20,26 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tokio_util::codec::{
-    length_delimited::{Builder, LengthDelimitedCodec},
-    Framed,
+use tokio_util::{
+    codec::{
+        length_delimited::{Builder, LengthDelimitedCodec},
+        Framed,
+    },
+    either::Either,
 };
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CryptoMode {
+    Encrypt,
+    Prefer,
+    Plain,
+}
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct Peer {
     pub(crate) address: SocketAddr,
     pub(crate) id: Option<PeerId>,
+    pub(crate) requires_crypto: bool,
 }
 
 impl Peer {
@@ -38,6 +52,7 @@ impl Peer {
             peer: self,
             info_hash,
             app,
+            crypto_mode: None,
         }
     }
 }
@@ -47,7 +62,11 @@ impl FromStr for Peer {
 
     fn from_str(s: &str) -> Result<Peer, AddrParseError> {
         let address = s.parse::<SocketAddr>()?;
-        Ok(Peer { address, id: None })
+        Ok(Peer {
+            address,
+            id: None,
+            requires_crypto: false,
+        })
     }
 }
 
@@ -62,6 +81,7 @@ impl From<SocketAddrV4> for Peer {
         Peer {
             address: addr.into(),
             id: None,
+            requires_crypto: false,
         }
     }
 }
@@ -71,6 +91,7 @@ impl From<SocketAddrV6> for Peer {
         Peer {
             address: addr.into(),
             id: None,
+            requires_crypto: false,
         }
     }
 }
@@ -126,6 +147,7 @@ impl FromBencode for Peer {
         Ok(Peer {
             address: SocketAddr::new(ip, port),
             id: peer_id,
+            requires_crypto: false,
         })
     }
 }
@@ -135,24 +157,71 @@ pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
     app: Arc<App>,
+    crypto_mode: Option<CryptoMode>,
 }
 
 impl<'a> InfoGetter<'a> {
+    pub(crate) fn crypto_mode(mut self, mode: Option<CryptoMode>) -> Self {
+        self.crypto_mode = mode;
+        self
+    }
+
+    fn get_crypto_mode(&self) -> Result<CryptoMode, PeerError> {
+        if let Some(cs) = self.crypto_mode {
+            match (cs, self.peer.requires_crypto) {
+                (CryptoMode::Prefer, true) => Ok(CryptoMode::Encrypt),
+                (CryptoMode::Plain, true) => Err(PeerError::CantRequireCrypto),
+                (cs, _) => Ok(cs),
+            }
+        } else {
+            self.app
+                .get_crypto_mode(self.peer.requires_crypto)
+                .ok_or(PeerError::CantRequireCrypto)
+        }
+    }
+
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
-        match timeout(self.app.cfg.peers.handshake_timeout, self.connect()).await {
+        let handshake_timeout = self.app.cfg.peers.handshake_timeout;
+        let r = match self.get_crypto_mode()? {
+            CryptoMode::Encrypt => timeout(handshake_timeout, self.connect(true)).await,
+            CryptoMode::Prefer => {
+                match timeout(handshake_timeout, self.connect(true)).await {
+                    Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
+                        log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
+                        timeout(handshake_timeout, self.connect(false)).await
+                    }
+                    r => r,
+                }
+            }
+            CryptoMode::Plain => timeout(handshake_timeout, self.connect(false)).await,
+        };
+        match r {
             Ok(Ok(mut conn)) => conn.get_metadata_info().await,
             Ok(Err(e)) => Err(e),
             Err(_) => Err(PeerError::ConnectTimeout),
         }
     }
 
-    async fn connect(self) -> Result<PeerConnection<'a>, PeerError> {
+    async fn connect(&self, encrypt: bool) -> Result<PeerConnection<'a>, PeerError> {
         log::debug!("Connecting to {}", self.peer);
-        let mut s = TcpStream::connect(&self.peer.address)
+        let s = TcpStream::connect(&self.peer.address)
             .await
             .map_err(PeerError::Connect)?;
         log::trace!("Connected to {}", self.peer);
+        let mut s = if encrypt {
+            log::debug!("Encrypting connection to {} ...", self.peer);
+            Either::Right(
+                msepe::EncryptedStream::handshake(
+                    s,
+                    msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng())
+                        .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
+                )
+                .await?,
+            )
+        } else {
+            Either::Left(s)
+        };
         log::trace!("Sending handshake to {}", self.peer);
         let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
         s.write_all_buf(&mut Bytes::from(msg))
@@ -181,6 +250,7 @@ impl<'a> InfoGetter<'a> {
             registry
         };
         let msg = Message::from(ExtendedHandshake {
+            e: None,
             m: Some(local_registry.to_m()),
             v: Some(CLIENT.into()),
             metadata_size: None,
@@ -213,16 +283,19 @@ impl<'a> InfoGetter<'a> {
     }
 }
 
-#[derive(Debug)]
 struct MessageChannel<'a> {
     peer: &'a Peer,
-    inner: Framed<TcpStream, LengthDelimitedCodec>,
+    inner: Framed<Either<TcpStream, msepe::EncryptedStream>, LengthDelimitedCodec>,
     local_registry: Bep10Registry,
     remote_registry: Bep10Registry,
 }
 
 impl<'a> MessageChannel<'a> {
-    fn new(peer: &'a Peer, s: TcpStream, local_registry: Bep10Registry) -> Self {
+    fn new(
+        peer: &'a Peer,
+        s: Either<TcpStream, msepe::EncryptedStream>,
+        local_registry: Bep10Registry,
+    ) -> Self {
         let inner = Builder::new()
             .big_endian()
             .max_frame_length(MAX_PEER_MSG_LEN)
@@ -259,7 +332,6 @@ impl<'a> MessageChannel<'a> {
     }
 }
 
-#[derive(Debug)]
 struct PeerConnection<'a> {
     channel: MessageChannel<'a>,
     #[allow(dead_code)]
@@ -341,6 +413,8 @@ impl PeerConnection<'_> {
 
 #[derive(Debug, Error)]
 pub(crate) enum PeerError {
+    #[error("peer requires encryption, but encryption is disabled")]
+    CantRequireCrypto,
     #[error("could not connect to peer")]
     Connect(#[source] std::io::Error),
     #[error("timed out trying to connect to peer and complete handshake")]
@@ -361,6 +435,8 @@ pub(crate) enum PeerError {
     Disconnect,
     #[error(transparent)]
     Handshake(#[from] HandshakeError),
+    #[error(transparent)]
+    CryptoHandshake(#[from] msepe::HandshakeError),
     #[error("peer sent invalid message")]
     Message(#[from] MessageError),
     #[error("peer sent extended handshake with inconsistent \"m\" dict")]
@@ -406,7 +482,15 @@ impl fmt::Display for DisplayJson<'_> {
         } else {
             write!(f, "null")?;
         }
-        f.write_char('}')?;
+        write!(
+            f,
+            r#", "requires_crypto": {}}}"#,
+            if self.0.requires_crypto {
+                "true"
+            } else {
+                "false"
+            }
+        )?;
         Ok(())
     }
 }
@@ -506,7 +590,10 @@ mod tests {
         fn no_id() {
             let peer = "127.0.0.1:8080".parse::<Peer>().unwrap();
             let s = peer.display_json().to_string();
-            assert_eq!(s, r#"{"host": "127.0.0.1", "port": 8080, "id": null}"#);
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": null, "requires_crypto": false}"#
+            );
         }
 
         #[test]
@@ -518,7 +605,7 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefghijk"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefghijk", "requires_crypto": false}"#
             );
         }
 
@@ -531,7 +618,7 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\u00eej"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\u00eej", "requires_crypto": false}"#
             );
         }
 
@@ -544,7 +631,21 @@ mod tests {
             let s = peer.display_json().to_string();
             assert_eq!(
                 s,
-                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\ufffdjk"}"#
+                r#"{"host": "127.0.0.1", "port": 8080, "id": "-PRE-123-abcdefgh\ufffdjk", "requires_crypto": false}"#
+            );
+        }
+
+        #[test]
+        fn requires_crypto() {
+            let peer = Peer {
+                address: "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+                id: None,
+                requires_crypto: true,
+            };
+            let s = peer.display_json().to_string();
+            assert_eq!(
+                s,
+                r#"{"host": "127.0.0.1", "port": 8080, "id": null, "requires_crypto": true}"#
             );
         }
     }

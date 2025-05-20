@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::consts::PEER_ID_PREFIX;
+use crate::peer::CryptoMode;
 use crate::types::{Key, PeerId};
 use rand::Rng;
 use std::fmt;
@@ -17,6 +18,10 @@ impl App {
         let port = cfg.trackers.local_port.generate(&mut rng);
         let local = LocalPeer { id, key, port };
         App { cfg, local }
+    }
+
+    pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
+        self.cfg.general.encrypt.get_crypto_mode(requires_crypto)
     }
 }
 

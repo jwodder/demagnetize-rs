@@ -16,17 +16,21 @@ exclude = ["/.*"]
 anstream = "0.6.14"
 anstyle = "1.0.7"
 bendy = "0.3.3"
-bytes = "1.6.0"
+bytes = "1.7.0"
 chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.6.0"
 dirs = "6.0.0"
 fern = "0.7.0"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink"] }
+generic-array = "0.14.7"
 log = "0.4.21"
+num-bigint = "0.4.6"
+num_enum = "0.7.3"
 patharg = { version = "0.4.0", features = ["tokio"] }
 pin-project-lite = "0.2.14"
 rand = "0.9.0"
+rc4 = "0.1.0"
 reqwest = { version = "0.12.4", default-features = false, features = ["http2"] }
 serde = { version = "1.0.219", features = ["derive"] }
 sha1 = "0.10.6"
@@ -43,6 +47,7 @@ thiserror = "2.0.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.14"
+rand_chacha = "0.9.0"
 rstest = { version = "0.25.0", default-features = false }
 tempfile = "3.10.1"
 

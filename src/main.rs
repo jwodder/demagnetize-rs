@@ -12,9 +12,9 @@ use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
-use crate::peer::Peer;
+use crate::peer::{CryptoMode, Peer};
 use crate::torrent::{PathTemplate, TorrentFile};
-use crate::tracker::Tracker;
+use crate::tracker::{Tracker, TrackerCrypto};
 use crate::types::InfoHash;
 use crate::util::ErrorChain;
 use anstream::AutoStream;
@@ -132,6 +132,22 @@ enum Command {
         #[arg(short = 'J', long)]
         json: bool,
 
+        /// Do not tell the tracker anything about our encryption support
+        #[arg(
+            long,
+            conflicts_with = "require_crypto",
+            conflicts_with = "support_crypto"
+        )]
+        no_crypto: bool,
+
+        /// Tell the tracker that we require peers with encryption support
+        #[arg(long)]
+        require_crypto: bool,
+
+        /// Tell the tracker that we support the encrypted peer protocol
+        #[arg(long, conflicts_with = "require_crypto")]
+        support_crypto: bool,
+
         /// The tracker to scrape, as an HTTP or UDP URL.
         tracker: Tracker,
 
@@ -145,6 +161,14 @@ enum Command {
     ///
     /// Note that the resulting .torrent file will not contain any trackers.
     QueryPeer {
+        /// Create an encrypted connection to the peer
+        #[arg(long)]
+        encrypt: bool,
+
+        /// Create an unencrypted connection to the peer
+        #[arg(long, conflicts_with = "encrypt")]
+        no_encrypt: bool,
+
         /// Save the .torrent file to the given path.
         ///
         /// The path may contain a `{name}` placeholder, which will be replaced
@@ -153,6 +177,11 @@ enum Command {
         /// hexadecimal.
         #[arg(short, long, default_value = "{name}.torrent")]
         outfile: PathTemplate,
+
+        /// Attempt to create an encrypted connection to the peer; if that
+        /// fails, try again without encryption
+        #[arg(long, conflicts_with = "encrypt", conflicts_with = "no_encrypt")]
+        prefer_encrypt: bool,
 
         /// The peer to get metadata from, in the form "IP:PORT" (or
         /// "[IP]:PORT" for IPv6).
@@ -238,10 +267,21 @@ impl Command {
                 json,
                 tracker,
                 info_hash,
+                no_crypto,
+                require_crypto,
+                support_crypto,
             } => {
+                let tracker_crypto = match (require_crypto, support_crypto, no_crypto) {
+                    (true, _, _) => Some(TrackerCrypto::Required),
+                    (false, true, _) => Some(TrackerCrypto::Supported),
+                    (false, false, true) => Some(TrackerCrypto::Plain),
+                    (false, false, false) => None,
+                };
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
-                    .get_peers(info_hash, Arc::clone(&app), Arc::clone(&group))
+                    .peer_getter(info_hash, Arc::clone(&app), Arc::clone(&group))
+                    .tracker_crypto(tracker_crypto)
+                    .run()
                     .await
                 {
                     Ok(peers) => {
@@ -266,21 +306,37 @@ impl Command {
                 outfile,
                 peer,
                 info_hash,
-            } => match peer.info_getter(info_hash, Arc::clone(&app)).run().await {
-                Ok(info) => {
-                    let tf = TorrentFile::new(info, Vec::new());
-                    if let Err(e) = tf.save(&outfile).await {
-                        log::error!("Failed to write to file: {}", ErrorChain(e));
+                encrypt,
+                prefer_encrypt,
+                no_encrypt,
+            } => {
+                let crypto_mode = match (encrypt, prefer_encrypt, no_encrypt) {
+                    (true, _, _) => Some(CryptoMode::Encrypt),
+                    (false, true, _) => Some(CryptoMode::Prefer),
+                    (false, false, true) => Some(CryptoMode::Plain),
+                    (false, false, false) => None,
+                };
+                match peer
+                    .info_getter(info_hash, app)
+                    .crypto_mode(crypto_mode)
+                    .run()
+                    .await
+                {
+                    Ok(info) => {
+                        let tf = TorrentFile::new(info, Vec::new());
+                        if let Err(e) = tf.save(&outfile).await {
+                            log::error!("Failed to write to file: {}", ErrorChain(e));
+                            ExitCode::FAILURE
+                        } else {
+                            ExitCode::SUCCESS
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
                         ExitCode::FAILURE
-                    } else {
-                        ExitCode::SUCCESS
                     }
                 }
-                Err(e) => {
-                    log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
-                    ExitCode::FAILURE
-                }
-            },
+            }
         }
     }
 }

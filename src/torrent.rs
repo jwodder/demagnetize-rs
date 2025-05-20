@@ -113,7 +113,7 @@ impl TorrentInfoBuilder {
         if left > 0 {
             return Err(BuildError::NotFinished { left });
         }
-        let got_hash = Bytes::from(self.hasher.finalize().to_vec());
+        let got_hash = Bytes::from_iter(self.hasher.finalize());
         if got_hash != self.info_hash.as_bytes() {
             return Err(BuildError::Digest {
                 expected: self.info_hash,
