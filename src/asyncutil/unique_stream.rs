@@ -5,43 +5,45 @@ use std::hash::Hash;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
-pub(crate) trait UniqueExt: Stream {
-    fn unique(self) -> UniqueStream<Self>
+pub(crate) trait UniqueByExt: Stream {
+    fn unique_by<F, K>(self, keyfunc: F) -> UniqueByStream<Self, F, K>
     where
         Self: Sized,
-        Self::Item: Eq + Hash + Clone,
+        F: Fn(&Self::Item) -> K,
+        K: Eq + Hash,
     {
-        UniqueStream::new(self)
+        UniqueByStream::new(self, keyfunc)
     }
 }
 
-impl<S: Stream> UniqueExt for S {}
+impl<S: Stream> UniqueByExt for S {}
 
 pin_project! {
     #[derive(Clone, Debug)]
     #[must_use = "streams do nothing unless polled"]
-    pub(crate) struct UniqueStream<S: Stream> {
+    pub(crate) struct UniqueByStream<S, F, K> {
         #[pin]
         inner: S,
-        seen: HashSet<S::Item>,
+        keyfunc: F,
+        seen: HashSet<K>,
     }
 }
 
-impl<S: Stream> UniqueStream<S> {
-    fn new(inner: S) -> Self
-    where
-        S::Item: Eq + Hash,
-    {
-        UniqueStream {
+impl<S, F, K> UniqueByStream<S, F, K> {
+    fn new(inner: S, keyfunc: F) -> Self {
+        UniqueByStream {
             inner,
+            keyfunc,
             seen: HashSet::new(),
         }
     }
 }
 
-impl<S: Stream> Stream for UniqueStream<S>
+impl<S, F, K> Stream for UniqueByStream<S, F, K>
 where
-    S::Item: Eq + Hash + Clone,
+    S: Stream,
+    F: Fn(&S::Item) -> K,
+    K: Eq + Hash,
 {
     type Item = S::Item;
 
@@ -50,7 +52,7 @@ where
         loop {
             match ready!(this.inner.as_mut().poll_next(cx)) {
                 Some(value) => {
-                    if this.seen.insert(value.clone()) {
+                    if this.seen.insert((this.keyfunc)(&value)) {
                         return Some(value).into();
                     }
                 }
@@ -66,8 +68,11 @@ mod tests {
     use futures_util::stream::{iter, StreamExt};
 
     #[tokio::test]
-    async fn test_unique_stream() {
-        let stream = iter([10, 20, 30, 20, 40, 10, 50]).unique();
-        assert_eq!(stream.collect::<Vec<_>>().await, vec![10, 20, 30, 40, 50]);
+    async fn test_unique_by_stream() {
+        // 10 = 0b1010 = 2
+        // 20 = 0b10100 = 2
+        // 30 = 0b11110 = 4
+        let stream = iter([4u32, 10, 20, 30, 8]).unique_by(|i| i.count_ones());
+        assert_eq!(stream.collect::<Vec<_>>().await, vec![4, 10, 30]);
     }
 }

@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueExt};
+use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueByExt};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::types::{InfoHash, InfoHashError};
@@ -64,7 +64,9 @@ impl Magnet {
             }),
         )
         .flatten()
-        .unique();
+        // Weed out duplicate peers, ignoring differences in peer IDs and
+        // requires_crypto fields … for now:
+        .unique_by(|peer| peer.address);
         let (sender, mut receiver) = channel(app.cfg.peers.jobs_per_magnet.get());
         let peer_job = tokio::spawn(async move {
             let peer_tasks = BufferedTasks::from_stream(
