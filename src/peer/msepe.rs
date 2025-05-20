@@ -577,13 +577,24 @@ mod tests {
 
     mod handshake {
         use super::*;
+        use data_encoding::HEXLOWER_PERMISSIVE;
         use rand::SeedableRng;
         use rand_chacha::ChaCha12Rng;
 
         const RNG_SEED: u64 = 0x0123456789ABCDEF;
+        static INFO_HASH: &str = "28c55196f57753c40aceb6fb58617e6995a7eddb";
         static PRIVATE_KEY: &str = "a068078feb542e953c13e4dacece2b6730a2b512";
         static PUBLIC_KEY: &str = "fe0ffefc8a55947c7054729257d361deffc0f235bd0401acf283c4a34d0d38b7fc183fc4b172e74eed2226c9b58337605448b8217a036b740886c49578963c8ef1e1211da94f3e1386a9a6f82e8e54156de0fc5897b3a84a6d8108492cc38b6a";
-        static INFO_HASH: &str = "28C55196F57753C40ACEB6FB58617E6995A7EDDB";
+        static SERVER_PUBKEY: &str = "b5816983bb486213388ea0ce7d8069cb62e8333a81eade46313590ff40ac185faeae22b28d4460341fa519171a15343844b80904e2e772bcc9dd8964586bdd08bb3ce6941a82dc1d305f7c8f771119f1b3c6f0d34a74f22b726d94b453b878fb";
+        const PADC_LEN: u16 = 379;
+
+        fn hex2uint(hexstr: &str) -> BigUint {
+            BigUint::parse_bytes(hexstr.as_bytes(), 16).unwrap()
+        }
+
+        fn hex2bytes(hexstr: &str) -> Bytes {
+            Bytes::from(HEXLOWER_PERMISSIVE.decode(hexstr.as_bytes()).unwrap())
+        }
 
         #[test]
         fn test_build() {
@@ -596,22 +607,16 @@ mod tests {
             let HandshakeState::Packet2 { ref private_key } = shaker.state else {
                 panic!("Handshaker state is not Packet2");
             };
-            assert_eq!(
-                private_key,
-                &BigUint::parse_bytes(PRIVATE_KEY.as_bytes(), 16).unwrap()
-            );
+            assert_eq!(private_key, &hex2uint(PRIVATE_KEY));
             let output1 = shaker.output_packet.clone();
             assert_eq!(shaker.get_output(), output1);
             assert_eq!(shaker.output_packet, None);
             assert_eq!(shaker.get_output(), None);
             let packet1 = output1.unwrap();
             let pubkey = BigUint::from_bytes_be(&packet1[..MODULUS_BYTES]);
-            assert_eq!(
-                pubkey,
-                BigUint::parse_bytes(PUBLIC_KEY.as_bytes(), 16).unwrap()
-            );
+            assert_eq!(pubkey, hex2uint(PUBLIC_KEY));
             assert!(((MODULUS_BYTES)..(MODULUS_BYTES + 512)).contains(&packet1.len()));
-            assert_eq!(shaker.padc_len, 379);
+            assert_eq!(shaker.padc_len, PADC_LEN);
             assert_eq!(shaker.skey, info_hash);
             assert_eq!(shaker.timeout, Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
             assert_eq!(shaker.get_timeout(), Some(DEFAULT_DH_EXCHANGE_TIMEOUT));
@@ -627,9 +632,7 @@ mod tests {
         #[test]
         fn test_build_custom_timeout() {
             let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
-            let info_hash = "28C55196F57753C40ACEB6FB58617E6995A7EDDB"
-                .parse::<InfoHash>()
-                .unwrap();
+            let info_hash = INFO_HASH.parse::<InfoHash>().unwrap();
             let builder = HandshakeBuilder::new(
                 peer,
                 info_hash,
@@ -641,6 +644,60 @@ mod tests {
             assert_eq!(shaker.get_timeout(), Some(Duration::from_secs(5)));
             assert_eq!(shaker.timeout, None);
             assert_eq!(shaker.get_timeout(), None);
+        }
+
+        #[test]
+        fn test_handshake() {
+            let peer = "127.0.0.1:60069".parse::<Peer>().unwrap();
+            let info_hash = INFO_HASH.parse::<InfoHash>().unwrap();
+            let builder =
+                HandshakeBuilder::new(peer, info_hash, ChaCha12Rng::seed_from_u64(RNG_SEED));
+            let mut shaker = builder.build();
+            assert!(shaker.get_output().is_some());
+            assert!(shaker.get_timeout().is_some());
+            let mut packet2 = BytesMut::from(hex2bytes(SERVER_PUBKEY));
+            packet2.put_bytes(0, 123);
+            assert!(shaker.handle_input(packet2.freeze()).is_ok());
+            assert!(shaker.handle_timeout().is_ok());
+            let packet3 = shaker.get_output().unwrap();
+            assert_eq!(shaker.get_timeout(), None);
+            assert_eq!(
+                packet3,
+                hex2bytes(concat!(
+                    "8e34baff908570c95d7ac86a8cbd66bca97559ba90eb626d8887c8f0",
+                    "1e6239809baa3be4a8b20aa71767de7f5409d59790a6ea2305d73ab2",
+                    "946572e9095be91d082f6b1e589dd086265ab55472d059285e82b7c5",
+                    "532736ffb2ab384615c9ebb77305224f3bc475a9d5a54b867c3c19da",
+                    "f105d52d1283107d0a82091b4cce1d33c2733f884cee790daadbeeaf",
+                    "4b415bf431d9c259de7a01e348b6629191502c46adf815a366f725a3",
+                    "0cafedf3cacb4bd1230280e59f6c85e8bb80db4c83d6ec7139351512",
+                    "db13d739073f21310f9fd72cf0f8b7b5874ce034b654e5c360fb5d4b",
+                    "c0b4e26c289462627e32d0e76fe0b036720aa447908a83ed5c33894c",
+                    "33467031777d94420dc5894a45446a1c54c421b0ba91fedc591e3a64",
+                    "b4fa644080ae509757c41e6a10d3e360cb5ced64ad29587f54f655dc",
+                    "0cc9cf7fca4f4f85b63b594e20121a7c3e0d5026f68440324f420e0d",
+                    "086678d89e530e77d44ab68b13c5f7dc7e08a43e198640e608200582",
+                    "3446ec6ca0a796611247ae2f2f2457c611f8dde116490e6d4497af80",
+                    "af19676320545afecced4dd6c1f46ee0fbfb9ad77172e13bfff4a8f7",
+                    "e75e2608cd7d7b437368a33e40d208",
+                ))
+            );
+            let packet4 = hex2bytes(concat!(
+                "997fd11c26fca76561f2731f5ca125bef92cdde3a41fbdcb5462f7d6b6bc",
+                "a93d7235c29d5eb847408d1b899472b455645325ab28cf7e0f76",
+            ));
+            assert!(shaker.handle_input(packet4).is_ok());
+            assert!(shaker.done());
+            let (mut keystream, extra) = shaker.into_keystream();
+            assert!(extra.is_empty());
+            let mut outgoing = BytesMut::new();
+            outgoing.put(b"Hello, World!".as_slice());
+            keystream.encode(outgoing.as_mut());
+            assert_eq!(outgoing, hex2bytes("825807e21b9faa9dd6e4fb3cac"));
+            let mut incoming = BytesMut::new();
+            incoming.put(b"Guten Tag, Welt!".as_slice());
+            keystream.decode(incoming.as_mut());
+            assert_eq!(incoming, hex2bytes("4fab277eea46010cf84c296afc116ea3"));
         }
     }
 }
