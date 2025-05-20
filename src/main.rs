@@ -12,7 +12,7 @@ use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
-use crate::peer::Peer;
+use crate::peer::{CryptoStrategy, Peer};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerCrypto};
 use crate::types::InfoHash;
@@ -161,6 +161,14 @@ enum Command {
     ///
     /// Note that the resulting .torrent file will not contain any trackers.
     QueryPeer {
+        /// Create an encrypted connection to the peer
+        #[arg(long)]
+        encrypt: bool,
+
+        /// Create an unencrypted connection to the peer
+        #[arg(long, conflicts_with = "encrypt")]
+        no_encrypt: bool,
+
         /// Save the .torrent file to the given path.
         ///
         /// The path may contain a `{name}` placeholder, which will be replaced
@@ -169,6 +177,11 @@ enum Command {
         /// hexadecimal.
         #[arg(short, long, default_value = "{name}.torrent")]
         outfile: PathTemplate,
+
+        /// Attempt to create an encrypted connection to the peer; if that
+        /// fails, try again without encryption
+        #[arg(long, conflicts_with = "encrypt", conflicts_with = "no_encrypt")]
+        try_encrypt: bool,
 
         /// The peer to get metadata from, in the form "IP:PORT" (or
         /// "[IP]:PORT" for IPv6).
@@ -295,21 +308,33 @@ impl Command {
                 outfile,
                 peer,
                 info_hash,
-            } => match peer.info_getter(info_hash, Arc::new(app)).run().await {
-                Ok(info) => {
-                    let tf = TorrentFile::new(info, Vec::new());
-                    if let Err(e) = tf.save(&outfile).await {
-                        log::error!("Failed to write to file: {}", ErrorChain(e));
+                encrypt,
+                try_encrypt,
+                no_encrypt,
+            } => {
+                let crypto_strategy = match (encrypt, try_encrypt, no_encrypt) {
+                    (true, _, _) => Some(CryptoStrategy::Always),
+                    (false, true, _) => Some(CryptoStrategy::Fallback),
+                    (false, false, true) => Some(CryptoStrategy::Never),
+                    (false, false, false) => None,
+                };
+                app.crypto_strategy = crypto_strategy;
+                match peer.info_getter(info_hash, Arc::new(app)).run().await {
+                    Ok(info) => {
+                        let tf = TorrentFile::new(info, Vec::new());
+                        if let Err(e) = tf.save(&outfile).await {
+                            log::error!("Failed to write to file: {}", ErrorChain(e));
+                            ExitCode::FAILURE
+                        } else {
+                            ExitCode::SUCCESS
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
                         ExitCode::FAILURE
-                    } else {
-                        ExitCode::SUCCESS
                     }
                 }
-                Err(e) => {
-                    log::error!("Failed to fetch info from peer: {}", ErrorChain(e));
-                    ExitCode::FAILURE
-                }
-            },
+            }
         }
     }
 }

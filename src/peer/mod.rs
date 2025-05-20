@@ -29,7 +29,6 @@ use tokio_util::{
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[expect(unused)]
 pub(crate) enum CryptoStrategy {
     Always,
     #[default]
@@ -163,26 +162,14 @@ pub(crate) struct InfoGetter<'a> {
 }
 
 impl<'a> InfoGetter<'a> {
-    #[expect(unused)]
-    pub(crate) fn crypto_strategy(mut self, strategy: CryptoStrategy) -> Self {
-        self.crypto_strategy = Some(strategy);
-        self
-    }
-
-    fn get_crypto_strategy(&self) -> Result<CryptoStrategy, PeerError> {
-        match (self.crypto_strategy, self.peer.requires_crypto) {
-            (None, true) => Ok(CryptoStrategy::Always),
-            (None, false) => Ok(CryptoStrategy::Fallback),
-            (Some(CryptoStrategy::Fallback), true) => Ok(CryptoStrategy::Always),
-            (Some(CryptoStrategy::Never), true) => Err(PeerError::CantRequireCrypto),
-            (Some(cs), _) => Ok(cs),
-        }
-    }
-
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
-        let r = match self.get_crypto_strategy()? {
+        let r = match self
+            .app
+            .get_crypto_strategy(self.peer.requires_crypto)
+            .ok_or(PeerError::CantRequireCrypto)?
+        {
             CryptoStrategy::Always => timeout(handshake_timeout, self.connect(true)).await,
             CryptoStrategy::Fallback => {
                 match timeout(handshake_timeout, self.connect(true)).await {

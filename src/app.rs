@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::consts::PEER_ID_PREFIX;
+use crate::peer::CryptoStrategy;
 use crate::tracker::TrackerCrypto;
 use crate::types::{Key, PeerId};
 use rand::Rng;
@@ -10,6 +11,7 @@ pub(crate) struct App {
     pub(crate) cfg: Config,
     pub(crate) local: LocalPeer,
     pub(crate) tracker_crypto: Option<TrackerCrypto>,
+    pub(crate) crypto_strategy: Option<CryptoStrategy>,
 }
 
 impl App {
@@ -22,11 +24,22 @@ impl App {
             cfg,
             local,
             tracker_crypto: None,
+            crypto_strategy: None,
         }
     }
 
     pub(crate) fn get_tracker_crypto(&self) -> TrackerCrypto {
         self.tracker_crypto.unwrap_or_default()
+    }
+
+    pub(crate) fn get_crypto_strategy(&self, requires_crypto: bool) -> Option<CryptoStrategy> {
+        match (self.crypto_strategy, requires_crypto) {
+            (None, true) => Some(CryptoStrategy::Always),
+            (None, false) => Some(CryptoStrategy::Fallback),
+            (Some(CryptoStrategy::Fallback), true) => Some(CryptoStrategy::Always),
+            (Some(CryptoStrategy::Never), true) => None,
+            (Some(cs), _) => Some(cs),
+        }
     }
 }
 
