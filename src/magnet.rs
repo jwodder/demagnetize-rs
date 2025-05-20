@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::asyncutil::{BufferedTasks, ShutdownGroup, UniqueByExt};
+use crate::asyncutil::{BufferedTasks, UniqueByExt};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::types::{InfoHash, InfoHashError};
@@ -36,7 +36,6 @@ impl Magnet {
     pub(crate) async fn get_torrent_file(
         &self,
         app: Arc<App>,
-        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
         let info_hash = self.info_hash();
@@ -45,10 +44,9 @@ impl Magnet {
             self.trackers().iter().map(|tracker| {
                 let tracker = Arc::clone(tracker);
                 let app = Arc::clone(&app);
-                let group = Arc::clone(&shutdown_group);
                 let display = self.to_string();
                 async move {
-                    match tracker.peer_getter(info_hash, app, group).run().await {
+                    match tracker.peer_getter(info_hash, app).run().await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
                             log::warn!(
@@ -109,9 +107,8 @@ impl Magnet {
         &self,
         template: Arc<PathTemplate>,
         app: Arc<App>,
-        shutdown_group: Arc<ShutdownGroup>,
     ) -> Result<(), DownloadInfoError> {
-        let tf = self.get_torrent_file(app, shutdown_group).await?;
+        let tf = self.get_torrent_file(app).await?;
         tf.save(&template).await?;
         Ok(())
     }

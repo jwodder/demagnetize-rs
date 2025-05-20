@@ -152,7 +152,7 @@ impl FromBencode for Peer {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
