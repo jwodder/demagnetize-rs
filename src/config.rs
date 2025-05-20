@@ -1,3 +1,4 @@
+use crate::peer::CryptoMode;
 use crate::tracker::TrackerCrypto;
 use rand::Rng;
 use serde::{
@@ -263,6 +264,18 @@ impl CryptoPreference {
             CryptoPreference::Always => TrackerCrypto::Required,
             CryptoPreference::Never => TrackerCrypto::Plain,
             _ => TrackerCrypto::Supported,
+        }
+    }
+
+    pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
+        match (self, requires_crypto) {
+            (CryptoPreference::Always, _) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::Prefer, true) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::Prefer, false) => Some(CryptoMode::Prefer),
+            (CryptoPreference::IfRequired, true) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::IfRequired, false) => Some(CryptoMode::Plain),
+            (CryptoPreference::Never, true) => None,
+            (CryptoPreference::Never, false) => Some(CryptoMode::Plain),
         }
     }
 }

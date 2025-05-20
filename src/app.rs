@@ -1,4 +1,4 @@
-use crate::config::{Config, CryptoPreference};
+use crate::config::Config;
 use crate::consts::PEER_ID_PREFIX;
 use crate::peer::CryptoMode;
 use crate::types::{Key, PeerId};
@@ -21,15 +21,7 @@ impl App {
     }
 
     pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
-        match (self.cfg.general.encrypt, requires_crypto) {
-            (CryptoPreference::Always, _) => Some(CryptoMode::Encrypt),
-            (CryptoPreference::Prefer, true) => Some(CryptoMode::Encrypt),
-            (CryptoPreference::Prefer, false) => Some(CryptoMode::Prefer),
-            (CryptoPreference::IfRequired, true) => Some(CryptoMode::Encrypt),
-            (CryptoPreference::IfRequired, false) => Some(CryptoMode::Plain),
-            (CryptoPreference::Never, true) => None,
-            (CryptoPreference::Never, false) => Some(CryptoMode::Plain),
-        }
+        self.cfg.general.encrypt.get_crypto_mode(requires_crypto)
     }
 }
 
