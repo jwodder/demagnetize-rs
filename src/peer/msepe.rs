@@ -136,8 +136,8 @@ impl Handshaker {
     }
 
     /// Passed bytes received from the server
-    fn handle_input(&mut self, b: Bytes) -> Result<(), HandshakeError> {
-        self.input_buffer.extend(b);
+    fn handle_input<B: Buf>(&mut self, b: B) -> Result<(), HandshakeError> {
+        self.input_buffer.put(b);
         if let HandshakeState::Packet4 {
             substate,
             rc4_keystream,
@@ -446,7 +446,7 @@ impl EncryptedStream {
             };
             match r {
                 Some(Ok(0)) => return Err(HandshakeError::Disconnect),
-                Some(Ok(_)) => handshaker.handle_input(buf.freeze())?,
+                Some(Ok(_)) => handshaker.handle_input(buf)?,
                 Some(Err(e)) => return Err(HandshakeError::Recv(e)),
                 None => {
                     log::trace!(
@@ -592,8 +592,8 @@ mod tests {
             BigUint::parse_bytes(hexstr.as_bytes(), 16).unwrap()
         }
 
-        fn hex2bytes(hexstr: &str) -> Bytes {
-            Bytes::from(HEXLOWER_PERMISSIVE.decode(hexstr.as_bytes()).unwrap())
+        fn hex2bytes(hexstr: &str) -> BytesMut {
+            BytesMut::from_iter(HEXLOWER_PERMISSIVE.decode(hexstr.as_bytes()).unwrap())
         }
 
         #[test]
@@ -655,9 +655,9 @@ mod tests {
             let mut shaker = builder.build();
             assert!(shaker.get_output().is_some());
             assert!(shaker.get_timeout().is_some());
-            let mut packet2 = BytesMut::from(hex2bytes(SERVER_PUBKEY));
+            let mut packet2 = hex2bytes(SERVER_PUBKEY);
             packet2.put_bytes(0, 123);
-            assert!(shaker.handle_input(packet2.freeze()).is_ok());
+            assert!(shaker.handle_input(packet2).is_ok());
             assert!(shaker.handle_timeout().is_ok());
             let packet3 = shaker.get_output().unwrap();
             assert_eq!(shaker.get_timeout(), None);
@@ -690,12 +690,10 @@ mod tests {
             assert!(shaker.done());
             let (mut keystream, extra) = shaker.into_keystream();
             assert!(extra.is_empty());
-            let mut outgoing = BytesMut::new();
-            outgoing.put(b"Hello, World!".as_slice());
+            let mut outgoing = BytesMut::from("Hello, World!");
             keystream.encode(outgoing.as_mut());
             assert_eq!(outgoing, hex2bytes("825807e21b9faa9dd6e4fb3cac"));
-            let mut incoming = BytesMut::new();
-            incoming.put(b"Guten Tag, Welt!".as_slice());
+            let mut incoming = BytesMut::from("Guten Tag, Welt!");
             keystream.decode(incoming.as_mut());
             assert_eq!(incoming, hex2bytes("4fab277eea46010cf84c296afc116ea3"));
         }
