@@ -9,7 +9,7 @@ mod tracker;
 mod types;
 mod util;
 use crate::app::App;
-use crate::asyncutil::{BufferedTasks, ShutdownGroup};
+use crate::asyncutil::BufferedTasks;
 use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::{CryptoMode, Peer};
@@ -92,7 +92,9 @@ impl Arguments {
         };
         let app = Arc::new(App::new(cfg, rand::rng()));
         log::debug!("Using local peer details: {}", app.local);
-        self.command.run(app).await
+        let r = self.command.run(Arc::clone(&app)).await;
+        app.shutdown().await;
+        r
     }
 }
 
@@ -199,18 +201,15 @@ impl Command {
     async fn run(self, app: Arc<App>) -> ExitCode {
         match self {
             Command::Get { outfile, magnet } => {
-                let group = Arc::new(ShutdownGroup::new());
-                let r = if let Err(e) = magnet
-                    .download_torrent_file(Arc::new(outfile), Arc::clone(&app), Arc::clone(&group))
+                if let Err(e) = magnet
+                    .download_torrent_file(Arc::new(outfile), Arc::clone(&app))
                     .await
                 {
                     log::error!("Failed to download torrent file: {}", ErrorChain(e));
                     ExitCode::FAILURE
                 } else {
                     ExitCode::SUCCESS
-                };
-                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
-                r
+                }
             }
             Command::Batch { outfile, file } => {
                 let magnets = match parse_magnets_file(file).await {
@@ -224,18 +223,16 @@ impl Command {
                     log::info!("No magnet links supplied");
                     return ExitCode::SUCCESS;
                 }
-                let group = Arc::new(ShutdownGroup::new());
                 let mut success = 0usize;
                 let mut total = 0usize;
                 let outfile = Arc::new(outfile);
                 let mut tasks = BufferedTasks::from_iter(
                     app.cfg.general.batch_jobs.get(),
                     magnets.into_iter().map(|magnet| {
-                        let gr = Arc::clone(&group);
                         let app = Arc::clone(&app);
                         let outf = Arc::clone(&outfile);
                         async move {
-                            if let Err(e) = magnet.download_torrent_file(outf, app, gr).await {
+                            if let Err(e) = magnet.download_torrent_file(outf, app).await {
                                 log::error!(
                                     "Failed to download torrent file for {magnet}: {}",
                                     ErrorChain(e)
@@ -256,7 +253,6 @@ impl Command {
                 log::info!(
                     "{success}/{total} magnet links successfully converted to torrent files"
                 );
-                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
                 if success == total {
                     ExitCode::SUCCESS
                 } else {
@@ -277,9 +273,8 @@ impl Command {
                     (false, false, true) => Some(TrackerCrypto::Plain),
                     (false, false, false) => None,
                 };
-                let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
-                    .peer_getter(info_hash, Arc::clone(&app), Arc::clone(&group))
+                    .peer_getter(info_hash, Arc::clone(&app))
                     .tracker_crypto(tracker_crypto)
                     .run()
                     .await
@@ -299,7 +294,6 @@ impl Command {
                         ExitCode::FAILURE
                     }
                 };
-                group.shutdown(app.cfg.trackers.shutdown_timeout).await;
                 r
             }
             Command::QueryPeer {

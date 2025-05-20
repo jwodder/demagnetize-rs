@@ -1,3 +1,4 @@
+use crate::asyncutil::ShutdownGroup;
 use crate::config::Config;
 use crate::consts::PEER_ID_PREFIX;
 use crate::peer::CryptoMode;
@@ -5,10 +6,11 @@ use crate::types::{Key, PeerId};
 use rand::Rng;
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct App {
     pub(crate) cfg: Config,
     pub(crate) local: LocalPeer,
+    pub(crate) shutdown_group: ShutdownGroup,
 }
 
 impl App {
@@ -17,11 +19,21 @@ impl App {
         let key = rng.random::<Key>();
         let port = cfg.trackers.local_port.generate(&mut rng);
         let local = LocalPeer { id, key, port };
-        App { cfg, local }
+        App {
+            cfg,
+            local,
+            shutdown_group: ShutdownGroup::new(),
+        }
     }
 
     pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
         self.cfg.general.encrypt.get_crypto_mode(requires_crypto)
+    }
+
+    pub(crate) async fn shutdown(&self) {
+        self.shutdown_group
+            .shutdown(self.cfg.trackers.shutdown_timeout)
+            .await;
     }
 }
 

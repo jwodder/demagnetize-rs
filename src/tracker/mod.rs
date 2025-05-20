@@ -3,7 +3,6 @@ pub(crate) mod udp;
 use self::http::*;
 use self::udp::*;
 use crate::app::App;
-use crate::asyncutil::ShutdownGroup;
 use crate::consts::LEFT;
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, PeerId};
@@ -30,17 +29,11 @@ impl Tracker {
         }
     }
 
-    pub(crate) fn peer_getter(
-        &self,
-        info_hash: InfoHash,
-        app: Arc<App>,
-        shutdown_group: Arc<ShutdownGroup>,
-    ) -> PeerGetter<'_> {
+    pub(crate) fn peer_getter(&self, info_hash: InfoHash, app: Arc<App>) -> PeerGetter<'_> {
         PeerGetter {
             tracker: self,
             info_hash,
             app,
-            shutdown_group,
             tracker_crypto: None,
         }
     }
@@ -51,7 +44,6 @@ pub(crate) struct PeerGetter<'a> {
     tracker: &'a Tracker,
     info_hash: InfoHash,
     app: Arc<App>,
-    shutdown_group: Arc<ShutdownGroup>,
     tracker_crypto: Option<TrackerCrypto>,
 }
 
@@ -85,7 +77,7 @@ impl PeerGetter<'_> {
             "{display} returned peers for {info_hash}: {}",
             comma_list(&peers)
         );
-        self.shutdown_group.spawn(|token| async move {
+        self.app.shutdown_group.spawn(|token| async move {
             tokio::select! {
                 () = token.cancelled() => log::trace!(r#""stopped" announcement to {display} for {info_hash} cancelled"#),
                 r = s.stop() => {
