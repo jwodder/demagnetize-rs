@@ -23,8 +23,8 @@ impl App {
     pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
         match (self.cfg.peers.encryption_preference, requires_crypto) {
             (CryptoPreference::Always, _) => Some(CryptoMode::Encrypt),
-            (CryptoPreference::Fallback, true) => Some(CryptoMode::Encrypt),
-            (CryptoPreference::Fallback, false) => Some(CryptoMode::Fallback),
+            (CryptoPreference::Prefer, true) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::Prefer, false) => Some(CryptoMode::Prefer),
             (CryptoPreference::IfRequired, true) => Some(CryptoMode::Encrypt),
             (CryptoPreference::IfRequired, false) => Some(CryptoMode::Plain),
             (CryptoPreference::Never, true) => None,

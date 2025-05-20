@@ -252,7 +252,7 @@ impl<'de> Deserialize<'de> for LocalPort {
 pub(crate) enum CryptoPreference {
     Always,
     #[default]
-    Fallback,
+    Prefer,
     IfRequired,
     Never,
 }
@@ -340,7 +340,7 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
                     handshake_timeout: Duration::from_secs(60),
                     dh_exchange_timeout: Duration::from_secs(30),
-                    encryption_preference: CryptoPreference::Fallback,
+                    encryption_preference: CryptoPreference::Prefer,
                 }
             }
         );

@@ -31,7 +31,7 @@ use tokio_util::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CryptoMode {
     Encrypt,
-    Fallback,
+    Prefer,
     Plain,
 }
 
@@ -169,7 +169,7 @@ impl<'a> InfoGetter<'a> {
     fn get_crypto_mode(&self) -> Result<CryptoMode, PeerError> {
         if let Some(cs) = self.crypto_mode {
             match (cs, self.peer.requires_crypto) {
-                (CryptoMode::Fallback, true) => Ok(CryptoMode::Encrypt),
+                (CryptoMode::Prefer, true) => Ok(CryptoMode::Encrypt),
                 (CryptoMode::Plain, true) => Err(PeerError::CantRequireCrypto),
                 (cs, _) => Ok(cs),
             }
@@ -185,7 +185,7 @@ impl<'a> InfoGetter<'a> {
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
         let r = match self.get_crypto_mode()? {
             CryptoMode::Encrypt => timeout(handshake_timeout, self.connect(true)).await,
-            CryptoMode::Fallback => {
+            CryptoMode::Prefer => {
                 match timeout(handshake_timeout, self.connect(true)).await {
                     Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
                         log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));

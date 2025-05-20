@@ -181,7 +181,7 @@ enum Command {
         /// Attempt to create an encrypted connection to the peer; if that
         /// fails, try again without encryption
         #[arg(long, conflicts_with = "encrypt", conflicts_with = "no_encrypt")]
-        try_encrypt: bool,
+        prefer_encrypt: bool,
 
         /// The peer to get metadata from, in the form "IP:PORT" (or
         /// "[IP]:PORT" for IPv6).
@@ -307,12 +307,12 @@ impl Command {
                 peer,
                 info_hash,
                 encrypt,
-                try_encrypt,
+                prefer_encrypt,
                 no_encrypt,
             } => {
-                let crypto_mode = match (encrypt, try_encrypt, no_encrypt) {
+                let crypto_mode = match (encrypt, prefer_encrypt, no_encrypt) {
                     (true, _, _) => Some(CryptoMode::Encrypt),
-                    (false, true, _) => Some(CryptoMode::Fallback),
+                    (false, true, _) => Some(CryptoMode::Prefer),
                     (false, false, true) => Some(CryptoMode::Plain),
                     (false, false, false) => None,
                 };
