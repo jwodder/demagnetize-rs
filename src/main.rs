@@ -9,7 +9,7 @@ mod tracker;
 mod types;
 mod util;
 use crate::app::App;
-use crate::asyncutil::BufferedTasks;
+use crate::asyncutil::WorkerNursery;
 use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
 use crate::peer::{CryptoMode, Peer};
@@ -226,12 +226,12 @@ impl Command {
                 let mut success = 0usize;
                 let mut total = 0usize;
                 let outfile = Arc::new(outfile);
-                let mut tasks = BufferedTasks::from_iter(
-                    app.cfg.general.batch_jobs.get(),
-                    magnets.into_iter().map(|magnet| {
-                        let app = Arc::clone(&app);
-                        let outf = Arc::clone(&outfile);
-                        async move {
+                let (nursery, mut outputs) = WorkerNursery::new(app.cfg.general.batch_jobs);
+                for magnet in magnets {
+                    let app = Arc::clone(&app);
+                    let outf = Arc::clone(&outfile);
+                    nursery
+                        .spawn(async move {
                             if let Err(e) = magnet.download_torrent_file(outf, app).await {
                                 log::error!(
                                     "Failed to download torrent file for {magnet}: {}",
@@ -241,10 +241,11 @@ impl Command {
                             } else {
                                 true
                             }
-                        }
-                    }),
-                );
-                while let Some(b) = tasks.next().await {
+                        })
+                        .expect("worker nursery should not be closed");
+                }
+                drop(nursery);
+                while let Some(b) = outputs.next().await {
                     if b {
                         success += 1;
                     }

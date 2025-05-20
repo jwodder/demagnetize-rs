@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::asyncutil::{BufferedTasks, UniqueByExt};
+use crate::asyncutil::{UniqueByExt, WorkerNursery};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::types::{InfoHash, InfoHashError};
@@ -10,7 +10,6 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc::channel;
 use url::Url;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,13 +38,13 @@ impl Magnet {
     ) -> Result<TorrentFile, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
         let info_hash = self.info_hash();
-        let peer_stream = BufferedTasks::from_iter(
-            app.cfg.trackers.jobs_per_magnet.get(),
-            self.trackers().iter().map(|tracker| {
-                let tracker = Arc::clone(tracker);
-                let app = Arc::clone(&app);
-                let display = self.to_string();
-                async move {
+        let (tracker_nursery, peer_stream) = WorkerNursery::new(app.cfg.trackers.jobs_per_magnet);
+        for tracker in self.trackers() {
+            let tracker = Arc::clone(tracker);
+            let app = Arc::clone(&app);
+            let display = self.to_string();
+            tracker_nursery
+                .spawn(async move {
                     match tracker.peer_getter(info_hash, app).run().await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
@@ -58,34 +57,29 @@ impl Magnet {
                             iter(Vec::new())
                         }
                     }
-                }
-            }),
-        )
-        .flatten()
+                })
+                .expect("tracker nursery should not be closed");
+        }
+        drop(tracker_nursery);
         // Weed out duplicate peers, ignoring differences in peer IDs and
         // requires_crypto fields … for now:
-        .unique_by(|peer| peer.address);
-        let (sender, mut receiver) = channel(app.cfg.peers.jobs_per_magnet.get());
+        let mut peer_stream = peer_stream.flatten().unique_by(|peer| peer.address);
+        let (peer_tasks, mut receiver) = WorkerNursery::new(app.cfg.peers.jobs_per_magnet);
         let peer_job = tokio::spawn(async move {
-            let peer_tasks = BufferedTasks::from_stream(
-                app.cfg.peers.jobs_per_magnet.get(),
-                peer_stream.map(|peer| {
-                    let app = Arc::clone(&app);
-                    let sender = sender.clone();
-                    async move {
-                        let r = peer.info_getter(info_hash, app).run().await;
-                        let _ = sender.send((peer, r)).await;
-                    }
-                }),
-            )
-            .await;
-            drop(sender);
-            // We need to process `peer_tasks` to completion, as otherwise
-            // letting this task end here would drop `peer_tasks`, causing the
-            // tasks inside it to be aborted.
-            peer_tasks.collect::<()>().await;
+            while let Some(peer) = peer_stream.next().await {
+                peer_tasks
+                    .spawn({
+                        let app = Arc::clone(&app);
+                        async move {
+                            let r = peer.info_getter(info_hash, app).run().await;
+                            (peer, r)
+                        }
+                    })
+                    .expect("peer task nursery should not be closed");
+            }
+            // peer_tasks is dropped here, allowing for closure.
         });
-        while let Some((peer, r)) = receiver.recv().await {
+        while let Some((peer, r)) = receiver.next().await {
             match r {
                 Ok(info) => {
                     let tf = TorrentFile::new(info, self.trackers.clone());
