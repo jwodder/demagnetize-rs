@@ -19,11 +19,11 @@ protocol.  The following notable features are supported:
 - Fast extension ([BEP 6](https://www.bittorrent.org/beps/bep_0006.html))
 - UDP tracker protocol extensions ([BEP
   41](https://www.bittorrent.org/beps/bep_0041.html))
+- MSE/PE Encryption
 
 The following features are not currently supported but are planned, in no
 particular order:
 
-- Encryption
 - Distributed hash tables
 - BitTorrent protocol v2
 - `x.pe` parameters in magnet links
@@ -163,6 +163,15 @@ in the form "IP:PORT".
 
 - `-J`, `--json` — Print out the peers as JSON objects, one per line
 
+- `--no-crypto` — Do not tell the tracker anything about our encryption
+  support.  Overrides the `peers.encryption-preference` configuration setting.
+
+- `--require-crypto` — Tell the tracker that we require peers with encryption
+  support.  Overrides the `peers.encryption-preference` configuration setting.
+
+- `--support-crypto` — Tell the tracker that we support the encrypted peer
+  protocol.  Overrides the `peers.encryption-preference` configuration setting.
+
 
 `demagnetize query-peer`
 ------------------------
@@ -182,12 +191,22 @@ information.
 
 ### Options
 
+- `--encrypt` — Create an encrypted connection to the peer.  Overrides the
+  `peers.encryption-preference` configuration setting.
+
+- `--no-encrypt` — Create an unencrypted connection to the peer.  Overrides the
+  `peers.encryption-preference` configuration setting.
+
 - `-o PATH`, `--outfile PATH` — Save the `.torrent` file to the given path.
   The path may contain a `{name}` placeholder, which will be replaced by the
   (sanitized) name of the torrent, and/or a `{hash}` placeholder, which will be
   replaced by the torrent's info hash in hexadecimal.  Specifying `-` will
   cause the torrent to be written to standard output.  [default:
   `{name}.torrent`]
+
+- `--try-encrypt` — Attempt to create an encrypted connection to the peer; if
+  that fails, try again without encryption.  Overrides the
+  `peers.encryption-preference` configuration setting.
 
 
 Configuration
@@ -211,6 +230,24 @@ This file may contain the following tables & keys, all of which are optional:
       the handshake for an encrypted peer connection, wait this many seconds
       for the remote peer to send its portion of the Diffie-Hellman key
       exchange.
+    - `encryption-preference` — Configures when to use MSE/PE encryption when
+      connecting to peers.  The possible options are:
+        - `"always"` – Always use encryption.  Also causes announcements to
+          HTTP trackers to include a `requirecrypto=1` parameter.
+        - `"fallback"` — Try creating an encrypted connection first; if the
+          encryption handshake fails, and the peer does not require encryption,
+          try again with an unencrypted connection.  Also causes announcements
+          to HTTP trackers to include a `supportcrypto=1` parameter.
+            - This is the default.
+            - Note that falling back to an unencrypted connection resets the
+              peer handshake timeout (see `handshake-timeout` below).
+        - `"if-required"` — Only use encryption if the returning tracker
+          indicated that the peer requires encryption.  Also causes
+          announcements to HTTP trackers to include a `supportcrypto=1`
+          parameter.
+        - `"never"` — Do not use encryption; do not attempt to connect to peers
+          that require encryption.  Also causes announcements to HTTP trackers
+          to not include a crypto parameter.
     - `handshake-timeout` (nonnegative integer; default 60) — When connecting
       to a peer, if the TCP connection, encryption handshake, and BitTorrent
       handshake are not all completed within this many seconds, the peer is
