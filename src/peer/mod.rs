@@ -169,50 +169,57 @@ impl<'a> InfoGetter<'a> {
         self
     }
 
-    fn get_crypto_strategy(&self) -> CryptoStrategy {
-        self.crypto_strategy.unwrap_or_default()
+    fn get_crypto_strategy(&self) -> Result<CryptoStrategy, PeerError> {
+        match (self.crypto_strategy, self.peer.requires_crypto) {
+            (None, true) => Ok(CryptoStrategy::Always),
+            (None, false) => Ok(CryptoStrategy::Fallback),
+            (Some(CryptoStrategy::Fallback), true) => Ok(CryptoStrategy::Always),
+            (Some(CryptoStrategy::Never), true) => Err(PeerError::CantRequireCrypto),
+            (Some(cs), _) => Ok(cs),
+        }
     }
 
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
-        match timeout(self.app.cfg.peers.handshake_timeout, self.connect()).await {
+        let handshake_timeout = self.app.cfg.peers.handshake_timeout;
+        let r = match self.get_crypto_strategy()? {
+            CryptoStrategy::Always => timeout(handshake_timeout, self.connect(true)).await,
+            CryptoStrategy::Fallback => {
+                match timeout(handshake_timeout, self.connect(true)).await {
+                    Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
+                        log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
+                        timeout(handshake_timeout, self.connect(false)).await
+                    }
+                    r => r,
+                }
+            }
+            CryptoStrategy::Never => timeout(handshake_timeout, self.connect(false)).await,
+        };
+        match r {
             Ok(Ok(mut conn)) => conn.get_metadata_info().await,
             Ok(Err(e)) => Err(e),
             Err(_) => Err(PeerError::ConnectTimeout),
         }
     }
 
-    async fn connect(self) -> Result<PeerConnection<'a>, PeerError> {
-        let crypto_strategy = self.get_crypto_strategy();
-        let mut s = match crypto_strategy {
-            CryptoStrategy::Always | CryptoStrategy::Fallback => {
-                let inner = self.tcp_connect().await?;
-                log::debug!("Encrypting connection to {} ...", self.peer);
-                match msepe::EncryptedStream::handshake(
-                    inner,
+    async fn connect(&self, encrypt: bool) -> Result<PeerConnection<'a>, PeerError> {
+        log::debug!("Connecting to {}", self.peer);
+        let s = TcpStream::connect(&self.peer.address)
+            .await
+            .map_err(PeerError::Connect)?;
+        log::trace!("Connected to {}", self.peer);
+        let mut s = if encrypt {
+            log::debug!("Encrypting connection to {} ...", self.peer);
+            Either::Right(
+                msepe::EncryptedStream::handshake(
+                    s,
                     msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng())
                         .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
                 )
-                .await
-                {
-                    Ok(s) => Either::Right(s),
-                    Err(e)
-                        if crypto_strategy == CryptoStrategy::Fallback
-                            && !self.peer.requires_crypto =>
-                    {
-                        log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
-                        Either::Left(self.tcp_connect().await?)
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-            CryptoStrategy::Never => {
-                if self.peer.requires_crypto {
-                    return Err(PeerError::CantRequireCrypto);
-                } else {
-                    Either::Left(self.tcp_connect().await?)
-                }
-            }
+                .await?,
+            )
+        } else {
+            Either::Left(s)
         };
         log::trace!("Sending handshake to {}", self.peer);
         let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
@@ -272,15 +279,6 @@ impl<'a> InfoGetter<'a> {
             info_hash: self.info_hash,
             metadata_size,
         })
-    }
-
-    async fn tcp_connect(&self) -> Result<TcpStream, PeerError> {
-        log::debug!("Connecting to {}", self.peer);
-        let s = TcpStream::connect(&self.peer.address)
-            .await
-            .map_err(PeerError::Connect)?;
-        log::trace!("Connected to {}", self.peer);
-        Ok(s)
     }
 }
 

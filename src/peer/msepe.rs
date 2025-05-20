@@ -1,4 +1,4 @@
-use super::{Peer, PeerError};
+use super::Peer;
 use crate::types::InfoHash;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use generic_array::GenericArray;
@@ -347,7 +347,7 @@ enum Packet4State {
     },
 }
 
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub(crate) enum HandshakeError {
     #[error("initial crypto handshake packet from server had invalid length: {0} bytes")]
     Packet2Len(usize),
@@ -359,6 +359,12 @@ pub(crate) enum HandshakeError {
     UnknownMethod(u32),
     #[error("server selected crypto method {0:?} even though we didn't ask for it")]
     UnexpectedSelection(CryptoMethod),
+    #[error("error sending message to peer")]
+    Send(#[source] std::io::Error),
+    #[error("error receiving message from peer")]
+    Recv(#[source] std::io::Error),
+    #[error("peer suddenly disconnected")]
+    Disconnect,
 }
 
 #[derive(Default)]
@@ -412,7 +418,7 @@ impl EncryptedStream {
     pub(super) async fn handshake<R: Rng>(
         mut conn: TcpStream,
         config: HandshakeBuilder<R>,
-    ) -> Result<Self, PeerError> {
+    ) -> Result<Self, HandshakeError> {
         let mut handshaker = config.build();
         let mut timeout_time = None;
         let mut n = 1;
@@ -425,8 +431,8 @@ impl EncryptedStream {
                 n += 2;
                 conn.write_all_buf(&mut outgoing)
                     .await
-                    .map_err(PeerError::Send)?;
-                conn.flush().await.map_err(PeerError::Send)?;
+                    .map_err(HandshakeError::Send)?;
+                conn.flush().await.map_err(HandshakeError::Send)?;
             }
             if let Some(timeout_len) = handshaker.get_timeout() {
                 timeout_time = Some(Instant::now() + timeout_len);
@@ -439,9 +445,9 @@ impl EncryptedStream {
                 Some(fut.await)
             };
             match r {
-                Some(Ok(0)) => return Err(PeerError::Disconnect),
+                Some(Ok(0)) => return Err(HandshakeError::Disconnect),
                 Some(Ok(_)) => handshaker.handle_input(buf.freeze())?,
-                Some(Err(e)) => return Err(PeerError::Recv(e)),
+                Some(Err(e)) => return Err(HandshakeError::Recv(e)),
                 None => {
                     log::trace!(
                         "Finished receiving encryption handshake packet 2 from {}",
