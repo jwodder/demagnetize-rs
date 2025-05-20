@@ -31,6 +31,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(version)]
 struct Arguments {
+    /// Read program configuration from the given file
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -43,6 +44,7 @@ struct Arguments {
     )]
     log_level: LevelFilter,
 
+    /// Do not read any configuration files
     #[arg(long, conflicts_with = "config")]
     no_config: bool,
 
