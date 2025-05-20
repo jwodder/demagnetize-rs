@@ -318,8 +318,12 @@ impl Command {
                     (false, false, true) => Some(CryptoMode::Plain),
                     (false, false, false) => None,
                 };
-                app.crypto_mode = crypto_mode;
-                match peer.info_getter(info_hash, Arc::new(app)).run().await {
+                match peer
+                    .info_getter(info_hash, Arc::new(app))
+                    .crypto_mode(crypto_mode)
+                    .run()
+                    .await
+                {
                     Ok(info) => {
                         let tf = TorrentFile::new(info, Vec::new());
                         if let Err(e) = tf.save(&outfile).await {

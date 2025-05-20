@@ -52,6 +52,7 @@ impl Peer {
             peer: self,
             info_hash,
             app,
+            crypto_mode: None,
         }
     }
 }
@@ -156,17 +157,33 @@ pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
     app: Arc<App>,
+    crypto_mode: Option<CryptoMode>,
 }
 
 impl<'a> InfoGetter<'a> {
+    pub(crate) fn crypto_mode(mut self, mode: Option<CryptoMode>) -> Self {
+        self.crypto_mode = mode;
+        self
+    }
+
+    fn get_crypto_mode(&self) -> Result<CryptoMode, PeerError> {
+        if let Some(cs) = self.crypto_mode {
+            match (cs, self.peer.requires_crypto) {
+                (CryptoMode::Fallback, true) => Ok(CryptoMode::Encrypt),
+                (CryptoMode::Plain, true) => Err(PeerError::CantRequireCrypto),
+                (cs, _) => Ok(cs),
+            }
+        } else {
+            self.app
+                .get_crypto_mode(self.peer.requires_crypto)
+                .ok_or(PeerError::CantRequireCrypto)
+        }
+    }
+
     pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
-        let r = match self
-            .app
-            .get_crypto_mode(self.peer.requires_crypto)
-            .ok_or(PeerError::CantRequireCrypto)?
-        {
+        let r = match self.get_crypto_mode()? {
             CryptoMode::Encrypt => timeout(handshake_timeout, self.connect(true)).await,
             CryptoMode::Fallback => {
                 match timeout(handshake_timeout, self.connect(true)).await {

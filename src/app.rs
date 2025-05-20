@@ -11,7 +11,6 @@ pub(crate) struct App {
     pub(crate) cfg: Config,
     pub(crate) local: LocalPeer,
     pub(crate) tracker_crypto: Option<TrackerCrypto>,
-    pub(crate) crypto_mode: Option<CryptoMode>,
 }
 
 impl App {
@@ -24,7 +23,6 @@ impl App {
             cfg,
             local,
             tracker_crypto: None,
-            crypto_mode: None,
         }
     }
 
@@ -38,22 +36,14 @@ impl App {
     }
 
     pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {
-        if let Some(cs) = self.crypto_mode {
-            match (cs, requires_crypto) {
-                (CryptoMode::Fallback, true) => Some(CryptoMode::Encrypt),
-                (CryptoMode::Plain, true) => None,
-                (cs, _) => Some(cs),
-            }
-        } else {
-            match (self.cfg.peers.encryption_preference, requires_crypto) {
-                (CryptoPreference::Always, _) => Some(CryptoMode::Encrypt),
-                (CryptoPreference::Fallback, true) => Some(CryptoMode::Encrypt),
-                (CryptoPreference::Fallback, false) => Some(CryptoMode::Fallback),
-                (CryptoPreference::IfRequired, true) => Some(CryptoMode::Encrypt),
-                (CryptoPreference::IfRequired, false) => Some(CryptoMode::Plain),
-                (CryptoPreference::Never, true) => None,
-                (CryptoPreference::Never, false) => Some(CryptoMode::Plain),
-            }
+        match (self.cfg.peers.encryption_preference, requires_crypto) {
+            (CryptoPreference::Always, _) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::Fallback, true) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::Fallback, false) => Some(CryptoMode::Fallback),
+            (CryptoPreference::IfRequired, true) => Some(CryptoMode::Encrypt),
+            (CryptoPreference::IfRequired, false) => Some(CryptoMode::Plain),
+            (CryptoPreference::Never, true) => None,
+            (CryptoPreference::Never, false) => Some(CryptoMode::Plain),
         }
     }
 }
