@@ -12,7 +12,7 @@ use crate::app::App;
 use crate::asyncutil::{BufferedTasks, ShutdownGroup};
 use crate::config::{Config, ConfigError};
 use crate::magnet::{parse_magnets_file, Magnet};
-use crate::peer::{CryptoStrategy, Peer};
+use crate::peer::{CryptoMode, Peer};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerCrypto};
 use crate::types::InfoHash;
@@ -312,13 +312,13 @@ impl Command {
                 try_encrypt,
                 no_encrypt,
             } => {
-                let crypto_strategy = match (encrypt, try_encrypt, no_encrypt) {
-                    (true, _, _) => Some(CryptoStrategy::Always),
-                    (false, true, _) => Some(CryptoStrategy::Fallback),
-                    (false, false, true) => Some(CryptoStrategy::Never),
+                let crypto_mode = match (encrypt, try_encrypt, no_encrypt) {
+                    (true, _, _) => Some(CryptoMode::Encrypt),
+                    (false, true, _) => Some(CryptoMode::Fallback),
+                    (false, false, true) => Some(CryptoMode::Plain),
                     (false, false, false) => None,
                 };
-                app.crypto_strategy = crypto_strategy;
+                app.crypto_mode = crypto_mode;
                 match peer.info_getter(info_hash, Arc::new(app)).run().await {
                     Ok(info) => {
                         let tf = TorrentFile::new(info, Vec::new());

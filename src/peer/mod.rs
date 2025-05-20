@@ -28,12 +28,11 @@ use tokio_util::{
     either::Either,
 };
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) enum CryptoStrategy {
-    Always,
-    #[default]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CryptoMode {
+    Encrypt,
     Fallback,
-    Never,
+    Plain,
 }
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
@@ -53,7 +52,6 @@ impl Peer {
             peer: self,
             info_hash,
             app,
-            crypto_strategy: None,
         }
     }
 }
@@ -158,7 +156,6 @@ pub(crate) struct InfoGetter<'a> {
     peer: &'a Peer,
     info_hash: InfoHash,
     app: Arc<App>,
-    crypto_strategy: Option<CryptoStrategy>,
 }
 
 impl<'a> InfoGetter<'a> {
@@ -167,11 +164,11 @@ impl<'a> InfoGetter<'a> {
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
         let r = match self
             .app
-            .get_crypto_strategy(self.peer.requires_crypto)
+            .get_crypto_mode(self.peer.requires_crypto)
             .ok_or(PeerError::CantRequireCrypto)?
         {
-            CryptoStrategy::Always => timeout(handshake_timeout, self.connect(true)).await,
-            CryptoStrategy::Fallback => {
+            CryptoMode::Encrypt => timeout(handshake_timeout, self.connect(true)).await,
+            CryptoMode::Fallback => {
                 match timeout(handshake_timeout, self.connect(true)).await {
                     Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
                         log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
@@ -180,7 +177,7 @@ impl<'a> InfoGetter<'a> {
                     r => r,
                 }
             }
-            CryptoStrategy::Never => timeout(handshake_timeout, self.connect(false)).await,
+            CryptoMode::Plain => timeout(handshake_timeout, self.connect(false)).await,
         };
         match r {
             Ok(Ok(mut conn)) => conn.get_metadata_info().await,

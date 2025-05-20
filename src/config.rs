@@ -113,6 +113,9 @@ pub(crate) struct PeersConfig {
         deserialize_with = "deserialize_seconds"
     )]
     pub(crate) dh_exchange_timeout: Duration,
+
+    #[serde(default)]
+    pub(crate) encryption_preference: CryptoPreference,
 }
 
 impl Default for PeersConfig {
@@ -121,6 +124,7 @@ impl Default for PeersConfig {
             jobs_per_magnet: default_peer_jobs_per_magnet(),
             handshake_timeout: default_handshake_timeout(),
             dh_exchange_timeout: default_dh_exchange_timeout(),
+            encryption_preference: CryptoPreference::default(),
         }
     }
 }
@@ -242,6 +246,16 @@ impl<'de> Deserialize<'de> for LocalPort {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CryptoPreference {
+    Always,
+    #[default]
+    Fallback,
+    IfRequired,
+    Never,
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
     #[error("error reading configuration file")]
@@ -315,6 +329,7 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
                     handshake_timeout: Duration::from_secs(60),
                     dh_exchange_timeout: Duration::from_secs(30),
+                    encryption_preference: CryptoPreference::Fallback,
                 }
             }
         );
@@ -452,6 +467,7 @@ mod tests {
             "\n",
             "[peers]\n",
             "dh-exchange-timeout = 10\n",
+            "encryption-preference = \"if-required\"\n",
             "handshake-timeout = 120\n",
             "jobs-per-magnet = 23\n",
         ))
@@ -476,6 +492,7 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(23).unwrap(),
                     handshake_timeout: Duration::from_secs(120),
                     dh_exchange_timeout: Duration::from_secs(10),
+                    encryption_preference: CryptoPreference::IfRequired,
                 }
             }
         );
