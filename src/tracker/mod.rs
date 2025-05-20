@@ -30,36 +30,62 @@ impl Tracker {
         }
     }
 
-    pub(crate) async fn get_peers(
+    pub(crate) fn peer_getter(
         &self,
         info_hash: InfoHash,
         app: Arc<App>,
         shutdown_group: Arc<ShutdownGroup>,
-    ) -> Result<Vec<Peer>, TrackerError> {
-        log::info!("Requesting peers for {info_hash} from {self}");
+    ) -> PeerGetter<'_> {
+        PeerGetter {
+            tracker: self,
+            info_hash,
+            app,
+            shutdown_group,
+            tracker_crypto: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PeerGetter<'a> {
+    tracker: &'a Tracker,
+    info_hash: InfoHash,
+    app: Arc<App>,
+    shutdown_group: Arc<ShutdownGroup>,
+    tracker_crypto: Option<TrackerCrypto>,
+}
+
+impl PeerGetter<'_> {
+    pub(crate) fn tracker_crypto(mut self, tc: Option<TrackerCrypto>) -> Self {
+        self.tracker_crypto = tc;
+        self
+    }
+
+    pub(crate) async fn run(self) -> Result<Vec<Peer>, TrackerError> {
+        log::info!(
+            "Requesting peers for {} from {}",
+            self.info_hash,
+            self.tracker
+        );
         timeout(
-            app.cfg.trackers.announce_timeout,
-            self.inner_get_peers(info_hash, app, shutdown_group),
+            self.app.cfg.trackers.announce_timeout,
+            self.inner_get_peers(),
         )
         .await
         .unwrap_or(Err(TrackerError::Timeout))
     }
 
-    async fn inner_get_peers(
-        &self,
-        info_hash: InfoHash,
-        app: Arc<App>,
-        shutdown_group: Arc<ShutdownGroup>,
-    ) -> Result<Vec<Peer>, TrackerError> {
-        let mut s = self.connect(info_hash, app).await?;
+    async fn inner_get_peers(self) -> Result<Vec<Peer>, TrackerError> {
+        let mut s = self.connect().await?;
         let peers = s.start().await?.peers;
-        let display = self.to_string();
+        let display = self.tracker.to_string();
+        let info_hash = self.info_hash;
         log::info!("{display} returned {} peers for {info_hash}", peers.len());
         log::debug!(
             "{display} returned peers for {info_hash}: {}",
             comma_list(&peers)
         );
-        shutdown_group.spawn(|token| async move {
+        self.shutdown_group.spawn(|token| async move {
             tokio::select! {
                 () = token.cancelled() => log::trace!(r#""stopped" announcement to {display} for {info_hash} cancelled"#),
                 r = s.stop() => {
@@ -75,19 +101,16 @@ impl Tracker {
         Ok(peers)
     }
 
-    async fn connect(
-        &self,
-        info_hash: InfoHash,
-        app: Arc<App>,
-    ) -> Result<TrackerSession, TrackerError> {
-        let inner = match self {
+    async fn connect(&self) -> Result<TrackerSession, TrackerError> {
+        let inner = match self.tracker {
             Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
             Tracker::Udp(t) => InnerTrackerSession::Udp(t.connect().await?),
         };
         Ok(TrackerSession {
             inner,
-            info_hash,
-            app,
+            info_hash: self.info_hash,
+            app: Arc::clone(&self.app),
+            tracker_crypto: self.tracker_crypto,
         })
     }
 }
@@ -118,6 +141,7 @@ struct TrackerSession {
     inner: InnerTrackerSession,
     info_hash: InfoHash,
     app: Arc<App>,
+    tracker_crypto: Option<TrackerCrypto>,
 }
 
 enum InnerTrackerSession {
@@ -126,6 +150,16 @@ enum InnerTrackerSession {
 }
 
 impl TrackerSession {
+    fn get_tracker_crypto(&self) -> TrackerCrypto {
+        self.tracker_crypto.unwrap_or_else(|| {
+            self.app
+                .cfg
+                .peers
+                .encryption_preference
+                .get_tracker_crypto()
+        })
+    }
+
     fn tracker_display(&self) -> String {
         match &self.inner {
             InnerTrackerSession::Http(s) => s.tracker.to_string(),
@@ -149,7 +183,7 @@ impl TrackerSession {
             key: self.app.local.key,
             numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
-            crypto: self.app.get_tracker_crypto(),
+            crypto: self.get_tracker_crypto(),
         })
         .await
     }
@@ -170,7 +204,7 @@ impl TrackerSession {
             key: self.app.local.key,
             numwant: self.app.cfg.trackers.numwant.get(),
             port: self.app.local.port,
-            crypto: self.app.get_tracker_crypto(),
+            crypto: self.get_tracker_crypto(),
         })
         .await
     }
@@ -284,7 +318,7 @@ pub(crate) enum TrackerCrypto {
     Required,
     #[default]
     Supported,
-    Nil,
+    Plain,
 }
 
 impl TrackerCrypto {
@@ -296,7 +330,7 @@ impl TrackerCrypto {
             TrackerCrypto::Supported => {
                 url.query_pairs_mut().append_pair("supportcrypto", "1");
             }
-            TrackerCrypto::Nil => (),
+            TrackerCrypto::Plain => (),
         }
     }
 }

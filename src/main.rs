@@ -90,7 +90,7 @@ impl Arguments {
                 }
             }
         };
-        let app = App::new(cfg, rand::rng());
+        let app = Arc::new(App::new(cfg, rand::rng()));
         log::debug!("Using local peer details: {}", app.local);
         self.command.run(app).await
     }
@@ -196,10 +196,9 @@ enum Command {
 }
 
 impl Command {
-    async fn run(self, mut app: App) -> ExitCode {
+    async fn run(self, app: Arc<App>) -> ExitCode {
         match self {
             Command::Get { outfile, magnet } => {
-                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let r = if let Err(e) = magnet
                     .download_torrent_file(Arc::new(outfile), Arc::clone(&app), Arc::clone(&group))
@@ -225,7 +224,6 @@ impl Command {
                     log::info!("No magnet links supplied");
                     return ExitCode::SUCCESS;
                 }
-                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let mut success = 0usize;
                 let mut total = 0usize;
@@ -276,14 +274,14 @@ impl Command {
                 let tracker_crypto = match (require_crypto, support_crypto, no_crypto) {
                     (true, _, _) => Some(TrackerCrypto::Required),
                     (false, true, _) => Some(TrackerCrypto::Supported),
-                    (false, false, true) => Some(TrackerCrypto::Nil),
+                    (false, false, true) => Some(TrackerCrypto::Plain),
                     (false, false, false) => None,
                 };
-                app.tracker_crypto = tracker_crypto;
-                let app = Arc::new(app);
                 let group = Arc::new(ShutdownGroup::new());
                 let r = match tracker
-                    .get_peers(info_hash, Arc::clone(&app), Arc::clone(&group))
+                    .peer_getter(info_hash, Arc::clone(&app), Arc::clone(&group))
+                    .tracker_crypto(tracker_crypto)
+                    .run()
                     .await
                 {
                     Ok(peers) => {
@@ -319,7 +317,7 @@ impl Command {
                     (false, false, false) => None,
                 };
                 match peer
-                    .info_getter(info_hash, Arc::new(app))
+                    .info_getter(info_hash, app)
                     .crypto_mode(crypto_mode)
                     .run()
                     .await

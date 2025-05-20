@@ -1,7 +1,6 @@
 use crate::config::{Config, CryptoPreference};
 use crate::consts::PEER_ID_PREFIX;
 use crate::peer::CryptoMode;
-use crate::tracker::TrackerCrypto;
 use crate::types::{Key, PeerId};
 use rand::Rng;
 use std::fmt;
@@ -10,7 +9,6 @@ use std::fmt;
 pub(crate) struct App {
     pub(crate) cfg: Config,
     pub(crate) local: LocalPeer,
-    pub(crate) tracker_crypto: Option<TrackerCrypto>,
 }
 
 impl App {
@@ -19,20 +17,7 @@ impl App {
         let key = rng.random::<Key>();
         let port = cfg.trackers.local_port.generate(&mut rng);
         let local = LocalPeer { id, key, port };
-        App {
-            cfg,
-            local,
-            tracker_crypto: None,
-        }
-    }
-
-    pub(crate) fn get_tracker_crypto(&self) -> TrackerCrypto {
-        self.tracker_crypto
-            .unwrap_or(match self.cfg.peers.encryption_preference {
-                CryptoPreference::Always => TrackerCrypto::Required,
-                CryptoPreference::Never => TrackerCrypto::Nil,
-                _ => TrackerCrypto::Supported,
-            })
+        App { cfg, local }
     }
 
     pub(crate) fn get_crypto_mode(&self, requires_crypto: bool) -> Option<CryptoMode> {

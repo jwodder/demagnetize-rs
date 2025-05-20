@@ -48,7 +48,7 @@ impl Magnet {
                 let group = Arc::clone(&shutdown_group);
                 let display = self.to_string();
                 async move {
-                    match tracker.get_peers(info_hash, app, group).await {
+                    match tracker.peer_getter(info_hash, app, group).run().await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
                             log::warn!(

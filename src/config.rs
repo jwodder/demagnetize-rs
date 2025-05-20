@@ -1,3 +1,4 @@
+use crate::tracker::TrackerCrypto;
 use rand::Rng;
 use serde::{
     de::{Deserializer, Unexpected},
@@ -254,6 +255,16 @@ pub(crate) enum CryptoPreference {
     Fallback,
     IfRequired,
     Never,
+}
+
+impl CryptoPreference {
+    pub(crate) fn get_tracker_crypto(&self) -> TrackerCrypto {
+        match self {
+            CryptoPreference::Always => TrackerCrypto::Required,
+            CryptoPreference::Never => TrackerCrypto::Plain,
+            _ => TrackerCrypto::Supported,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
