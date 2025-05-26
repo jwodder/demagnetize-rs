@@ -24,7 +24,7 @@ data-encoding = "2.6.0"
 dirs = "6.0.0"
 fern = "0.7.0"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink"] }
-generic-array = "0.14.7"
+generic-array = "1.0.0"
 log = "0.4.21"
 num-bigint = "0.4.6"
 num_enum = "0.7.3"
