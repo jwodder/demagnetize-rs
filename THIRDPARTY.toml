@@ -30779,7 +30779,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "serde_spanned"
-package_version = "0.6.8"
+package_version = "0.6.9"
 repository = "https://github.com/toml-rs/toml"
 license = "MIT OR Apache-2.0"
 
@@ -34931,7 +34931,7 @@ SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "toml"
-package_version = "0.8.22"
+package_version = "0.8.23"
 repository = "https://github.com/toml-rs/toml"
 license = "MIT OR Apache-2.0"
 
@@ -35168,7 +35168,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "toml_datetime"
-package_version = "0.6.9"
+package_version = "0.6.11"
 repository = "https://github.com/toml-rs/toml"
 license = "MIT OR Apache-2.0"
 
@@ -35405,7 +35405,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "toml_edit"
-package_version = "0.22.26"
+package_version = "0.22.27"
 repository = "https://github.com/toml-rs/toml"
 license = "MIT OR Apache-2.0"
 
@@ -35642,7 +35642,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "toml_write"
-package_version = "0.1.1"
+package_version = "0.1.2"
 repository = "https://github.com/toml-rs/toml"
 license = "MIT OR Apache-2.0"
 
