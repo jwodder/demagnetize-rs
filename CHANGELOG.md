@@ -1,3 +1,7 @@
+v0.6.0 (in development)
+-----------------------
+- Add URL of GitHub repository to `--help` output
+
 v0.5.0 (2025-05-20)
 -------------------
 - Fix "Saving torrent to file" message when torrent is actually being written

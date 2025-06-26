@@ -28,6 +28,8 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 /// Convert magnet links to .torrent files
+///
+/// Visit <https://github.com/jwodder/demagnetize-rs> for more information.
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(version)]
 struct Arguments {
