@@ -38,51 +38,41 @@ impl Config {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 pub(crate) struct GeneralConfig {
     /// Maximum number of magnet links to operate on at once in batch mode
-    #[serde(default = "default_batch_jobs")]
     pub(crate) batch_jobs: NonZeroUsize,
 
-    #[serde(default)]
     pub(crate) encrypt: CryptoPreference,
 }
 
 impl Default for GeneralConfig {
     fn default() -> GeneralConfig {
         GeneralConfig {
-            batch_jobs: default_batch_jobs(),
+            batch_jobs: NonZeroUsize::new(50)
+                .expect("default general.batch-jobs should be nonzero"),
             encrypt: CryptoPreference::default(),
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 pub(crate) struct TrackersConfig {
-    #[serde(default)]
     pub(crate) local_port: LocalPort,
 
     /// Number of peers to request per tracker
-    #[serde(default = "default_numwant")]
     pub(crate) numwant: NonZeroU32,
 
     /// Maximum number of trackers per magnet link to communicate with at once
-    #[serde(default = "default_tracker_jobs_per_magnet")]
     pub(crate) jobs_per_magnet: NonZeroUsize,
 
     /// Overall timeout for interacting with a tracker
-    #[serde(
-        default = "default_announce_timeout",
-        deserialize_with = "deserialize_seconds"
-    )]
+    #[serde(deserialize_with = "deserialize_seconds")]
     pub(crate) announce_timeout: Duration,
 
     /// Timeout for sending & receiving a "stopped" announcement to a tracker
-    #[serde(
-        default = "default_shutdown_timeout",
-        deserialize_with = "deserialize_seconds"
-    )]
+    #[serde(deserialize_with = "deserialize_seconds")]
     pub(crate) shutdown_timeout: Duration,
 }
 
@@ -90,43 +80,38 @@ impl Default for TrackersConfig {
     fn default() -> TrackersConfig {
         TrackersConfig {
             local_port: LocalPort::default(),
-            numwant: default_numwant(),
-            jobs_per_magnet: default_tracker_jobs_per_magnet(),
-            announce_timeout: default_announce_timeout(),
-            shutdown_timeout: default_shutdown_timeout(),
+            numwant: NonZeroU32::new(50).expect("default trackers.numwant should be nonzero"),
+            jobs_per_magnet: NonZeroUsize::new(30)
+                .expect("default trackers.jobs-per-magnet should be nonzero"),
+            announce_timeout: Duration::from_secs(30),
+            shutdown_timeout: Duration::from_secs(3),
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 pub(crate) struct PeersConfig {
     /// Maximum number of peers per magnet link to interact with at once
-    #[serde(default = "default_peer_jobs_per_magnet")]
     pub(crate) jobs_per_magnet: NonZeroUsize,
 
     /// Timeout for connecting to a peer and performing the BitTorrent
     /// handshake and extended handshake
-    #[serde(
-        default = "default_handshake_timeout",
-        deserialize_with = "deserialize_seconds"
-    )]
+    #[serde(deserialize_with = "deserialize_seconds")]
     pub(crate) handshake_timeout: Duration,
 
     /// Timeout for receiving packet 2 from server during encryption handshake
-    #[serde(
-        default = "default_dh_exchange_timeout",
-        deserialize_with = "deserialize_seconds"
-    )]
+    #[serde(deserialize_with = "deserialize_seconds")]
     pub(crate) dh_exchange_timeout: Duration,
 }
 
 impl Default for PeersConfig {
     fn default() -> PeersConfig {
         PeersConfig {
-            jobs_per_magnet: default_peer_jobs_per_magnet(),
-            handshake_timeout: default_handshake_timeout(),
-            dh_exchange_timeout: default_dh_exchange_timeout(),
+            jobs_per_magnet: NonZeroUsize::new(30)
+                .expect("default peers.jobs-per-magnet should be nonzero"),
+            handshake_timeout: Duration::from_secs(60),
+            dh_exchange_timeout: crate::peer::msepe::DEFAULT_DH_EXCHANGE_TIMEOUT,
         }
     }
 }
@@ -286,38 +271,6 @@ pub(crate) enum ConfigError {
     Read(#[from] std::io::Error),
     #[error("error parsing configuration file")]
     Parse(#[from] toml::de::Error),
-}
-
-fn default_batch_jobs() -> NonZeroUsize {
-    NonZeroUsize::new(50).expect("default general.batch-jobs should be nonzero")
-}
-
-fn default_numwant() -> NonZeroU32 {
-    NonZeroU32::new(50).expect("default trackers.numwant should be nonzero")
-}
-
-fn default_tracker_jobs_per_magnet() -> NonZeroUsize {
-    NonZeroUsize::new(30).expect("default trackers.jobs-per-magnet should be nonzero")
-}
-
-fn default_announce_timeout() -> Duration {
-    Duration::from_secs(30)
-}
-
-fn default_shutdown_timeout() -> Duration {
-    Duration::from_secs(3)
-}
-
-fn default_peer_jobs_per_magnet() -> NonZeroUsize {
-    NonZeroUsize::new(30).expect("default peers.jobs-per-magnet should be nonzero")
-}
-
-fn default_handshake_timeout() -> Duration {
-    Duration::from_secs(60)
-}
-
-fn default_dh_exchange_timeout() -> Duration {
-    crate::peer::msepe::DEFAULT_DH_EXCHANGE_TIMEOUT
 }
 
 fn deserialize_seconds<'de, D>(deserializer: D) -> Result<Duration, D::Error>
