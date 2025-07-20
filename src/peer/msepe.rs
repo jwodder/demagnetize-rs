@@ -209,7 +209,8 @@ impl Handshaker {
         Ok(())
     }
 
-    /// Returns the amount of time after which `handle_timeout()` should be called; only returns `Some` on first call
+    /// Returns the amount of time after which `handle_timeout()` should be
+    /// called; only returns `Some` on first call
     fn get_timeout(&mut self) -> Option<Duration> {
         self.timeout.take()
     }
