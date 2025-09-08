@@ -370,7 +370,9 @@ mod tests {
         };
         assert_eq!(
             e.to_string(),
-            "Error: malformed content discovered: unexpected end of packet in peers6"
+            // <https://github.com/P3KI/bendy/issues/68>
+            //"malformed content discovered: unexpected end of packet in peers6"
+            "malformed content discovered: unexpected end of packet"
         );
     }
 
