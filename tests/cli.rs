@@ -1,7 +1,7 @@
 #![cfg(test)]
 use assert_cmd::Command;
-use bendy::decoding::FromBencode;
-use bendy::encoding::ToBencode;
+use bendy::decoding::{Decoder, FromBencode};
+use bendy::encoding::Encoder;
 use bendy::value::Value;
 use bytes::Bytes;
 use sha1::{Digest, Sha1};
@@ -22,7 +22,9 @@ fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
     let path = tmp_path.path().join(format!("{hash}.torrent"));
     assert!(path.exists());
     let buf = std::fs::read(path).unwrap();
-    let data = Value::from_bencode(&buf).unwrap();
+    let mut decoder = Decoder::new(&buf).with_max_depth(10);
+    let obj = decoder.next_object().unwrap().unwrap();
+    let data = Value::decode_bencode_object(obj).unwrap();
     let Value::Dict(mut d) = data else {
         panic!("Torrent data is not a dict");
     };
@@ -30,7 +32,9 @@ fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
     let Value::Dict(info) = info else {
         panic!("info is not a dict");
     };
-    let info_bytes = info.to_bencode().unwrap();
+    let mut encoder = Encoder::new().with_max_depth(10);
+    encoder.emit(info).unwrap();
+    let info_bytes = encoder.get_output().unwrap();
     let digest = Bytes::from(Sha1::digest(info_bytes).to_vec());
     assert_eq!(format!("{digest:x}"), hash);
     let creation_date = d.remove(b"creation date".as_slice()).unwrap();
