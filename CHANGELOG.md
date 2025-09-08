@@ -1,6 +1,7 @@
 v0.6.0 (in development)
 -----------------------
 - Add URL of GitHub repository to `--help` output
+- Increased MSRV to 1.85
 
 v0.5.0 (2025-05-20)
 -------------------
