@@ -145,32 +145,15 @@ pub(crate) fn decode_bencode<T: FromBencode>(buf: &[u8]) -> Result<T, UnbencodeE
     Ok(value)
 }
 
-// We can't derive `thiserror::Error` on this, as bendy's Error is not a
-// standard Error.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub(crate) enum UnbencodeError {
-    Bendy(bendy::decoding::Error),
+    #[error(transparent)]
+    Bendy(#[from] bendy::decoding::Error),
+    #[error("no data in bencode packet")]
     NoData,
+    #[error("trailing bytes after bencode structure")]
     TrailingData,
 }
-
-impl fmt::Display for UnbencodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnbencodeError::Bendy(e) => write!(f, "{e}"),
-            UnbencodeError::NoData => write!(f, "no data in bencode packet"),
-            UnbencodeError::TrailingData => write!(f, "trailing bytes after bencode structure"),
-        }
-    }
-}
-
-impl From<bendy::decoding::Error> for UnbencodeError {
-    fn from(e: bendy::decoding::Error) -> UnbencodeError {
-        UnbencodeError::Bendy(e)
-    }
-}
-
-impl std::error::Error for UnbencodeError {}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ErrorChain<E>(pub(crate) E);
