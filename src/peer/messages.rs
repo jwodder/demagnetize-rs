@@ -621,7 +621,7 @@ impl FromBencode for ExtendedHandshake {
                     yourip = Some(
                         value
                             .try_into_bytes()
-                            .and_then(|bs| from_compact_ip(bs).map_err(Into::into))
+                            .and_then(from_compact_ip)
                             .context("yourip")?,
                     );
                 }
@@ -831,12 +831,12 @@ impl MessageError {
 #[error("no remote message ID registered for extension \"{0}\"")]
 pub(super) struct MessageEncodeError(Bep10Extension);
 
-fn from_compact_ip(compact: &[u8]) -> Result<IpAddr, CompactIpError> {
+fn from_compact_ip(compact: &[u8]) -> Result<IpAddr, BendyError> {
     match <[u8; 4]>::try_from(compact) {
         Ok(barray) => Ok(IpAddr::from(barray)),
         Err(_) => match <[u8; 16]>::try_from(compact) {
             Ok(barray) => Ok(IpAddr::from(barray)),
-            Err(_) => Err(CompactIpError(compact.len())),
+            Err(_) => Err(BendyError::malformed_content(CompactIpError(compact.len()))),
         },
     }
 }
