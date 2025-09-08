@@ -110,19 +110,13 @@ impl FromBencode for Peer {
                         Ok(id) => {
                             peer_id = Some(id);
                         }
-                        Err(e) => {
-                            return Err(
-                                BendyError::malformed_content(Box::new(e)).context("peer id")
-                            )
-                        }
+                        Err(e) => return Err(BendyError::malformed_content(e).context("peer id")),
                     }
                 }
                 (b"ip", v) => {
                     let s = match std::str::from_utf8(v.try_into_bytes().context("peer id")?) {
                         Ok(s) => s,
-                        Err(e) => {
-                            return Err(BendyError::malformed_content(Box::new(e)).context("ip"))
-                        }
+                        Err(e) => return Err(BendyError::malformed_content(e).context("ip")),
                     };
                     // Note that BEP 3 technically allows non-compact `ip`
                     // values to be domain names as well, but we're not
@@ -131,9 +125,7 @@ impl FromBencode for Peer {
                         Ok(ipaddr) => {
                             ip = Some(ipaddr);
                         }
-                        Err(e) => {
-                            return Err(BendyError::malformed_content(Box::new(e)).context("ip"))
-                        }
+                        Err(e) => return Err(BendyError::malformed_content(e).context("ip")),
                     }
                 }
                 (b"port", v) => {

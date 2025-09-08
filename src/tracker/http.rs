@@ -156,9 +156,7 @@ impl FromBencode for HttpAnnounceResponse {
                         let addrs = match buf.try_get_all::<SocketAddrV4>() {
                             Ok(addrs) => addrs,
                             Err(e) => {
-                                return Err(
-                                    BendyError::malformed_content(Box::new(e)).context("peers")
-                                );
+                                return Err(BendyError::malformed_content(e).context("peers"));
                             }
                         };
                         peers.extend(addrs.into_iter().map(Peer::from));
@@ -177,9 +175,7 @@ impl FromBencode for HttpAnnounceResponse {
                     let addrs = match buf.try_get_all::<SocketAddrV6>() {
                         Ok(addrs) => addrs,
                         Err(e) => {
-                            return Err(
-                                BendyError::malformed_content(Box::new(e)).context("peers6")
-                            );
+                            return Err(BendyError::malformed_content(e).context("peers6"));
                         }
                     };
                     peers.extend(addrs.into_iter().map(Peer::from));
