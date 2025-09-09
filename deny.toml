@@ -6,12 +6,6 @@ no-default-features = false
 [advisories]
 version = 2
 yanked = "deny"
-ignore = [
-    # Advisories stemming from bendy's use of "failure" (can't do anything
-    # about that):
-    "RUSTSEC-2019-0036",
-    "RUSTSEC-2020-0036",
-]
 
 [bans]
 deny = ["serde_yml"]
