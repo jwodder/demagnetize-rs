@@ -2933,7 +2933,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "bendy"
-package_version = "0.4.0"
+package_version = "0.6.0"
 repository = "https://github.com/P3KI/bendy"
 license = "BSD-3-Clause"
 
