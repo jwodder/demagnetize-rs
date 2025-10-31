@@ -2,7 +2,7 @@
 members = ["cargo:."]
 
 [dist]
-cargo-dist-version = "0.28.1"
+cargo-dist-version = "0.30.2"
 ci = "github"
 default-features = false
 features = ["rustls"]
