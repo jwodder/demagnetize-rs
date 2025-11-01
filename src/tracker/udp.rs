@@ -8,8 +8,8 @@ use std::fmt;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 use thiserror::Error;
-use tokio::net::{lookup_host, UdpSocket};
-use tokio::time::{timeout, timeout_at, Instant};
+use tokio::net::{UdpSocket, lookup_host};
+use tokio::time::{Instant, timeout, timeout_at};
 use url::Url;
 
 const PROTOCOL_ID: u64 = 0x41727101980;
@@ -451,9 +451,13 @@ pub(crate) enum UdpTrackerError {
     Recv(#[source] std::io::Error),
     #[error("UDP tracker sent response with invalid length")]
     PacketLen(#[from] PacketError),
-    #[error("UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}")]
+    #[error(
+        "UDP tracker sent response with unexpected or unsupported action; expected {expected}, got {got}"
+    )]
     BadAction { expected: u32, got: u32 },
-    #[error("response from UDP tracker did not contain expected transaction ID; expected {expected:#x}, got {got:#x}")]
+    #[error(
+        "response from UDP tracker did not contain expected transaction ID; expected {expected:#x}, got {got:#x}"
+    )]
     XactionMismatch { expected: u32, got: u32 },
 }
 

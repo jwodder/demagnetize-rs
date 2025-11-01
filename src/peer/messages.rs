@@ -2,7 +2,7 @@ use super::extensions::{
     Bep10Extension, Bep10Registry, Bep10RegistryError, Extension, ExtensionSet,
 };
 use crate::types::{InfoHash, PeerId};
-use crate::util::{decode_bencode, PacketError, TryBytes, UnbencodeError};
+use crate::util::{PacketError, TryBytes, UnbencodeError, decode_bencode};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{Encoder, SingleItemEncoder, ToBencode};
 use bendy::value::Value;
@@ -866,7 +866,10 @@ mod tests {
             b"k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82\xe3\x12\x91\xd3\x85\xa7\x96L"
         );
         assert_eq!(shake.peer_id.as_bytes(), b"-TR3000-vfu1svh0ewb6");
-        assert_eq!(shake.to_string(), "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension; peer ID: b\"-TR3000-vfu1svh0ewb6\")");
+        assert_eq!(
+            shake.to_string(),
+            "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension; peer ID: b\"-TR3000-vfu1svh0ewb6\")"
+        );
         assert_eq!(Bytes::from(shake), buf);
     }
 
@@ -884,7 +887,10 @@ mod tests {
             b"k\xcb\xd4A\xd7\xa0\x88\xc6;\xa8\xf8\x82\xe3\x12\x91\xd3\x85\xa7\x96L"
         );
         assert_eq!(shake.peer_id.as_bytes(), b"-qB4360-5Ngjy9uIMl~O");
-        assert_eq!(shake.to_string(), "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension, Unknown(0x0000000000080000); peer ID: b\"-qB4360-5Ngjy9uIMl~O\")");
+        assert_eq!(
+            shake.to_string(),
+            "handshake (extensions: BEP 10 Extension Protocol, BitTorrent DHT, Fast Extension, Unknown(0x0000000000080000); peer ID: b\"-qB4360-5Ngjy9uIMl~O\")"
+        );
         assert_eq!(Bytes::from(shake), buf);
     }
 
@@ -972,7 +978,10 @@ mod tests {
                 yourip: Some(IpAddr::from([153, 162, 68, 155])),
             })
         );
-        assert_eq!(msg.to_string(), "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436; yourip: 153.162.68.155");
+        assert_eq!(
+            msg.to_string(),
+            "extended handshake: extensions: \"lt_donthave\", \"share_mode\", \"upload_only\", \"ut_holepunch\", \"ut_metadata\", \"ut_pex\"; client: \"qBittorrent/4.3.6\"; metadata size: 5436; yourip: 153.162.68.155"
+        );
         let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
             unreachable!();
         };
@@ -1002,7 +1011,10 @@ mod tests {
                 yourip: Some(IpAddr::from([153, 162, 68, 155])),
             })
         );
-        assert_eq!(msg.to_string(), "extended handshake: extensions: \"ut_metadata\"; prefers encryption; client: \"A Client v1.2.3\"; metadata size: 5436; yourip: 153.162.68.155");
+        assert_eq!(
+            msg.to_string(),
+            "extended handshake: extensions: \"ut_metadata\"; prefers encryption; client: \"A Client v1.2.3\"; metadata size: 5436; yourip: 153.162.68.155"
+        );
         let Message::Extended(ExtendedMessage::Handshake(msg)) = msg else {
             unreachable!();
         };

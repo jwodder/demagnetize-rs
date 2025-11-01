@@ -5,16 +5,16 @@ use generic_array::GenericArray;
 use num_bigint::BigUint;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rand::Rng;
-use rc4::{consts::U20, KeyInit, Rc4, StreamCipher};
+use rc4::{KeyInit, Rc4, StreamCipher, consts::U20};
 use sha1::{Digest, Sha1};
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
-    time::{timeout_at, Instant},
+    time::{Instant, timeout_at},
 };
 
 pub(crate) const DEFAULT_DH_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -382,20 +382,14 @@ enum Keystream {
 impl Keystream {
     /// Encode data before sending it to the server
     fn encode(&mut self, bs: &mut [u8]) {
-        if let Keystream::Rc4 {
-            ref mut outgoing, ..
-        } = self
-        {
+        if let Keystream::Rc4 { outgoing, .. } = self {
             outgoing.apply_keystream(bs);
         }
     }
 
     /// Decode incoming data received from the server
     fn decode(&mut self, bs: &mut [u8]) {
-        if let Keystream::Rc4 {
-            ref mut incoming, ..
-        } = self
-        {
+        if let Keystream::Rc4 { incoming, .. } = self {
             incoming.apply_keystream(bs);
         }
     }
@@ -509,10 +503,11 @@ impl AsyncWrite for EncryptedStream {
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut this = self.project();
         while !this.write_buffer.is_empty() {
-            let written = ready!(this
-                .inner
-                .as_mut()
-                .poll_write(cx, this.write_buffer.as_ref()))?;
+            let written = ready!(
+                this.inner
+                    .as_mut()
+                    .poll_write(cx, this.write_buffer.as_ref())
+            )?;
             let _ = this.write_buffer.split_to(written);
         }
         this.inner.poll_flush(cx)

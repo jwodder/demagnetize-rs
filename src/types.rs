@@ -1,9 +1,9 @@
 use crate::util::{PacketError, TryFromBuf};
 use bytes::{Buf, Bytes};
-use data_encoding::{DecodeError, BASE32, HEXLOWER_PERMISSIVE};
+use data_encoding::{BASE32, DecodeError, HEXLOWER_PERMISSIVE};
 use rand::{
-    distr::{Alphanumeric, Distribution, StandardUniform},
     Rng,
+    distr::{Alphanumeric, Distribution, StandardUniform},
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -256,7 +256,10 @@ mod tests {
             .unwrap();
         let mut url = Url::parse("http://tracker.example.com:8080/announce?here=there").unwrap();
         info_hash.add_query_param(&mut url);
-        assert_eq!(url.as_str(), "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB");
+        assert_eq!(
+            url.as_str(),
+            "http://tracker.example.com:8080/announce?here=there&info_hash=%28%C5Q%96%F5wS%C4%0A%CE%B6%FBXa%7Ei%95%A7%ED%DB"
+        );
     }
 
     #[test]

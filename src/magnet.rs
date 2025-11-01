@@ -4,7 +4,7 @@ use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
 use crate::types::{InfoHash, InfoHashError};
 use crate::util::ErrorChain;
-use futures_util::stream::{iter, StreamExt};
+use futures_util::stream::{StreamExt, iter};
 use patharg::InputArg;
 use std::fmt;
 use std::str::FromStr;
@@ -228,7 +228,7 @@ pub(crate) async fn parse_magnets_file(input: InputArg) -> Result<Vec<Magnet>, M
                 return Err(MagnetsFileError::Parse {
                     lineno: i + 1,
                     source: e,
-                })
+                });
             }
         }
     }

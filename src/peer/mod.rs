@@ -11,7 +11,7 @@ use crate::util::ErrorChain;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
@@ -22,8 +22,8 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_util::{
     codec::{
-        length_delimited::{Builder, LengthDelimitedCodec},
         Framed,
+        length_delimited::{Builder, LengthDelimitedCodec},
     },
     either::Either,
 };
@@ -177,15 +177,17 @@ impl<'a> InfoGetter<'a> {
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
         let r = match self.get_crypto_mode()? {
             CryptoMode::Encrypt => timeout(handshake_timeout, self.connect(true)).await,
-            CryptoMode::Prefer => {
-                match timeout(handshake_timeout, self.connect(true)).await {
-                    Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
-                        log::warn!("Encryption handshake with {} failed: {}; will try unencrypted connection", self.peer, ErrorChain(e));
-                        timeout(handshake_timeout, self.connect(false)).await
-                    }
-                    r => r,
+            CryptoMode::Prefer => match timeout(handshake_timeout, self.connect(true)).await {
+                Ok(Err(e @ PeerError::CryptoHandshake(_))) => {
+                    log::warn!(
+                        "Encryption handshake with {} failed: {}; will try unencrypted connection",
+                        self.peer,
+                        ErrorChain(e)
+                    );
+                    timeout(handshake_timeout, self.connect(false)).await
                 }
-            }
+                r => r,
+            },
             CryptoMode::Plain => timeout(handshake_timeout, self.connect(false)).await,
         };
         match r {
@@ -441,7 +443,9 @@ pub(crate) enum PeerError {
     InfoPush(#[from] PushError),
     #[error("peer sent invalid torrent metadata")]
     InfoBuild(#[from] BuildError),
-    #[error("peer declared total metadata size as {handshake} in extended handshake but as {data} in metadata data message")]
+    #[error(
+        "peer declared total metadata size as {handshake} in extended handshake but as {data} in metadata data message"
+    )]
     SizeMismatch { handshake: u32, data: u32 },
     #[error("request for metadata piece {expected} was replied to with message for piece {got}")]
     WrongPiece { expected: u32, got: u32 },
@@ -512,7 +516,7 @@ fn write_json_str<W: Write>(s: &str, writer: &mut W) -> fmt::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::{decode_bencode, UnbencodeError};
+    use crate::util::{UnbencodeError, decode_bencode};
     use rstest::rstest;
 
     #[test]
