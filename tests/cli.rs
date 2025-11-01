@@ -1,5 +1,5 @@
 #![cfg(test)]
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use bendy::decoding::{Decoder, FromBencode};
 use bendy::encoding::Encoder;
 use bendy::value::Value;
@@ -9,8 +9,7 @@ use tempfile::tempdir;
 
 fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
     let tmp_path = tempdir().unwrap();
-    Command::cargo_bin("demagnetize")
-        .unwrap()
+    cargo_bin_cmd!("demagnetize")
         .arg("--log-level=TRACE")
         .arg("--no-config")
         .arg("get")
