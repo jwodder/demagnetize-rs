@@ -2,8 +2,8 @@ use crate::peer::CryptoMode;
 use crate::tracker::TrackerCrypto;
 use rand::Rng;
 use serde::{
-    de::{Deserializer, Unexpected},
     Deserialize,
+    de::{Deserializer, Unexpected},
 };
 use std::fmt;
 use std::num::{NonZeroU32, NonZeroUsize};

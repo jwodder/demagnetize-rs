@@ -1,6 +1,6 @@
 use super::{AnnounceResponse, Announcement, TrackerError, TrackerUrlError};
 use crate::peer::Peer;
-use crate::util::{decode_bencode, TryBytes, UnbencodeError};
+use crate::util::{TryBytes, UnbencodeError, decode_bencode};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use reqwest::Client;
 use std::fmt;
@@ -146,7 +146,10 @@ impl FromBencode for HttpAnnounceResponse {
                     );
                 }
                 (b"peers", v) => {
-                    debug_assert!(peers.is_empty(), "peers should not be populated before reaching `peers` field of HTTP tracker response");
+                    debug_assert!(
+                        peers.is_empty(),
+                        "peers should not be populated before reaching `peers` field of HTTP tracker response"
+                    );
                     if matches!(v, Object::List(_)) {
                         // Original, non-compact format (BEP 3)
                         peers.extend(Vec::<Peer>::decode_bencode_object(v).context("peers")?);

@@ -11,7 +11,7 @@ mod util;
 use crate::app::App;
 use crate::asyncutil::WorkerNursery;
 use crate::config::{Config, ConfigError};
-use crate::magnet::{parse_magnets_file, Magnet};
+use crate::magnet::{Magnet, parse_magnets_file};
 use crate::peer::{CryptoMode, Peer};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerCrypto};
@@ -65,7 +65,9 @@ impl Arguments {
             } else if let Some(p) = Config::default_path() {
                 (p, true)
             } else {
-                log::error!("Failed to locate configuration file: could not determine user's home directory");
+                log::error!(
+                    "Failed to locate configuration file: could not determine user's home directory"
+                );
                 return ExitCode::FAILURE;
             };
             log::debug!(
@@ -276,7 +278,7 @@ impl Command {
                     (false, false, true) => Some(TrackerCrypto::Plain),
                     (false, false, false) => None,
                 };
-                let r = match tracker
+                match tracker
                     .peer_getter(info_hash, Arc::clone(&app))
                     .tracker_crypto(tracker_crypto)
                     .run()
@@ -296,8 +298,7 @@ impl Command {
                         log::error!("Error communicating with tracker: {}", ErrorChain(e));
                         ExitCode::FAILURE
                     }
-                };
-                r
+                }
             }
             Command::QueryPeer {
                 outfile,

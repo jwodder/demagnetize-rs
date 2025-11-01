@@ -6,7 +6,7 @@ use crate::app::App;
 use crate::consts::LEFT;
 use crate::peer::Peer;
 use crate::types::{InfoHash, Key, PeerId};
-use crate::util::{comma_list, ErrorChain};
+use crate::util::{ErrorChain, comma_list};
 use bytes::Bytes;
 use std::fmt;
 use std::str::FromStr;
