@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::asyncutil::{UniqueByExt, WorkerNursery};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
-use crate::types::{InfoHash, InfoHashError};
+use crate::types::{InfoHash, InfoHashError, InfoHashProvider};
 use crate::util::ErrorChain;
 use futures_util::stream::{StreamExt, iter};
 use patharg::InputArg;
@@ -20,10 +20,6 @@ pub(crate) struct Magnet {
 }
 
 impl Magnet {
-    fn info_hash(&self) -> InfoHash {
-        self.info_hash
-    }
-
     fn display_name(&self) -> Option<&str> {
         self.display_name.as_deref()
     }
@@ -35,23 +31,21 @@ impl Magnet {
     pub(crate) async fn get_torrent_file(
         &self,
         app: Arc<App>,
-    ) -> Result<TorrentFile, GetInfoError> {
+    ) -> Result<TorrentFile<Arc<Magnet>>, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
-        let info_hash = self.info_hash();
+        let this = Arc::new(self.clone());
         let (tracker_nursery, peer_stream) = WorkerNursery::new(app.cfg.trackers.jobs_per_magnet);
         for tracker in self.trackers() {
+            let this = Arc::clone(&this);
             let tracker = Arc::clone(tracker);
             let app = Arc::clone(&app);
-            let display = self.to_string();
             tracker_nursery
                 .spawn(async move {
-                    match tracker.peer_getter(info_hash, app).run().await {
+                    match tracker.peer_getter(Arc::clone(&this), app).run().await {
                         Ok(peers) => iter(peers),
                         Err(e) => {
                             log::warn!(
-                                "Error communicating with {} for {}: {}",
-                                tracker,
-                                display,
+                                "Error communicating with {tracker} for {this}: {}",
                                 ErrorChain(e)
                             );
                             iter(Vec::new())
@@ -69,9 +63,10 @@ impl Magnet {
             while let Some(peer) = peer_stream.next().await {
                 peer_tasks
                     .spawn({
+                        let this = Arc::clone(&this);
                         let app = Arc::clone(&app);
                         async move {
-                            let r = peer.info_getter(info_hash, app).run().await;
+                            let r = peer.info_getter(this, app).run().await;
                             (peer, r)
                         }
                     })
@@ -156,6 +151,18 @@ impl fmt::Display for Magnet {
         } else {
             write!(f, "{}", self.info_hash)
         }
+    }
+}
+
+impl InfoHashProvider for Magnet {
+    fn get_info_hash(&self) -> InfoHash {
+        self.info_hash
+    }
+}
+
+impl InfoHashProvider for Arc<Magnet> {
+    fn get_info_hash(&self) -> InfoHash {
+        self.info_hash
     }
 }
 
@@ -253,7 +260,7 @@ mod tests {
     fn test_parse_magnet() {
         let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb&dn=debian-11.2.0-amd64-netinst.iso&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce".parse::<Magnet>().unwrap();
         assert_eq!(
-            magnet.info_hash().as_bytes(),
+            magnet.info_hash.as_bytes(),
             b"\x28\xC5\x51\x96\xF5\x77\x53\xC4\x0A\xCE\xB6\xFB\x58\x61\x7E\x69\x95\xA7\xED\xDB"
         );
         assert_eq!(
