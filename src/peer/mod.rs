@@ -6,7 +6,7 @@ use self::messages::*;
 use crate::app::App;
 use crate::consts::{CLIENT, MAX_PEER_MSG_LEN, SUPPORTED_EXTENSIONS, UT_METADATA};
 use crate::torrent::*;
-use crate::types::{InfoHash, PeerId};
+use crate::types::{InfoHash, InfoHashProvider, PeerId};
 use crate::util::ErrorChain;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
@@ -47,7 +47,11 @@ impl Peer {
         DisplayJson(self)
     }
 
-    pub(crate) fn info_getter(&self, info_hash: InfoHash, app: Arc<App>) -> InfoGetter<'_> {
+    pub(crate) fn info_getter<H: InfoHashProvider>(
+        &self,
+        info_hash: H,
+        app: Arc<App>,
+    ) -> InfoGetter<'_, H> {
         InfoGetter {
             peer: self,
             info_hash,
@@ -145,14 +149,14 @@ impl FromBencode for Peer {
 }
 
 #[derive(Debug)]
-pub(crate) struct InfoGetter<'a> {
+pub(crate) struct InfoGetter<'a, H> {
     peer: &'a Peer,
-    info_hash: InfoHash,
+    info_hash: H,
     app: Arc<App>,
     crypto_mode: Option<CryptoMode>,
 }
 
-impl<'a> InfoGetter<'a> {
+impl<'a, H: InfoHashProvider> InfoGetter<'a, H> {
     pub(crate) fn crypto_mode(mut self, mode: Option<CryptoMode>) -> Self {
         self.crypto_mode = mode;
         self
@@ -172,7 +176,7 @@ impl<'a> InfoGetter<'a> {
         }
     }
 
-    pub(crate) async fn run(self) -> Result<TorrentInfo, PeerError> {
+    pub(crate) async fn run(self) -> Result<TorrentInfo<H>, PeerError> {
         log::info!("Requesting info for {} from {}", self.info_hash, self.peer);
         let handshake_timeout = self.app.cfg.peers.handshake_timeout;
         let r = match self.get_crypto_mode()? {
@@ -197,7 +201,7 @@ impl<'a> InfoGetter<'a> {
         }
     }
 
-    async fn connect(&self, encrypt: bool) -> Result<PeerConnection<'a>, PeerError> {
+    async fn connect(&self, encrypt: bool) -> Result<PeerConnection<'a, H>, PeerError> {
         log::debug!("Connecting to {}", self.peer);
         let s = TcpStream::connect(&self.peer.address)
             .await
@@ -208,8 +212,12 @@ impl<'a> InfoGetter<'a> {
             Either::Right(
                 msepe::EncryptedStream::handshake(
                     s,
-                    msepe::HandshakeBuilder::new(*self.peer, self.info_hash, StdRng::from_os_rng())
-                        .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
+                    msepe::HandshakeBuilder::new(
+                        *self.peer,
+                        self.info_hash.get_info_hash(),
+                        StdRng::from_os_rng(),
+                    )
+                    .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
                 )
                 .await?,
             )
@@ -217,7 +225,11 @@ impl<'a> InfoGetter<'a> {
             Either::Left(s)
         };
         log::trace!("Sending handshake to {}", self.peer);
-        let msg = Handshake::new(SUPPORTED_EXTENSIONS, self.info_hash, self.app.local.id);
+        let msg = Handshake::new(
+            SUPPORTED_EXTENSIONS,
+            self.info_hash.get_info_hash(),
+            self.app.local.id,
+        );
         s.write_all_buf(&mut Bytes::from(msg))
             .await
             .map_err(PeerError::Send)?;
@@ -226,9 +238,9 @@ impl<'a> InfoGetter<'a> {
         let _ = s.read_exact(&mut buf).await.map_err(PeerError::Recv)?;
         let msg = Handshake::try_from(buf.freeze())?;
         log::trace!("{} sent {msg}", self.peer);
-        if msg.info_hash != self.info_hash {
+        if msg.info_hash != self.info_hash.get_info_hash() {
             return Err(PeerError::InfoHashMismatch {
-                expected: self.info_hash,
+                expected: self.info_hash.get_info_hash(),
                 got: msg.info_hash,
             });
         }
@@ -271,7 +283,7 @@ impl<'a> InfoGetter<'a> {
         Ok(PeerConnection {
             channel,
             extensions,
-            info_hash: self.info_hash,
+            info_hash: self.info_hash.clone(),
             metadata_size,
         })
     }
@@ -326,16 +338,16 @@ impl<'a> MessageChannel<'a> {
     }
 }
 
-struct PeerConnection<'a> {
+struct PeerConnection<'a, H> {
     channel: MessageChannel<'a>,
     #[allow(dead_code)]
     extensions: ExtensionSet,
-    info_hash: InfoHash,
+    info_hash: H,
     metadata_size: Option<u32>,
 }
 
-impl PeerConnection<'_> {
-    async fn get_metadata_info(&mut self) -> Result<TorrentInfo, PeerError> {
+impl<H: InfoHashProvider> PeerConnection<'_, H> {
+    async fn get_metadata_info(&mut self) -> Result<TorrentInfo<H>, PeerError> {
         // Unlike a normal torrent, we expect to get the entire info from a
         // single peer and error if it can't give it to us (because peers
         // should only be sending any info if they've checked the whole thing,
@@ -343,7 +355,7 @@ impl PeerConnection<'_> {
         let Some(metadata_size) = self.metadata_size else {
             return Err(PeerError::NoMetadataSize);
         };
-        let mut piecer = TorrentInfoBuilder::new(self.info_hash, metadata_size)?;
+        let mut piecer = TorrentInfoBuilder::new(self.info_hash.clone(), metadata_size)?;
         while let Some(i) = piecer.next_piece() {
             let msg = Message::from(MetadataMessage::Request { piece: i });
             self.channel.send(msg).await?;

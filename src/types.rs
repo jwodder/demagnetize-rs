@@ -11,6 +11,13 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+// Used so that a `Magnet` or `Arc<Magnet>` can be passed where an `InfoHash`
+// is needed while still outputting the `Magnet` name (if any) in the `Display`
+// impl
+pub(crate) trait InfoHashProvider: Clone + Send + Sync + fmt::Display {
+    fn get_info_hash(&self) -> InfoHash;
+}
+
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct InfoHash([u8; InfoHash::LENGTH]);
 
@@ -81,6 +88,12 @@ impl TryFromBuf for InfoHash {
         } else {
             Err(PacketError::Short)
         }
+    }
+}
+
+impl InfoHashProvider for InfoHash {
+    fn get_info_hash(&self) -> InfoHash {
+        *self
     }
 }
 

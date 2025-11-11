@@ -5,7 +5,7 @@ use self::udp::*;
 use crate::app::App;
 use crate::consts::LEFT;
 use crate::peer::Peer;
-use crate::types::{InfoHash, Key, PeerId};
+use crate::types::{InfoHash, InfoHashProvider, Key, PeerId};
 use crate::util::{ErrorChain, comma_list};
 use bytes::Bytes;
 use std::fmt;
@@ -29,7 +29,11 @@ impl Tracker {
         }
     }
 
-    pub(crate) fn peer_getter(&self, info_hash: InfoHash, app: Arc<App>) -> PeerGetter<'_> {
+    pub(crate) fn peer_getter<H: InfoHashProvider>(
+        &self,
+        info_hash: H,
+        app: Arc<App>,
+    ) -> PeerGetter<'_, H> {
         PeerGetter {
             tracker: self,
             info_hash,
@@ -40,14 +44,14 @@ impl Tracker {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct PeerGetter<'a> {
+pub(crate) struct PeerGetter<'a, H> {
     tracker: &'a Tracker,
-    info_hash: InfoHash,
+    info_hash: H,
     app: Arc<App>,
     tracker_crypto: Option<TrackerCrypto>,
 }
 
-impl PeerGetter<'_> {
+impl<H: InfoHashProvider + 'static> PeerGetter<'_, H> {
     pub(crate) fn tracker_crypto(mut self, tc: Option<TrackerCrypto>) -> Self {
         self.tracker_crypto = tc;
         self
@@ -93,14 +97,14 @@ impl PeerGetter<'_> {
         Ok(peers)
     }
 
-    async fn connect(&self) -> Result<TrackerSession, TrackerError> {
+    async fn connect(&self) -> Result<TrackerSession<H>, TrackerError> {
         let inner = match self.tracker {
             Tracker::Http(t) => InnerTrackerSession::Http(t.connect()?),
             Tracker::Udp(t) => InnerTrackerSession::Udp(t.connect().await?),
         };
         Ok(TrackerSession {
             inner,
-            info_hash: self.info_hash,
+            info_hash: self.info_hash.clone(),
             app: Arc::clone(&self.app),
             tracker_crypto: self.tracker_crypto,
         })
@@ -129,9 +133,9 @@ impl FromStr for Tracker {
     }
 }
 
-struct TrackerSession {
+struct TrackerSession<H> {
     inner: InnerTrackerSession,
-    info_hash: InfoHash,
+    info_hash: H,
     app: Arc<App>,
     tracker_crypto: Option<TrackerCrypto>,
 }
@@ -141,7 +145,7 @@ enum InnerTrackerSession {
     Udp(UdpTrackerSession),
 }
 
-impl TrackerSession {
+impl<H: InfoHashProvider> TrackerSession<H> {
     fn get_tracker_crypto(&self) -> TrackerCrypto {
         self.tracker_crypto
             .unwrap_or_else(|| self.app.cfg.general.encrypt.get_tracker_crypto())
@@ -161,7 +165,7 @@ impl TrackerSession {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash,
+            info_hash: self.info_hash.get_info_hash(),
             peer_id: self.app.local.id,
             downloaded: 0,
             left: LEFT,
@@ -182,7 +186,7 @@ impl TrackerSession {
             self.info_hash
         );
         self.announce(Announcement {
-            info_hash: self.info_hash,
+            info_hash: self.info_hash.get_info_hash(),
             peer_id: self.app.local.id,
             downloaded: 0,
             left: LEFT,

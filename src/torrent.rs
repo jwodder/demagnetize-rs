@@ -1,6 +1,6 @@
 use crate::consts::{CLIENT, MAX_INFO_LENGTH};
 use crate::tracker::Tracker;
-use crate::types::InfoHash;
+use crate::types::{InfoHash, InfoHashProvider};
 use bendy::decoding::{Decoder, Object};
 use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
@@ -18,12 +18,12 @@ use thiserror::Error;
 use tokio::fs::create_dir_all;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct TorrentInfo {
-    info_hash: InfoHash,
+pub(crate) struct TorrentInfo<H> {
+    info_hash: H,
     data: Bytes,
 }
 
-impl TorrentInfo {
+impl<H> TorrentInfo<H> {
     pub(crate) fn name(&self) -> Option<Cow<'_, str>> {
         let mut decoder = Decoder::new(&self.data);
         let Ok(Some(obj)) = decoder.next_object() else {
@@ -41,28 +41,25 @@ impl TorrentInfo {
     }
 }
 
-impl From<TorrentInfo> for Bytes {
-    fn from(info: TorrentInfo) -> Bytes {
+impl<H> From<TorrentInfo<H>> for Bytes {
+    fn from(info: TorrentInfo<H>) -> Bytes {
         info.data
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TorrentInfoBuilder {
-    info_hash: InfoHash,
+pub(crate) struct TorrentInfoBuilder<H> {
+    info_hash: H,
     hasher: Sha1,
     data: BytesMut,
     sizes: Vec<usize>,
     index_iter: Peekable<Range<u32>>,
 }
 
-impl TorrentInfoBuilder {
+impl<H: InfoHashProvider> TorrentInfoBuilder<H> {
     const PIECE_LENGTH: usize = 16 << 10; // 16 KiB
 
-    pub(crate) fn new(
-        info_hash: InfoHash,
-        length: u32,
-    ) -> Result<TorrentInfoBuilder, ConstructError> {
+    pub(crate) fn new(info_hash: H, length: u32) -> Result<TorrentInfoBuilder<H>, ConstructError> {
         let Ok(lgth) = usize::try_from(length) else {
             return Err(ConstructError::TooLarge(length));
         };
@@ -108,15 +105,15 @@ impl TorrentInfoBuilder {
         self.index_iter.peek().copied()
     }
 
-    pub(crate) fn build(self) -> Result<TorrentInfo, BuildError> {
+    pub(crate) fn build(self) -> Result<TorrentInfo<H>, BuildError> {
         let left = self.index_iter.count();
         if left > 0 {
             return Err(BuildError::NotFinished { left });
         }
         let got_hash = Bytes::from_iter(self.hasher.finalize());
-        if got_hash != self.info_hash.as_bytes() {
+        if got_hash != self.info_hash.get_info_hash().as_bytes() {
             return Err(BuildError::Digest {
-                expected: self.info_hash,
+                expected: self.info_hash.get_info_hash(),
                 got: got_hash,
             });
         }
@@ -130,15 +127,15 @@ impl TorrentInfoBuilder {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct TorrentFile {
-    info: TorrentInfo,
+pub(crate) struct TorrentFile<H> {
+    info: TorrentInfo<H>,
     trackers: Vec<Arc<Tracker>>,
     creation_date: i64,
     created_by: String,
 }
 
-impl TorrentFile {
-    pub(crate) fn new(info: TorrentInfo, trackers: Vec<Arc<Tracker>>) -> TorrentFile {
+impl<H: InfoHashProvider> TorrentFile<H> {
+    pub(crate) fn new(info: TorrentInfo<H>, trackers: Vec<Arc<Tracker>>) -> TorrentFile<H> {
         TorrentFile {
             trackers,
             created_by: CLIENT.into(),
@@ -149,7 +146,7 @@ impl TorrentFile {
 
     pub(crate) async fn save(self, template: &PathTemplate) -> std::io::Result<()> {
         let name = sanitize(self.info.name().as_deref().unwrap_or("NONAME"));
-        let path = OutputArg::from_arg(template.format(&name, self.info.info_hash));
+        let path = OutputArg::from_arg(template.format(&name, self.info.info_hash.get_info_hash()));
         if path.is_stdout() {
             log::info!(
                 "Writing torrent for info hash {} to stdout",
@@ -188,8 +185,8 @@ macro_rules! put_kv {
     };
 }
 
-impl From<TorrentFile> for Bytes {
-    fn from(torrent: TorrentFile) -> Bytes {
+impl<H> From<TorrentFile<H>> for Bytes {
+    fn from(torrent: TorrentFile<H>) -> Bytes {
         let mut buf = BytesMut::new();
         buf.put_u8(b'd');
         if !torrent.trackers.is_empty() {
