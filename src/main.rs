@@ -2,6 +2,7 @@ mod app;
 mod asyncutil;
 mod config;
 mod consts;
+mod dht;
 mod magnet;
 mod peer;
 mod torrent;
