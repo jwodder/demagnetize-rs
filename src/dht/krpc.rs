@@ -5,7 +5,7 @@ use crate::types::InfoHash;
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::Bytes;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum DhtMessage {
@@ -47,6 +47,7 @@ pub(super) struct PingResponse {
     pub(super) t: Bytes,
     pub(super) v: Option<String>,
     pub(super) id: NodeId,
+    pub(super) ip: Option<SocketAddr>,
 }
 
 impl ToBencode for PingResponse {
@@ -82,6 +83,7 @@ pub(super) struct FindNodeResponse {
     pub(super) id: NodeId,
     pub(super) nodes: Vec<NodeInfo>,
     pub(super) nodes6: Vec<NodeInfo>,
+    pub(super) ip: Option<SocketAddr>,
 }
 
 impl ToBencode for FindNodeResponse {
@@ -119,6 +121,7 @@ pub(super) struct GetPeersResponse {
     pub(super) nodes: Vec<NodeInfo>,
     pub(super) nodes6: Vec<NodeInfo>,
     pub(super) token: Bytes,
+    pub(super) ip: Option<SocketAddr>,
 }
 
 impl ToBencode for GetPeersResponse {
@@ -154,6 +157,7 @@ pub(super) struct AnnouncePeerResponse {
     pub(super) t: Bytes,
     pub(super) v: Option<String>,
     pub(super) id: NodeId,
+    pub(super) ip: Option<SocketAddr>,
 }
 
 impl ToBencode for AnnouncePeerResponse {
@@ -247,6 +251,7 @@ mod tests {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
                     id: NodeId(*b"mnopqrstuvwxyz123456"),
+                    ip: None,
                 })
             );
         }
@@ -288,6 +293,7 @@ mod tests {
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
+                    ip: None,
                 })
             );
         }
@@ -324,6 +330,7 @@ mod tests {
                     nodes: Vec::new(),
                     nodes6: Vec::new(),
                     token: Bytes::from(b"aoeusnth".as_slice()),
+                    ip: None,
                 })
             );
         }
@@ -345,6 +352,7 @@ mod tests {
                     }],
                     nodes6: Vec::new(),
                     token: Bytes::from(b"aoeusnth".as_slice()),
+                    ip: None,
                 })
             );
         }
@@ -378,6 +386,7 @@ mod tests {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
                     id: NodeId(*b"mnopqrstuvwxyz123456"),
+                    ip: None,
                 })
             );
         }
