@@ -192,3 +192,194 @@ pub(super) enum Want {
     N4,
     N6,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod decode {
+        use super::*;
+        use crate::util::decode_bencode;
+        use std::net::Ipv4Addr;
+
+        #[test]
+        fn error() {
+            let msg = decode_bencode::<DhtMessage>(
+                b"d1:eli201e23:A Generic Error Ocurrede1:t2:aa1:y1:ee",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::Error(RpcError {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    error_code: 201,
+                    error_message: "A Generic Error Ocurred".into(),
+                })
+            );
+        }
+
+        #[test]
+        fn ping_query() {
+            let msg = decode_bencode::<DhtMessage>(
+                b"d1:ad2:id20:abcdefghij0123456789e1:q4:ping1:t2:aa1:y1:qe",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::PingQuery(PingQuery {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    ro: None,
+                })
+            );
+        }
+
+        #[test]
+        fn ping_response() {
+            let msg =
+                decode_bencode::<DhtMessage>(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re")
+                    .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::PingResponse(PingResponse {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"mnopqrstuvwxyz123456"),
+                })
+            );
+        }
+
+        #[test]
+        fn find_node_query() {
+            let msg = decode_bencode::<DhtMessage>(
+                b"d1:ad2:id20:abcdefghij01234567896:target20:mnopqrstuvwxyz123456e1:q9:find_node1:t2:aa1:y1:qe",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::FindNodeQuery(FindNodeQuery {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    target: NodeId(*b"mnopqrstuvwxyz123456"),
+                    ro: None,
+                    want: None,
+                })
+            );
+        }
+
+        #[test]
+        fn find_node_response() {
+            let msg = decode_bencode::<DhtMessage>(
+                b"d1:rd2:id20:0123456789abcdefghij5:nodes26:mnopqrstuvwxyz123456iiiippe1:t2:aa1:y1:re",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::FindNodeResponse(FindNodeResponse {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"0123456789abcdefghij"),
+                    nodes: vec![NodeInfo {
+                        id: NodeId(*b"mnopqrstuvwxyz123456"),
+                        ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
+                        port: 28784,
+                    }],
+                    nodes6: Vec::new(),
+                })
+            );
+        }
+
+        #[test]
+        fn get_peers_query() {
+            let msg = decode_bencode::<DhtMessage>(b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe").unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::GetPeersQuery(GetPeersQuery {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    info_hash: b"mnopqrstuvwxyz123456".to_vec().try_into().unwrap(),
+                    ro: None,
+                    want: None,
+                })
+            );
+        }
+
+        #[test]
+        fn get_peers_response_values() {
+            let msg = decode_bencode::<DhtMessage>(b"d1:rd2:id20:abcdefghij01234567895:token8:aoeusnth6:valuesl6:axje.u6:idhtnmee1:t2:aa1:y1:re").unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::GetPeersResponse(GetPeersResponse {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    values: vec![
+                        "141.170.152.145:11893".parse().unwrap(),
+                        "151.144.150.164:28269".parse().unwrap(),
+                    ],
+                    nodes: Vec::new(),
+                    nodes6: Vec::new(),
+                    token: Bytes::from(b"aoeusnth".as_slice()),
+                })
+            );
+        }
+
+        #[test]
+        fn get_peers_response_nodes() {
+            let msg = decode_bencode::<DhtMessage>(b"d1:rd2:id20:abcdefghij01234567895:nodes26:mnopqrstuvwxyz123456iiiipp5:token8:aoeusnthe1:t2:aa1:y1:re").unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::GetPeersResponse(GetPeersResponse {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    values: Vec::new(),
+                    nodes: vec![NodeInfo {
+                        id: NodeId(*b"mnopqrstuvwxyz123456"),
+                        ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
+                        port: 28784,
+                    }],
+                    nodes6: Vec::new(),
+                    token: Bytes::from(b"aoeusnth".as_slice()),
+                })
+            );
+        }
+
+        #[test]
+        fn announce_peer_query() {
+            let msg = decode_bencode::<DhtMessage>(b"d1:ad2:id20:abcdefghij012345678912:implied_porti1e9:info_hash20:mnopqrstuvwxyz1234564:porti6881e5:token8:aoeusnthe1:q13:announce_peer1:t2:aa1:y1:qe").unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::AnnouncePeerQuery(AnnouncePeerQuery {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"abcdefghij0123456789"),
+                    info_hash: b"mnopqrstuvwxyz123456".to_vec().try_into().unwrap(),
+                    port: 6881,
+                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    implied_port: Some(true),
+                    ro: None
+                })
+            );
+        }
+
+        #[test]
+        fn announce_peer_response() {
+            let msg =
+                decode_bencode::<DhtMessage>(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re")
+                    .unwrap();
+            assert_eq!(
+                msg,
+                DhtMessage::AnnouncePeerResponse(AnnouncePeerResponse {
+                    t: Bytes::from(b"aa".as_slice()),
+                    v: None,
+                    id: NodeId(*b"mnopqrstuvwxyz123456"),
+                })
+            );
+        }
+    }
+}
