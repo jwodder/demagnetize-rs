@@ -1,5 +1,6 @@
 #![expect(dead_code)]
 mod actor;
+mod krpc;
 mod table;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
