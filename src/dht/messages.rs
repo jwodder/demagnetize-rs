@@ -381,15 +381,15 @@ impl FromBencode for GetPeersResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct RpcError {
+pub(super) struct ErrorResponse {
     pub(super) transaction_id: Bytes,
     pub(super) client: Option<String>,
     pub(super) error_code: u32,
     pub(super) error_message: String,
 }
 
-impl FromBencode for RpcError {
-    fn decode_bencode_object(object: Object<'_, '_>) -> Result<RpcError, BendyError> {
+impl FromBencode for ErrorResponse {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<ErrorResponse, BendyError> {
         let mut transaction_id = None;
         let mut client = None;
         let mut error_code = None;
@@ -436,12 +436,41 @@ impl FromBencode for RpcError {
         let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
         let error_code = error_code.ok_or_else(|| BendyError::missing_field("e.0"))?;
         let error_message = error_message.ok_or_else(|| BendyError::missing_field("e.1"))?;
-        Ok(RpcError {
+        Ok(ErrorResponse {
             transaction_id,
             client,
             error_code,
             error_message,
         })
+    }
+}
+
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub(crate) enum RpcError {
+    #[error("generic error: {0:?}")]
+    Generic(String),
+    #[error("server error: {0:?}")]
+    Server(String),
+    #[error("protocol error: {0:?}")]
+    Protocol(String),
+    #[error("method unknown error: {0:?}")]
+    MethodUnknown(String),
+    #[error("other error: code {code}: {message:?}")]
+    Other { code: u32, message: String },
+}
+
+impl From<ErrorResponse> for RpcError {
+    fn from(value: ErrorResponse) -> RpcError {
+        match value.error_code {
+            201 => RpcError::Generic(value.error_message),
+            202 => RpcError::Server(value.error_message),
+            203 => RpcError::Protocol(value.error_message),
+            204 => RpcError::MethodUnknown(value.error_message),
+            code => RpcError::Other {
+                code,
+                message: value.error_message,
+            },
+        }
     }
 }
 
@@ -557,12 +586,13 @@ mod tests {
 
         #[test]
         fn error() {
-            let msg =
-                decode_bencode::<RpcError>(b"d1:eli201e23:A Generic Error Ocurrede1:t2:aa1:y1:ee")
-                    .unwrap();
+            let msg = decode_bencode::<ErrorResponse>(
+                b"d1:eli201e23:A Generic Error Ocurrede1:t2:aa1:y1:ee",
+            )
+            .unwrap();
             assert_eq!(
                 msg,
-                RpcError {
+                ErrorResponse {
                     transaction_id: Bytes::from(b"aa".as_slice()),
                     client: None,
                     error_code: 201,
