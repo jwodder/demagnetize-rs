@@ -1,13 +1,12 @@
 use super::extensions::{
     Bep10Extension, Bep10Registry, Bep10RegistryError, Extension, ExtensionSet,
 };
+use crate::compact::AsCompact;
 use crate::types::{InfoHash, PeerId};
 use crate::util::{PacketError, TryBytes, UnbencodeError, decode_bencode};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{Encoder, SingleItemEncoder, ToBencode};
-use bendy::value::Value;
 use bytes::{BufMut, Bytes, BytesMut};
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::net::IpAddr;
@@ -583,11 +582,7 @@ impl ToBencode for ExtendedHandshake {
                 e.emit_pair(b"v", v)?;
             }
             if let Some(ip) = self.yourip {
-                let compact = match ip {
-                    IpAddr::V4(ip) => ip.octets().to_vec(),
-                    IpAddr::V6(ip) => ip.octets().to_vec(),
-                };
-                e.emit_pair(b"yourip", Value::Bytes(Cow::from(compact)))?;
+                e.emit_pair(b"yourip", AsCompact(ip))?;
             }
             Ok(())
         })

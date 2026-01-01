@@ -1,5 +1,6 @@
 mod app;
 mod asyncutil;
+mod compact;
 mod config;
 mod consts;
 mod dht;
