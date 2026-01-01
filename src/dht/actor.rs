@@ -13,7 +13,7 @@ pub(crate) struct DhtActor {
 // TODO: Operations to implement:
 // - Saving to a file
 // - Restoring from a file
-// - Looking up the closest node(s) to an info hash
+// - Looking up the peers for an info hash
 // - Adding a node in response to a PORT peer message
 // - Refreshing buckets after 15 minutes of inactivity
 // - Rebuilding in response to a change in our IP address

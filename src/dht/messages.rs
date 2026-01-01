@@ -3,7 +3,7 @@ use crate::compact::{AsCompact, FromCompact, FromCompactError};
 use crate::peer::Peer;
 use crate::types::InfoHash;
 use crate::util::TryBytes;
-use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
+use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
 use bytes::Bytes;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -575,6 +575,20 @@ struct InvalidYField {
     got: String,
 }
 
+pub(super) fn get_transaction_id(msg: &[u8]) -> Result<Bytes, BendyError> {
+    let mut decoder = Decoder::new(msg);
+    if let Some(obj) = decoder.next_object()? {
+        let mut dd = obj.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            if let (b"t", val) = kv {
+                let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                return Ok(Bytes::from(data.0));
+            }
+        }
+    }
+    Err(BendyError::missing_field("t"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -727,6 +741,13 @@ mod tests {
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe");
         }
     }
+
+    #[test]
+    fn get_transaction_id_ok() {
+        let t = get_transaction_id(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice())
+            .unwrap();
+        assert_eq!(t, b"aa".as_slice());
+    }
 }
 
 // TO TEST:
@@ -737,3 +758,7 @@ mod tests {
 //  - "ip" = IPv6
 // - Encoding:
 //  - "want"
+// - get_transaction_id:
+//  - empty message
+//  - no `t` field
+//  - top-level structure not dict
