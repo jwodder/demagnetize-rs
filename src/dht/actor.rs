@@ -28,3 +28,10 @@ pub(crate) struct DhtActor {
 // - If an RPC response indicates that a remote node's ID has changed, remove
 //   the old node ID from the table/mark it bad and then insert the new node
 //   info
+// - When an incoming UDP packet is received, first check whether we're
+//   expecting anything from the remote address; if not, immediately discard
+//   the packet (and log a message?)
+// - When decoding an incoming RPC message, first use `get_transaction_id()` to
+//   get the transaction ID, then (assuming the transaction is found) use the
+//   transaction's query type to determine what response type to decode the
+//   message as

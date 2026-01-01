@@ -2,6 +2,7 @@ use super::{NodeId, NodeInfo};
 use crate::compact::AsCompact;
 use crate::peer::Peer;
 use crate::types::InfoHash;
+use crate::util::{UnbencodeError, decode_bencode};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
 use bytes::Bytes;
@@ -71,7 +72,7 @@ impl FromBencode for PingResponse {
                     let data = String::decode_bencode_object(val).context("y")?;
                     if data != "r" {
                         return Err(BendyError::malformed_content(InvalidYField {
-                            expected: "r",
+                            expected: "\"r\"",
                             got: data,
                         })
                         .context("y"));
@@ -183,7 +184,7 @@ impl FromBencode for FindNodeResponse {
                     let data = String::decode_bencode_object(val).context("y")?;
                     if data != "r" {
                         return Err(BendyError::malformed_content(InvalidYField {
-                            expected: "r",
+                            expected: "\"r\"",
                             got: data,
                         })
                         .context("y"));
@@ -321,7 +322,7 @@ impl FromBencode for GetPeersResponse {
                     let data = String::decode_bencode_object(val).context("y")?;
                     if data != "r" {
                         return Err(BendyError::malformed_content(InvalidYField {
-                            expected: "r",
+                            expected: "\"r\"",
                             got: data,
                         })
                         .context("y"));
@@ -435,7 +436,7 @@ impl FromBencode for ErrorResponse {
                     let data = String::decode_bencode_object(val).context("y")?;
                     if data != "e" {
                         return Err(BendyError::malformed_content(InvalidYField {
-                            expected: "e",
+                            expected: "\"e\"",
                             got: data,
                         })
                         .context("y"));
@@ -457,7 +458,7 @@ impl FromBencode for ErrorResponse {
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub(crate) enum RpcError {
+pub(super) enum RpcError {
     #[error("generic error: {0:?}")]
     Generic(String),
     #[error("server error: {0:?}")]
@@ -500,13 +501,6 @@ impl Want {
     }
 }
 
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-#[error("invalid \"y\" field in DHT RPC packet; expected {expected:?}, got {got:?}")]
-struct InvalidYField {
-    expected: &'static str,
-    got: String,
-}
-
 pub(super) fn get_transaction_id(msg: &[u8]) -> Result<Bytes, BendyError> {
     let mut decoder = Decoder::new(msg);
     if let Some(obj) = decoder.next_object()? {
@@ -521,13 +515,66 @@ pub(super) fn get_transaction_id(msg: &[u8]) -> Result<Bytes, BendyError> {
     Err(BendyError::missing_field("t"))
 }
 
+fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
+    let mut decoder = Decoder::new(msg);
+    if let Some(obj) = decoder.next_object()? {
+        let mut dd = obj.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            if let (b"y", val) = kv {
+                return val.try_into_bytes();
+            }
+        }
+    }
+    Err(BendyError::missing_field("y"))
+}
+
+pub(super) fn decode_response<T: FromBencode>(msg: &[u8]) -> Result<T, ResponseError> {
+    match get_message_type(msg)? {
+        b"r" => decode_bencode::<T>(msg).map_err(Into::into),
+        b"e" => Err(decode_bencode::<ErrorResponse>(msg)?.into()),
+        other => Err(InvalidYField {
+            expected: "\"e\" or \"r\"",
+            got: String::from_utf8_lossy(other).into_owned(),
+        }
+        .into()),
+    }
+}
+
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[error("invalid \"y\" field in DHT RPC packet; expected {expected}, got {got:?}")]
+pub(super) struct InvalidYField {
+    expected: &'static str,
+    got: String,
+}
+
+#[derive(Clone, Debug, Error)]
+pub(super) enum ResponseError {
+    #[error("failed to decode DHT RPC packet")]
+    Bencode(#[from] UnbencodeError),
+    #[error("remote DHT node replied with error")]
+    Rpc(#[from] RpcError),
+    #[error(transparent)]
+    MsgType(#[from] InvalidYField),
+}
+
+impl From<BendyError> for ResponseError {
+    fn from(value: BendyError) -> ResponseError {
+        ResponseError::from(UnbencodeError::from(value))
+    }
+}
+
+impl From<ErrorResponse> for ResponseError {
+    fn from(value: ErrorResponse) -> ResponseError {
+        ResponseError::from(RpcError::from(value))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     mod decode {
         use super::*;
-        use crate::util::decode_bencode;
         use std::net::Ipv4Addr;
 
         #[test]
