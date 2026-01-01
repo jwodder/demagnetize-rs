@@ -515,7 +515,7 @@ pub(super) fn get_transaction_id(msg: &[u8]) -> Result<Bytes, BendyError> {
     Err(BendyError::missing_field("t"))
 }
 
-fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
+pub(super) fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
     let mut decoder = Decoder::new(msg);
     if let Some(obj) = decoder.next_object()? {
         let mut dd = obj.try_into_dictionary()?;

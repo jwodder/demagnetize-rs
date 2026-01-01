@@ -7,6 +7,7 @@ use crate::util::{PacketError, TryBytes, TryFromBuf};
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -21,6 +22,15 @@ impl NodeId {
         let byteno = i / 8;
         let bitno = 7 - (i % 8);
         self.0[byteno] & (1 << bitno) != 0
+    }
+}
+
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{b:02x}")?;
+        }
+        Ok(())
     }
 }
 
