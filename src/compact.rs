@@ -128,9 +128,9 @@ impl FromCompact for SocketAddrV6 {
 macro_rules! impl_vec_fromcompact {
     ($t:ty, $len:literal) => {
         impl FromCompact for Vec<$t> {
-            type Error = FromCompactError;
+            type Error = crate::compact::FromCompactError;
 
-            fn from_compact(mut bs: &[u8]) -> Result<Vec<$t>, FromCompactError> {
+            fn from_compact(mut bs: &[u8]) -> Result<Vec<$t>, crate::compact::FromCompactError> {
                 let mut items = Vec::new();
                 while !bs.is_empty() {
                     if bs.len() >= $len {
@@ -154,6 +154,6 @@ impl_vec_fromcompact!(SocketAddrV6, 18);
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[error("compact representation of {ty} had invalid length {length}")]
 pub(crate) struct FromCompactError {
-    ty: &'static str,
-    length: usize,
+    pub(crate) ty: &'static str,
+    pub(crate) length: usize,
 }

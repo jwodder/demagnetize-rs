@@ -80,6 +80,16 @@ impl fmt::Display for Peer {
     }
 }
 
+impl From<SocketAddr> for Peer {
+    fn from(address: SocketAddr) -> Peer {
+        Peer {
+            address,
+            id: None,
+            requires_crypto: false,
+        }
+    }
+}
+
 impl From<SocketAddrV4> for Peer {
     fn from(addr: SocketAddrV4) -> Peer {
         Peer {

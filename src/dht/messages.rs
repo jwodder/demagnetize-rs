@@ -1,11 +1,13 @@
-#![expect(unused_variables)]
 use super::NodeId;
+use crate::compact::{AsCompact, FromCompact, FromCompactError};
 use crate::peer::Peer;
 use crate::types::InfoHash;
-use bendy::decoding::{Error as BendyError, FromBencode, Object};
+use crate::util::TryBytes;
+use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
-use bytes::{BufMut, Bytes, BytesMut};
-use std::net::{IpAddr, SocketAddr};
+use bytes::Bytes;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PingQuery {
@@ -50,7 +52,50 @@ pub(super) struct PingResponse {
 
 impl FromBencode for PingResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<PingResponse, BendyError> {
-        todo!()
+        let mut t = None;
+        let mut v = None;
+        let mut id = None;
+        let mut ip = None;
+        let mut dd = object.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    t = Some(Bytes::from(data.0));
+                }
+                (b"v", val) => {
+                    v = Some(
+                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
+                    );
+                }
+                (b"y", val) => {
+                    let data = String::decode_bencode_object(val).context("y")?;
+                    if data != "r" {
+                        return Err(BendyError::malformed_content(InvalidYField {
+                            expected: "r",
+                            got: data,
+                        })
+                        .context("y"));
+                    }
+                }
+                (b"r", val) => {
+                    let mut rdict = val.try_into_dictionary().context("r")?;
+                    while let Some(rkv) = rdict.next_pair().context("r")? {
+                        if let (b"id", idval) = rkv {
+                            id = Some(NodeId::decode_bencode_object(idval).context("r.id")?);
+                        }
+                    }
+                }
+                (b"ip", val) => {
+                    let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
+                    ip = Some(addr.0);
+                }
+                _ => (),
+            }
+        }
+        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
+        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        Ok(PingResponse { t, v, id, ip })
     }
 }
 
@@ -112,7 +157,72 @@ pub(super) struct FindNodeResponse {
 
 impl FromBencode for FindNodeResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<FindNodeResponse, BendyError> {
-        todo!()
+        let mut t = None;
+        let mut v = None;
+        let mut id = None;
+        let mut nodes = Vec::new();
+        let mut nodes6 = Vec::new();
+        let mut ip = None;
+        let mut dd = object.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    t = Some(Bytes::from(data.0));
+                }
+                (b"v", val) => {
+                    v = Some(
+                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
+                    );
+                }
+                (b"y", val) => {
+                    let data = String::decode_bencode_object(val).context("y")?;
+                    if data != "r" {
+                        return Err(BendyError::malformed_content(InvalidYField {
+                            expected: "r",
+                            got: data,
+                        })
+                        .context("y"));
+                    }
+                }
+                (b"r", val) => {
+                    let mut rdict = val.try_into_dictionary().context("r")?;
+                    while let Some(rkv) = rdict.next_pair().context("r")? {
+                        match rkv {
+                            (b"id", rval) => {
+                                id = Some(NodeId::decode_bencode_object(rval).context("r.id")?);
+                            }
+                            (b"nodes", rval) => {
+                                let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
+                                    .context("r.nodes")?;
+                                nodes.extend(ns.0.into_iter().map(NodeInfo::from));
+                            }
+                            (b"nodes6", rval) => {
+                                let ns = AsCompact::<Vec<NodeInfoV6>>::decode_bencode_object(rval)
+                                    .context("r.nodes6")?;
+                                nodes6.extend(ns.0.into_iter().map(NodeInfo::from));
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                (b"ip", val) => {
+                    let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
+                    ip = Some(addr.0);
+                }
+                _ => (),
+            }
+        }
+        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
+        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        Ok(FindNodeResponse {
+            t,
+            v,
+            id,
+            nodes,
+            nodes6,
+            ip,
+        })
     }
 }
 
@@ -176,64 +286,90 @@ pub(super) struct GetPeersResponse {
 
 impl FromBencode for GetPeersResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<GetPeersResponse, BendyError> {
-        todo!()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct AnnouncePeerQuery {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
-    pub(super) info_hash: InfoHash,
-    pub(super) port: u16,
-    pub(super) token: Bytes,
-    pub(super) implied_port: Option<bool>,
-    pub(super) ro: Option<bool>,
-}
-
-impl ToBencode for AnnouncePeerQuery {
-    const MAX_DEPTH: usize = 2;
-
-    fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
-        encoder.emit_dict(|mut e| {
-            e.emit_pair_with(b"a", |enc2| {
-                enc2.emit_dict(|mut a| {
-                    a.emit_pair(b"id", self.id)?;
-                    if let Some(flag) = self.implied_port {
-                        a.emit_pair(b"implied_port", u8::from(flag))?;
+        let mut t = None;
+        let mut v = None;
+        let mut id = None;
+        let mut values = Vec::new();
+        let mut nodes = Vec::new();
+        let mut nodes6 = Vec::new();
+        let mut token = None;
+        let mut ip = None;
+        let mut dd = object.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    t = Some(Bytes::from(data.0));
+                }
+                (b"v", val) => {
+                    v = Some(
+                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
+                    );
+                }
+                (b"y", val) => {
+                    let data = String::decode_bencode_object(val).context("y")?;
+                    if data != "r" {
+                        return Err(BendyError::malformed_content(InvalidYField {
+                            expected: "r",
+                            got: data,
+                        })
+                        .context("y"));
                     }
-                    a.emit_pair(b"info_hash", AsString(self.info_hash.as_bytes()))?;
-                    a.emit_pair(b"port", self.port)?;
-                    a.emit_pair(b"token", AsString(&self.token))?;
-                    Ok(())
-                })
-            })?;
-            e.emit_pair(b"q", AsString(b"announce_peer"))?;
-            e.emit_pair(b"t", AsString(&self.t))?;
-            if let Some(ro) = self.ro {
-                e.emit_pair(b"ro", u8::from(ro))?;
+                }
+                (b"r", val) => {
+                    let mut rdict = val.try_into_dictionary().context("r")?;
+                    while let Some(rkv) = rdict.next_pair().context("r")? {
+                        match rkv {
+                            (b"id", rval) => {
+                                id = Some(NodeId::decode_bencode_object(rval).context("r.id")?);
+                            }
+                            (b"nodes", rval) => {
+                                let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
+                                    .context("r.nodes")?;
+                                nodes.extend(ns.0.into_iter().map(NodeInfo::from));
+                            }
+                            (b"nodes6", rval) => {
+                                let ns = AsCompact::<Vec<NodeInfoV6>>::decode_bencode_object(rval)
+                                    .context("r.nodes6")?;
+                                nodes6.extend(ns.0.into_iter().map(NodeInfo::from));
+                            }
+                            (b"values", rval) => {
+                                let mut vs = rval.try_into_list().context("r.values")?;
+                                while let Some(item) = vs.next_object().context("r.values")? {
+                                    let addr = AsCompact::<SocketAddr>::decode_bencode_object(item)
+                                        .context("r.values")?;
+                                    values.push(Peer::from(addr.0));
+                                }
+                            }
+                            (b"token", rval) => {
+                                let data = AsString::<Vec<u8>>::decode_bencode_object(rval)
+                                    .context("r.token")?;
+                                token = Some(Bytes::from(data.0));
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                (b"ip", val) => {
+                    let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
+                    ip = Some(addr.0);
+                }
+                _ => (),
             }
-            if let Some(ref v) = self.v {
-                e.emit_pair(b"v", v)?;
-            }
-            e.emit_pair(b"y", AsString(b"q"))?;
-            Ok(())
+        }
+        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
+        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        let token = token.ok_or_else(|| BendyError::missing_field("r.token"))?;
+        Ok(GetPeersResponse {
+            t,
+            v,
+            id,
+            values,
+            nodes,
+            nodes6,
+            token,
+            ip,
         })
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct AnnouncePeerResponse {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
-    pub(super) ip: Option<SocketAddr>,
-}
-
-impl FromBencode for AnnouncePeerResponse {
-    fn decode_bencode_object(object: Object<'_, '_>) -> Result<AnnouncePeerResponse, BendyError> {
-        todo!()
     }
 }
 
@@ -247,7 +383,58 @@ pub(super) struct RpcError {
 
 impl FromBencode for RpcError {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<RpcError, BendyError> {
-        todo!()
+        let mut t = None;
+        let mut v = None;
+        let mut error_code = None;
+        let mut error_message = None;
+        let mut dd = object.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"e", val) => {
+                    let mut elst = val.try_into_list().context("e")?;
+                    if let Some(item) = elst.next_object().context("e")? {
+                        error_code = Some(u32::decode_bencode_object(item).context("e.0")?);
+                    }
+                    if error_code.is_some() {
+                        if let Some(item) = elst.next_object().context("e")? {
+                            error_message = Some(
+                                String::from_utf8_lossy(item.try_into_bytes().context("e.1")?)
+                                    .into_owned(),
+                            );
+                        }
+                    }
+                }
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    t = Some(Bytes::from(data.0));
+                }
+                (b"v", val) => {
+                    v = Some(
+                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
+                    );
+                }
+                (b"y", val) => {
+                    let data = String::decode_bencode_object(val).context("y")?;
+                    if data != "e" {
+                        return Err(BendyError::malformed_content(InvalidYField {
+                            expected: "e",
+                            got: data,
+                        })
+                        .context("y"));
+                    }
+                }
+                _ => (),
+            }
+        }
+        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
+        let error_code = error_code.ok_or_else(|| BendyError::missing_field("e.0"))?;
+        let error_message = error_message.ok_or_else(|| BendyError::missing_field("e.1"))?;
+        Ok(RpcError {
+            t,
+            v,
+            error_code,
+            error_message,
+        })
     }
 }
 
@@ -257,6 +444,78 @@ pub(super) struct NodeInfo {
     pub(super) ip: IpAddr,
     pub(super) port: u16,
 }
+
+impl From<NodeInfoV4> for NodeInfo {
+    fn from(value: NodeInfoV4) -> NodeInfo {
+        NodeInfo {
+            id: value.id,
+            ip: value.ip.into(),
+            port: value.port,
+        }
+    }
+}
+
+impl From<NodeInfoV6> for NodeInfo {
+    fn from(value: NodeInfoV6) -> NodeInfo {
+        NodeInfo {
+            id: value.id,
+            ip: value.ip.into(),
+            port: value.port,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NodeInfoV4 {
+    id: NodeId,
+    ip: Ipv4Addr,
+    port: u16,
+}
+
+impl FromCompact for NodeInfoV4 {
+    type Error = FromCompactError;
+
+    fn from_compact(bs: &[u8]) -> Result<NodeInfoV4, FromCompactError> {
+        let e = FromCompactError {
+            ty: "NodeInfoV4",
+            length: bs.len(),
+        };
+        let mut buf = TryBytes::from(bs);
+        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
+        let ip = buf.try_get::<Ipv4Addr>().map_err(|_| e)?;
+        let port = buf.try_get::<u16>().map_err(|_| e)?;
+        buf.eof().map_err(|_| e)?;
+        Ok(NodeInfoV4 { id, ip, port })
+    }
+}
+
+impl_vec_fromcompact!(NodeInfoV4, 26);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NodeInfoV6 {
+    id: NodeId,
+    ip: Ipv6Addr,
+    port: u16,
+}
+
+impl FromCompact for NodeInfoV6 {
+    type Error = FromCompactError;
+
+    fn from_compact(bs: &[u8]) -> Result<NodeInfoV6, FromCompactError> {
+        let e = FromCompactError {
+            ty: "NodeInfoV6",
+            length: bs.len(),
+        };
+        let mut buf = TryBytes::from(bs);
+        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
+        let ip = buf.try_get::<Ipv6Addr>().map_err(|_| e)?;
+        let port = buf.try_get::<u16>().map_err(|_| e)?;
+        buf.eof().map_err(|_| e)?;
+        Ok(NodeInfoV6 { id, ip, port })
+    }
+}
+
+impl_vec_fromcompact!(NodeInfoV6, 38);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Want {
@@ -273,14 +532,11 @@ impl Want {
     }
 }
 
-fn socket_addr2bencode(addr: SocketAddr) -> AsString<Bytes> {
-    let mut buf = BytesMut::new();
-    match addr.ip() {
-        IpAddr::V4(ip) => buf.put_slice(&ip.octets()),
-        IpAddr::V6(ip) => buf.put_slice(&ip.octets()),
-    }
-    buf.put_u16(addr.port());
-    AsString(buf.freeze())
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[error("invalid \"y\" field in DHT RPC packet; expected {expected:?}, got {got:?}")]
+struct InvalidYField {
+    expected: &'static str,
+    got: String,
 }
 
 #[cfg(test)]
@@ -357,8 +613,8 @@ mod tests {
                     v: None,
                     id: NodeId(*b"abcdefghij0123456789"),
                     values: vec![
-                        "141.170.152.145:11893".parse().unwrap(),
-                        "151.144.150.164:28269".parse().unwrap(),
+                        "97.120.106.101:11893".parse().unwrap(),
+                        "105.100.104.116:28269".parse().unwrap(),
                     ],
                     nodes: Vec::new(),
                     nodes6: Vec::new(),
@@ -385,23 +641,6 @@ mod tests {
                     }],
                     nodes6: Vec::new(),
                     token: Bytes::from(b"aoeusnth".as_slice()),
-                    ip: None,
-                }
-            );
-        }
-
-        #[test]
-        fn announce_peer_response() {
-            let msg = decode_bencode::<AnnouncePeerResponse>(
-                b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re",
-            )
-            .unwrap();
-            assert_eq!(
-                msg,
-                AnnouncePeerResponse {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
-                    id: NodeId(*b"mnopqrstuvwxyz123456"),
                     ip: None,
                 }
             );
@@ -449,21 +688,6 @@ mod tests {
                 want: None,
             };
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe");
-        }
-
-        #[test]
-        fn announce_peer_query() {
-            let msg = AnnouncePeerQuery {
-                t: Bytes::from(b"aa".as_slice()),
-                v: None,
-                id: NodeId(*b"abcdefghij0123456789"),
-                info_hash: b"mnopqrstuvwxyz123456".to_vec().try_into().unwrap(),
-                port: 6881,
-                token: Bytes::from(b"aoeusnth".as_slice()),
-                implied_port: Some(true),
-                ro: None,
-            };
-            assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij012345678912:implied_porti1e9:info_hash20:mnopqrstuvwxyz1234564:porti6881e5:token8:aoeusnthe1:q13:announce_peer1:t2:aa1:y1:qe");
         }
     }
 }
