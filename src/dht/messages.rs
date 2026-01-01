@@ -11,10 +11,10 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PingQuery {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
-    pub(super) ro: Option<bool>,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
+    pub(super) read_only: Option<bool>,
 }
 
 impl ToBencode for PingQuery {
@@ -24,16 +24,16 @@ impl ToBencode for PingQuery {
         encoder.emit_dict(|mut e| {
             e.emit_pair_with(b"a", |enc2| {
                 enc2.emit_dict(|mut a| {
-                    a.emit_pair(b"id", self.id)?;
+                    a.emit_pair(b"id", self.node_id)?;
                     Ok(())
                 })
             })?;
             e.emit_pair(b"q", AsString(b"ping"))?;
-            e.emit_pair(b"t", AsString(&self.t))?;
-            if let Some(ro) = self.ro {
+            e.emit_pair(b"t", AsString(&self.transaction_id))?;
+            if let Some(ro) = self.read_only {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
-            if let Some(ref v) = self.v {
+            if let Some(ref v) = self.client {
                 e.emit_pair(b"v", v)?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
@@ -44,27 +44,27 @@ impl ToBencode for PingQuery {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PingResponse {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
-    pub(super) ip: Option<SocketAddr>,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
+    pub(super) your_addr: Option<SocketAddr>,
 }
 
 impl FromBencode for PingResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<PingResponse, BendyError> {
-        let mut t = None;
-        let mut v = None;
-        let mut id = None;
-        let mut ip = None;
+        let mut transaction_id = None;
+        let mut client = None;
+        let mut node_id = None;
+        let mut your_addr = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
                 (b"t", val) => {
                     let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                    t = Some(Bytes::from(data.0));
+                    transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    v = Some(
+                    client = Some(
                         String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
                     );
                 }
@@ -82,30 +82,35 @@ impl FromBencode for PingResponse {
                     let mut rdict = val.try_into_dictionary().context("r")?;
                     while let Some(rkv) = rdict.next_pair().context("r")? {
                         if let (b"id", idval) = rkv {
-                            id = Some(NodeId::decode_bencode_object(idval).context("r.id")?);
+                            node_id = Some(NodeId::decode_bencode_object(idval).context("r.id")?);
                         }
                     }
                 }
                 (b"ip", val) => {
                     let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
-                    ip = Some(addr.0);
+                    your_addr = Some(addr.0);
                 }
                 _ => (),
             }
         }
-        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
-        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
-        Ok(PingResponse { t, v, id, ip })
+        let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
+        let node_id = node_id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        Ok(PingResponse {
+            transaction_id,
+            client,
+            node_id,
+            your_addr,
+        })
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct FindNodeQuery {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
     pub(super) target: NodeId,
-    pub(super) ro: Option<bool>,
+    pub(super) read_only: Option<bool>,
     pub(super) want: Option<Vec<Want>>,
 }
 
@@ -116,7 +121,7 @@ impl ToBencode for FindNodeQuery {
         encoder.emit_dict(|mut e| {
             e.emit_pair_with(b"a", |enc2| {
                 enc2.emit_dict(|mut a| {
-                    a.emit_pair(b"id", self.id)?;
+                    a.emit_pair(b"id", self.node_id)?;
                     a.emit_pair(b"target", self.target)?;
                     if let Some(ref want) = self.want {
                         a.emit_pair_with(b"want", |enc3| {
@@ -132,11 +137,11 @@ impl ToBencode for FindNodeQuery {
                 })
             })?;
             e.emit_pair(b"q", AsString(b"find_node"))?;
-            e.emit_pair(b"t", AsString(&self.t))?;
-            if let Some(ro) = self.ro {
+            e.emit_pair(b"t", AsString(&self.transaction_id))?;
+            if let Some(ro) = self.read_only {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
-            if let Some(ref v) = self.v {
+            if let Some(ref v) = self.client {
                 e.emit_pair(b"v", v)?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
@@ -147,31 +152,31 @@ impl ToBencode for FindNodeQuery {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct FindNodeResponse {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
     pub(super) nodes: Vec<NodeInfo>,
     pub(super) nodes6: Vec<NodeInfo>,
-    pub(super) ip: Option<SocketAddr>,
+    pub(super) your_addr: Option<SocketAddr>,
 }
 
 impl FromBencode for FindNodeResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<FindNodeResponse, BendyError> {
-        let mut t = None;
-        let mut v = None;
-        let mut id = None;
+        let mut transaction_id = None;
+        let mut client = None;
+        let mut node_id = None;
         let mut nodes = Vec::new();
         let mut nodes6 = Vec::new();
-        let mut ip = None;
+        let mut your_addr = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
                 (b"t", val) => {
                     let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                    t = Some(Bytes::from(data.0));
+                    transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    v = Some(
+                    client = Some(
                         String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
                     );
                 }
@@ -190,7 +195,8 @@ impl FromBencode for FindNodeResponse {
                     while let Some(rkv) = rdict.next_pair().context("r")? {
                         match rkv {
                             (b"id", rval) => {
-                                id = Some(NodeId::decode_bencode_object(rval).context("r.id")?);
+                                node_id =
+                                    Some(NodeId::decode_bencode_object(rval).context("r.id")?);
                             }
                             (b"nodes", rval) => {
                                 let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
@@ -208,31 +214,31 @@ impl FromBencode for FindNodeResponse {
                 }
                 (b"ip", val) => {
                     let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
-                    ip = Some(addr.0);
+                    your_addr = Some(addr.0);
                 }
                 _ => (),
             }
         }
-        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
-        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
+        let node_id = node_id.ok_or_else(|| BendyError::missing_field("r.id"))?;
         Ok(FindNodeResponse {
-            t,
-            v,
-            id,
+            transaction_id,
+            client,
+            node_id,
             nodes,
             nodes6,
-            ip,
+            your_addr,
         })
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct GetPeersQuery {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
     pub(super) info_hash: InfoHash,
-    pub(super) ro: Option<bool>,
+    pub(super) read_only: Option<bool>,
     pub(super) want: Option<Vec<Want>>,
 }
 
@@ -243,7 +249,7 @@ impl ToBencode for GetPeersQuery {
         encoder.emit_dict(|mut e| {
             e.emit_pair_with(b"a", |enc2| {
                 enc2.emit_dict(|mut a| {
-                    a.emit_pair(b"id", self.id)?;
+                    a.emit_pair(b"id", self.node_id)?;
                     a.emit_pair(b"info_hash", self.info_hash)?;
                     if let Some(ref want) = self.want {
                         a.emit_pair_with(b"want", |enc3| {
@@ -259,11 +265,11 @@ impl ToBencode for GetPeersQuery {
                 })
             })?;
             e.emit_pair(b"q", AsString(b"get_peers"))?;
-            e.emit_pair(b"t", AsString(&self.t))?;
-            if let Some(ro) = self.ro {
+            e.emit_pair(b"t", AsString(&self.transaction_id))?;
+            if let Some(ro) = self.read_only {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
-            if let Some(ref v) = self.v {
+            if let Some(ref v) = self.client {
                 e.emit_pair(b"v", v)?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
@@ -274,35 +280,35 @@ impl ToBencode for GetPeersQuery {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct GetPeersResponse {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
-    pub(super) id: NodeId,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
+    pub(super) node_id: NodeId,
     pub(super) values: Vec<Peer>,
     pub(super) nodes: Vec<NodeInfo>,
     pub(super) nodes6: Vec<NodeInfo>,
     pub(super) token: Bytes,
-    pub(super) ip: Option<SocketAddr>,
+    pub(super) your_addr: Option<SocketAddr>,
 }
 
 impl FromBencode for GetPeersResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<GetPeersResponse, BendyError> {
-        let mut t = None;
-        let mut v = None;
-        let mut id = None;
+        let mut transaction_id = None;
+        let mut client = None;
+        let mut node_id = None;
         let mut values = Vec::new();
         let mut nodes = Vec::new();
         let mut nodes6 = Vec::new();
         let mut token = None;
-        let mut ip = None;
+        let mut your_addr = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
                 (b"t", val) => {
                     let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                    t = Some(Bytes::from(data.0));
+                    transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    v = Some(
+                    client = Some(
                         String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
                     );
                 }
@@ -321,7 +327,8 @@ impl FromBencode for GetPeersResponse {
                     while let Some(rkv) = rdict.next_pair().context("r")? {
                         match rkv {
                             (b"id", rval) => {
-                                id = Some(NodeId::decode_bencode_object(rval).context("r.id")?);
+                                node_id =
+                                    Some(NodeId::decode_bencode_object(rval).context("r.id")?);
                             }
                             (b"nodes", rval) => {
                                 let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
@@ -352,39 +359,39 @@ impl FromBencode for GetPeersResponse {
                 }
                 (b"ip", val) => {
                     let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
-                    ip = Some(addr.0);
+                    your_addr = Some(addr.0);
                 }
                 _ => (),
             }
         }
-        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
-        let id = id.ok_or_else(|| BendyError::missing_field("r.id"))?;
+        let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
+        let node_id = node_id.ok_or_else(|| BendyError::missing_field("r.id"))?;
         let token = token.ok_or_else(|| BendyError::missing_field("r.token"))?;
         Ok(GetPeersResponse {
-            t,
-            v,
-            id,
+            transaction_id,
+            client,
+            node_id,
             values,
             nodes,
             nodes6,
             token,
-            ip,
+            your_addr,
         })
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct RpcError {
-    pub(super) t: Bytes,
-    pub(super) v: Option<String>,
+    pub(super) transaction_id: Bytes,
+    pub(super) client: Option<String>,
     pub(super) error_code: u32,
     pub(super) error_message: String,
 }
 
 impl FromBencode for RpcError {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<RpcError, BendyError> {
-        let mut t = None;
-        let mut v = None;
+        let mut transaction_id = None;
+        let mut client = None;
         let mut error_code = None;
         let mut error_message = None;
         let mut dd = object.try_into_dictionary()?;
@@ -406,10 +413,10 @@ impl FromBencode for RpcError {
                 }
                 (b"t", val) => {
                     let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                    t = Some(Bytes::from(data.0));
+                    transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    v = Some(
+                    client = Some(
                         String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
                     );
                 }
@@ -426,12 +433,12 @@ impl FromBencode for RpcError {
                 _ => (),
             }
         }
-        let t = t.ok_or_else(|| BendyError::missing_field("t"))?;
+        let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
         let error_code = error_code.ok_or_else(|| BendyError::missing_field("e.0"))?;
         let error_message = error_message.ok_or_else(|| BendyError::missing_field("e.1"))?;
         Ok(RpcError {
-            t,
-            v,
+            transaction_id,
+            client,
             error_code,
             error_message,
         })
@@ -556,8 +563,8 @@ mod tests {
             assert_eq!(
                 msg,
                 RpcError {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
                     error_code: 201,
                     error_message: "A Generic Error Ocurred".into(),
                 }
@@ -572,10 +579,10 @@ mod tests {
             assert_eq!(
                 msg,
                 PingResponse {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
-                    id: NodeId::from(b"mnopqrstuvwxyz123456"),
-                    ip: None,
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"mnopqrstuvwxyz123456"),
+                    your_addr: None,
                 }
             );
         }
@@ -589,16 +596,16 @@ mod tests {
             assert_eq!(
                 msg,
                 FindNodeResponse {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
-                    id: NodeId::from(b"0123456789abcdefghij"),
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"0123456789abcdefghij"),
                     nodes: vec![NodeInfo {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
                         ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
-                    ip: None,
+                    your_addr: None,
                 }
             );
         }
@@ -609,9 +616,9 @@ mod tests {
             assert_eq!(
                 msg,
                 GetPeersResponse {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
-                    id: NodeId::from(b"abcdefghij0123456789"),
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"abcdefghij0123456789"),
                     values: vec![
                         "97.120.106.101:11893".parse().unwrap(),
                         "105.100.104.116:28269".parse().unwrap(),
@@ -619,7 +626,7 @@ mod tests {
                     nodes: Vec::new(),
                     nodes6: Vec::new(),
                     token: Bytes::from(b"aoeusnth".as_slice()),
-                    ip: None,
+                    your_addr: None,
                 }
             );
         }
@@ -630,9 +637,9 @@ mod tests {
             assert_eq!(
                 msg,
                 GetPeersResponse {
-                    t: Bytes::from(b"aa".as_slice()),
-                    v: None,
-                    id: NodeId::from(b"abcdefghij0123456789"),
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"abcdefghij0123456789"),
                     values: Vec::new(),
                     nodes: vec![NodeInfo {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
@@ -641,7 +648,7 @@ mod tests {
                     }],
                     nodes6: Vec::new(),
                     token: Bytes::from(b"aoeusnth".as_slice()),
-                    ip: None,
+                    your_addr: None,
                 }
             );
         }
@@ -653,10 +660,10 @@ mod tests {
         #[test]
         fn ping_query() {
             let msg = PingQuery {
-                t: Bytes::from(b"aa".as_slice()),
-                v: None,
-                id: NodeId::from(b"abcdefghij0123456789"),
-                ro: None,
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
+                read_only: None,
             };
             assert_eq!(
                 msg.to_bencode().unwrap(),
@@ -667,11 +674,11 @@ mod tests {
         #[test]
         fn find_node_query() {
             let msg = FindNodeQuery {
-                t: Bytes::from(b"aa".as_slice()),
-                v: None,
-                id: NodeId::from(b"abcdefghij0123456789"),
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
                 target: NodeId::from(b"mnopqrstuvwxyz123456"),
-                ro: None,
+                read_only: None,
                 want: None,
             };
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567896:target20:mnopqrstuvwxyz123456e1:q9:find_node1:t2:aa1:y1:qe");
@@ -680,11 +687,11 @@ mod tests {
         #[test]
         fn get_peers_query() {
             let msg = GetPeersQuery {
-                t: Bytes::from(b"aa".as_slice()),
-                v: None,
-                id: NodeId::from(b"abcdefghij0123456789"),
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
                 info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
-                ro: None,
+                read_only: None,
                 want: None,
             };
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe");
