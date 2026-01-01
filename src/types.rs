@@ -1,4 +1,5 @@
 use crate::util::{PacketError, TryFromBuf};
+use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
 use data_encoding::{BASE32, DecodeError, HEXLOWER_PERMISSIVE};
 use rand::{
@@ -68,6 +69,12 @@ impl FromStr for InfoHash {
     }
 }
 
+impl From<&[u8; 20]> for InfoHash {
+    fn from(value: &[u8; 20]) -> InfoHash {
+        InfoHash(*value)
+    }
+}
+
 impl TryFrom<Vec<u8>> for InfoHash {
     type Error = InfoHashError;
 
@@ -94,6 +101,14 @@ impl TryFromBuf for InfoHash {
 impl InfoHashProvider for InfoHash {
     fn get_info_hash(&self) -> InfoHash {
         *self
+    }
+}
+
+impl ToBencode for InfoHash {
+    const MAX_DEPTH: usize = 0;
+
+    fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
+        encoder.emit_bytes(&self.0)
     }
 }
 

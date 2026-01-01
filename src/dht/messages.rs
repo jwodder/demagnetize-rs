@@ -244,7 +244,7 @@ impl ToBencode for GetPeersQuery {
             e.emit_pair_with(b"a", |enc2| {
                 enc2.emit_dict(|mut a| {
                     a.emit_pair(b"id", self.id)?;
-                    a.emit_pair(b"info_hash", AsString(self.info_hash.as_bytes()))?;
+                    a.emit_pair(b"info_hash", self.info_hash)?;
                     if let Some(ref want) = self.want {
                         a.emit_pair_with(b"want", |enc3| {
                             enc3.emit_list(|wlst| {
@@ -574,7 +574,7 @@ mod tests {
                 PingResponse {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
-                    id: NodeId(*b"mnopqrstuvwxyz123456"),
+                    id: NodeId::from(b"mnopqrstuvwxyz123456"),
                     ip: None,
                 }
             );
@@ -591,9 +591,9 @@ mod tests {
                 FindNodeResponse {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
-                    id: NodeId(*b"0123456789abcdefghij"),
+                    id: NodeId::from(b"0123456789abcdefghij"),
                     nodes: vec![NodeInfo {
-                        id: NodeId(*b"mnopqrstuvwxyz123456"),
+                        id: NodeId::from(b"mnopqrstuvwxyz123456"),
                         ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
                         port: 28784,
                     }],
@@ -611,7 +611,7 @@ mod tests {
                 GetPeersResponse {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
-                    id: NodeId(*b"abcdefghij0123456789"),
+                    id: NodeId::from(b"abcdefghij0123456789"),
                     values: vec![
                         "97.120.106.101:11893".parse().unwrap(),
                         "105.100.104.116:28269".parse().unwrap(),
@@ -632,10 +632,10 @@ mod tests {
                 GetPeersResponse {
                     t: Bytes::from(b"aa".as_slice()),
                     v: None,
-                    id: NodeId(*b"abcdefghij0123456789"),
+                    id: NodeId::from(b"abcdefghij0123456789"),
                     values: Vec::new(),
                     nodes: vec![NodeInfo {
-                        id: NodeId(*b"mnopqrstuvwxyz123456"),
+                        id: NodeId::from(b"mnopqrstuvwxyz123456"),
                         ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
                         port: 28784,
                     }],
@@ -655,7 +655,7 @@ mod tests {
             let msg = PingQuery {
                 t: Bytes::from(b"aa".as_slice()),
                 v: None,
-                id: NodeId(*b"abcdefghij0123456789"),
+                id: NodeId::from(b"abcdefghij0123456789"),
                 ro: None,
             };
             assert_eq!(
@@ -669,8 +669,8 @@ mod tests {
             let msg = FindNodeQuery {
                 t: Bytes::from(b"aa".as_slice()),
                 v: None,
-                id: NodeId(*b"abcdefghij0123456789"),
-                target: NodeId(*b"mnopqrstuvwxyz123456"),
+                id: NodeId::from(b"abcdefghij0123456789"),
+                target: NodeId::from(b"mnopqrstuvwxyz123456"),
                 ro: None,
                 want: None,
             };
@@ -682,8 +682,8 @@ mod tests {
             let msg = GetPeersQuery {
                 t: Bytes::from(b"aa".as_slice()),
                 v: None,
-                id: NodeId(*b"abcdefghij0123456789"),
-                info_hash: b"mnopqrstuvwxyz123456".to_vec().try_into().unwrap(),
+                id: NodeId::from(b"abcdefghij0123456789"),
+                info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
                 ro: None,
                 want: None,
             };

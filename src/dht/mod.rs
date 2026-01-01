@@ -23,6 +23,12 @@ impl NodeId {
     }
 }
 
+impl From<&[u8; 20]> for NodeId {
+    fn from(value: &[u8; 20]) -> NodeId {
+        NodeId(*value)
+    }
+}
+
 impl TryFromBuf for NodeId {
     fn try_from_buf(buf: &mut Bytes) -> Result<NodeId, PacketError> {
         if buf.len() >= 20 {
