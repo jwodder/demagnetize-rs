@@ -115,7 +115,7 @@ pub(super) struct FindNodeQuery {
 }
 
 impl ToBencode for FindNodeQuery {
-    const MAX_DEPTH: usize = 2;
+    const MAX_DEPTH: usize = 3;
 
     fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
         encoder.emit_dict(|mut e| {
@@ -243,7 +243,7 @@ pub(super) struct GetPeersQuery {
 }
 
 impl ToBencode for GetPeersQuery {
-    const MAX_DEPTH: usize = 2;
+    const MAX_DEPTH: usize = 3;
 
     fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
         encoder.emit_dict(|mut e| {
@@ -632,6 +632,44 @@ mod tests {
         }
 
         #[test]
+        fn ping_response_ipv4() {
+            let msg = decode_bencode::<PingResponse>(
+                b"d2:ip6:abcdef1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                PingResponse {
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"mnopqrstuvwxyz123456"),
+                    your_addr: Some("97.98.99.100:25958".parse().unwrap()),
+                }
+            );
+        }
+
+        #[test]
+        fn ping_response_ipv6() {
+            let msg = decode_bencode::<PingResponse>(
+                b"d2:ip18:abcdefghijklmnopqr1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re",
+            )
+            .unwrap();
+            assert_eq!(
+                msg,
+                PingResponse {
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"mnopqrstuvwxyz123456"),
+                    your_addr: Some(
+                        "[6162:6364:6566:6768:696a:6b6c:6d6e:6f70]:29042"
+                            .parse()
+                            .unwrap()
+                    ),
+                }
+            );
+        }
+
+        #[test]
         fn find_node_response() {
             let msg = decode_bencode::<FindNodeResponse>(
                 b"d1:rd2:id20:0123456789abcdefghij5:nodes26:mnopqrstuvwxyz123456iiiippe1:t2:aa1:y1:re",
@@ -676,6 +714,29 @@ mod tests {
         }
 
         #[test]
+        fn get_peers_response_ipv6_values() {
+            let msg = decode_bencode::<GetPeersResponse>(b"d1:rd2:id20:abcdefghij01234567895:token8:aoeusnth6:valuesl6:axje.u18:iiiiiiiiiiiiiiiippee1:t2:aa1:y1:re").unwrap();
+            assert_eq!(
+                msg,
+                GetPeersResponse {
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"abcdefghij0123456789"),
+                    values: vec![
+                        "97.120.106.101:11893".parse().unwrap(),
+                        "[6969:6969:6969:6969:6969:6969:6969:6969]:28784"
+                            .parse()
+                            .unwrap(),
+                    ],
+                    nodes: Vec::new(),
+                    nodes6: Vec::new(),
+                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    your_addr: None,
+                }
+            );
+        }
+
+        #[test]
         fn get_peers_response_nodes() {
             let msg = decode_bencode::<GetPeersResponse>(b"d1:rd2:id20:abcdefghij01234567895:nodes26:mnopqrstuvwxyz123456iiiipp5:token8:aoeusnthe1:t2:aa1:y1:re").unwrap();
             assert_eq!(
@@ -691,6 +752,28 @@ mod tests {
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
+                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    your_addr: None,
+                }
+            );
+        }
+
+        #[test]
+        fn get_peers_response_nodes6() {
+            let msg = decode_bencode::<GetPeersResponse>(b"d1:rd2:id20:abcdefghij01234567896:nodes638:mnopqrstuvwxyz123456iiiiiiiiiiiiiiiipp5:token8:aoeusnthe1:t2:aa1:y1:re").unwrap();
+            assert_eq!(
+                msg,
+                GetPeersResponse {
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"abcdefghij0123456789"),
+                    values: Vec::new(),
+                    nodes: Vec::new(),
+                    nodes6: vec![NodeInfo {
+                        id: NodeId::from(b"mnopqrstuvwxyz123456"),
+                        ip: "6969:6969:6969:6969:6969:6969:6969:6969".parse().unwrap(),
+                        port: 28784,
+                    }],
                     token: Bytes::from(b"aoeusnth".as_slice()),
                     your_addr: None,
                 }
@@ -740,25 +823,74 @@ mod tests {
             };
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe");
         }
+
+        #[test]
+        fn get_peers_query_want_n4() {
+            let msg = GetPeersQuery {
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
+                info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
+                read_only: None,
+                want: Some(vec![Want::N4]),
+            };
+            assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz1234564:wantl2:n4ee1:q9:get_peers1:t2:aa1:y1:qe");
+        }
+
+        #[test]
+        fn get_peers_query_want_n6() {
+            let msg = GetPeersQuery {
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
+                info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
+                read_only: None,
+                want: Some(vec![Want::N6]),
+            };
+            assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz1234564:wantl2:n6ee1:q9:get_peers1:t2:aa1:y1:qe");
+        }
+
+        #[test]
+        fn get_peers_query_want_n4_n6() {
+            let msg = GetPeersQuery {
+                transaction_id: Bytes::from(b"aa".as_slice()),
+                client: None,
+                node_id: NodeId::from(b"abcdefghij0123456789"),
+                info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
+                read_only: None,
+                want: Some(vec![Want::N4, Want::N6]),
+            };
+            assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz1234564:wantl2:n42:n6ee1:q9:get_peers1:t2:aa1:y1:qe");
+        }
     }
 
-    #[test]
-    fn get_transaction_id_ok() {
-        let t = get_transaction_id(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice())
-            .unwrap();
-        assert_eq!(t, b"aa".as_slice());
+    mod get_transaction_id {
+        use super::*;
+
+        #[test]
+        fn ok() {
+            let t =
+                get_transaction_id(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice())
+                    .unwrap();
+            assert_eq!(t, b"aa".as_slice());
+        }
+
+        #[test]
+        fn empty() {
+            let e = get_transaction_id(b"".as_slice()).unwrap_err();
+            assert_eq!(e.to_string(), "missing field: t");
+        }
+
+        #[test]
+        fn no_t() {
+            let e = get_transaction_id(b"d1:eli201e5:Ouch.e1:y1:ee".as_slice()).unwrap_err();
+            assert_eq!(e.to_string(), "missing field: t");
+        }
+
+        #[test]
+        fn not_dict() {
+            let e = get_transaction_id(b"li201e5:Ouch.e".as_slice()).unwrap_err();
+            assert_eq!(e.to_string(), "discovered List but expected Dict");
+        }
     }
 }
-
-// TO TEST:
-// - Decoding:
-//  - "values" has IPv6 peers
-//  - "nodes6"
-//  - "ip" = IPv4
-//  - "ip" = IPv6
-// - Encoding:
-//  - "want"
-// - get_transaction_id:
-//  - empty message
-//  - no `t` field
-//  - top-level structure not dict
