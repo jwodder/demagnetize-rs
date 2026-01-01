@@ -16,8 +16,15 @@ pub(crate) struct DhtActor {
 // - Looking up the peers for an info hash
 // - Adding a node in response to a PORT peer message
 // - Refreshing buckets after 15 minutes of inactivity
+//  - Do this via a task that queries expired buckets every 60 seconds
+//  - Exactly what nodes should the "find_nodes" queries be sent to?
 // - Rebuilding in response to a change in our IP address
 // - "Upon inserting the first node into its routing table and when starting up
 //   thereafter, the node should attempt to find the closest nodes in the DHT
 //   to itself.  It does this by issuing find_node messages to closer and
 //   closer nodes until it cannot find any closer."
+
+// Notes:
+// - If an RPC response indicates that a remote node's ID has changed, remove
+//   the old node ID from the table/mark it bad and then insert the new node
+//   info

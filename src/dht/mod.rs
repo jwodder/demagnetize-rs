@@ -2,11 +2,12 @@
 mod actor;
 mod messages;
 mod table;
-use crate::util::{PacketError, TryFromBuf};
+use crate::compact::{FromCompact, FromCompactError};
+use crate::util::{PacketError, TryBytes, TryFromBuf};
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
-use thiserror::Error;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct NodeId([u8; 20]);
@@ -47,9 +48,10 @@ impl FromBencode for NodeId {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<NodeId, BendyError> {
         let bs = object.try_into_bytes()?;
         let Ok(bytes) = bs.try_into() else {
-            return Err(BendyError::malformed_content(NodeIdFromBytesError(
-                bs.len(),
-            )));
+            return Err(BendyError::malformed_content(FromCompactError {
+                ty: "NodeId",
+                length: bs.len(),
+            }));
         };
         Ok(NodeId(bytes))
     }
@@ -63,6 +65,46 @@ impl ToBencode for NodeId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
-#[error("node ID is {0} bytes long, expected 20")]
-struct NodeIdFromBytesError(usize);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NodeInfo<T> {
+    id: NodeId,
+    ip: T,
+    port: u16,
+}
+
+impl FromCompact for NodeInfo<Ipv4Addr> {
+    type Error = FromCompactError;
+
+    fn from_compact(bs: &[u8]) -> Result<NodeInfo<Ipv4Addr>, FromCompactError> {
+        let e = FromCompactError {
+            ty: "NodeInfo<Ipv4Addr>",
+            length: bs.len(),
+        };
+        let mut buf = TryBytes::from(bs);
+        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
+        let ip = buf.try_get::<Ipv4Addr>().map_err(|_| e)?;
+        let port = buf.try_get::<u16>().map_err(|_| e)?;
+        buf.eof().map_err(|_| e)?;
+        Ok(NodeInfo { id, ip, port })
+    }
+}
+
+impl FromCompact for NodeInfo<Ipv6Addr> {
+    type Error = FromCompactError;
+
+    fn from_compact(bs: &[u8]) -> Result<NodeInfo<Ipv6Addr>, FromCompactError> {
+        let e = FromCompactError {
+            ty: "NodeInfo<Ipv6Addr>",
+            length: bs.len(),
+        };
+        let mut buf = TryBytes::from(bs);
+        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
+        let ip = buf.try_get::<Ipv6Addr>().map_err(|_| e)?;
+        let port = buf.try_get::<u16>().map_err(|_| e)?;
+        buf.eof().map_err(|_| e)?;
+        Ok(NodeInfo { id, ip, port })
+    }
+}
+
+impl_vec_fromcompact!(NodeInfo<Ipv4Addr>, 26);
+impl_vec_fromcompact!(NodeInfo<Ipv6Addr>, 38);

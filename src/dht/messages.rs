@@ -1,12 +1,11 @@
-use super::NodeId;
-use crate::compact::{AsCompact, FromCompact, FromCompactError};
+use super::{NodeId, NodeInfo};
+use crate::compact::AsCompact;
 use crate::peer::Peer;
 use crate::types::InfoHash;
-use crate::util::TryBytes;
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
 use bytes::Bytes;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,8 +154,8 @@ pub(super) struct FindNodeResponse {
     pub(super) transaction_id: Bytes,
     pub(super) client: Option<String>,
     pub(super) node_id: NodeId,
-    pub(super) nodes: Vec<NodeInfo>,
-    pub(super) nodes6: Vec<NodeInfo>,
+    pub(super) nodes: Vec<NodeInfo<Ipv4Addr>>,
+    pub(super) nodes6: Vec<NodeInfo<Ipv6Addr>>,
     pub(super) your_addr: Option<SocketAddr>,
 }
 
@@ -199,14 +198,20 @@ impl FromBencode for FindNodeResponse {
                                     Some(NodeId::decode_bencode_object(rval).context("r.id")?);
                             }
                             (b"nodes", rval) => {
-                                let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
+                                let ns =
+                                    AsCompact::<Vec<NodeInfo<Ipv4Addr>>>::decode_bencode_object(
+                                        rval,
+                                    )
                                     .context("r.nodes")?;
-                                nodes.extend(ns.0.into_iter().map(NodeInfo::from));
+                                nodes.extend(ns.0);
                             }
                             (b"nodes6", rval) => {
-                                let ns = AsCompact::<Vec<NodeInfoV6>>::decode_bencode_object(rval)
+                                let ns =
+                                    AsCompact::<Vec<NodeInfo<Ipv6Addr>>>::decode_bencode_object(
+                                        rval,
+                                    )
                                     .context("r.nodes6")?;
-                                nodes6.extend(ns.0.into_iter().map(NodeInfo::from));
+                                nodes6.extend(ns.0);
                             }
                             _ => (),
                         }
@@ -284,8 +289,8 @@ pub(super) struct GetPeersResponse {
     pub(super) client: Option<String>,
     pub(super) node_id: NodeId,
     pub(super) values: Vec<Peer>,
-    pub(super) nodes: Vec<NodeInfo>,
-    pub(super) nodes6: Vec<NodeInfo>,
+    pub(super) nodes: Vec<NodeInfo<Ipv4Addr>>,
+    pub(super) nodes6: Vec<NodeInfo<Ipv6Addr>>,
     pub(super) token: Bytes,
     pub(super) your_addr: Option<SocketAddr>,
 }
@@ -331,14 +336,20 @@ impl FromBencode for GetPeersResponse {
                                     Some(NodeId::decode_bencode_object(rval).context("r.id")?);
                             }
                             (b"nodes", rval) => {
-                                let ns = AsCompact::<Vec<NodeInfoV4>>::decode_bencode_object(rval)
+                                let ns =
+                                    AsCompact::<Vec<NodeInfo<Ipv4Addr>>>::decode_bencode_object(
+                                        rval,
+                                    )
                                     .context("r.nodes")?;
-                                nodes.extend(ns.0.into_iter().map(NodeInfo::from));
+                                nodes.extend(ns.0);
                             }
                             (b"nodes6", rval) => {
-                                let ns = AsCompact::<Vec<NodeInfoV6>>::decode_bencode_object(rval)
+                                let ns =
+                                    AsCompact::<Vec<NodeInfo<Ipv6Addr>>>::decode_bencode_object(
+                                        rval,
+                                    )
                                     .context("r.nodes6")?;
-                                nodes6.extend(ns.0.into_iter().map(NodeInfo::from));
+                                nodes6.extend(ns.0);
                             }
                             (b"values", rval) => {
                                 let mut vs = rval.try_into_list().context("r.values")?;
@@ -474,85 +485,6 @@ impl From<ErrorResponse> for RpcError {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct NodeInfo {
-    pub(super) id: NodeId,
-    pub(super) ip: IpAddr,
-    pub(super) port: u16,
-}
-
-impl From<NodeInfoV4> for NodeInfo {
-    fn from(value: NodeInfoV4) -> NodeInfo {
-        NodeInfo {
-            id: value.id,
-            ip: value.ip.into(),
-            port: value.port,
-        }
-    }
-}
-
-impl From<NodeInfoV6> for NodeInfo {
-    fn from(value: NodeInfoV6) -> NodeInfo {
-        NodeInfo {
-            id: value.id,
-            ip: value.ip.into(),
-            port: value.port,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct NodeInfoV4 {
-    id: NodeId,
-    ip: Ipv4Addr,
-    port: u16,
-}
-
-impl FromCompact for NodeInfoV4 {
-    type Error = FromCompactError;
-
-    fn from_compact(bs: &[u8]) -> Result<NodeInfoV4, FromCompactError> {
-        let e = FromCompactError {
-            ty: "NodeInfoV4",
-            length: bs.len(),
-        };
-        let mut buf = TryBytes::from(bs);
-        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
-        let ip = buf.try_get::<Ipv4Addr>().map_err(|_| e)?;
-        let port = buf.try_get::<u16>().map_err(|_| e)?;
-        buf.eof().map_err(|_| e)?;
-        Ok(NodeInfoV4 { id, ip, port })
-    }
-}
-
-impl_vec_fromcompact!(NodeInfoV4, 26);
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct NodeInfoV6 {
-    id: NodeId,
-    ip: Ipv6Addr,
-    port: u16,
-}
-
-impl FromCompact for NodeInfoV6 {
-    type Error = FromCompactError;
-
-    fn from_compact(bs: &[u8]) -> Result<NodeInfoV6, FromCompactError> {
-        let e = FromCompactError {
-            ty: "NodeInfoV6",
-            length: bs.len(),
-        };
-        let mut buf = TryBytes::from(bs);
-        let id = buf.try_get::<NodeId>().map_err(|_| e)?;
-        let ip = buf.try_get::<Ipv6Addr>().map_err(|_| e)?;
-        let port = buf.try_get::<u16>().map_err(|_| e)?;
-        buf.eof().map_err(|_| e)?;
-        Ok(NodeInfoV6 { id, ip, port })
-    }
-}
-
-impl_vec_fromcompact!(NodeInfoV6, 38);
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Want {
     N4,
@@ -683,7 +615,7 @@ mod tests {
                     node_id: NodeId::from(b"0123456789abcdefghij"),
                     nodes: vec![NodeInfo {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
-                        ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
+                        ip: Ipv4Addr::new(105, 105, 105, 105),
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
@@ -748,7 +680,7 @@ mod tests {
                     values: Vec::new(),
                     nodes: vec![NodeInfo {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
-                        ip: IpAddr::V4(Ipv4Addr::new(105, 105, 105, 105)),
+                        ip: Ipv4Addr::new(105, 105, 105, 105),
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
