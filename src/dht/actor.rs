@@ -22,7 +22,6 @@ use bytes::{Bytes, BytesMut};
 use rand::Rng;
 use std::collections::{HashMap, hash_map::Entry};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Mutex;
 use thiserror::Error;
 use tokio::{
     net::UdpSocket,
@@ -40,7 +39,7 @@ pub(crate) struct DhtActor {
     ipv4_socket: UdpSocket,
     ipv6_socket: UdpSocket,
     action_recv: mpsc::Receiver<ActorMessage>,
-    awaiting_responses: Mutex<HashMap<SocketAddr, HashMap<Bytes, InFlight>>>,
+    awaiting_responses: HashMap<SocketAddr, HashMap<Bytes, InFlight>>,
 }
 
 impl DhtActor {
@@ -77,7 +76,7 @@ impl DhtActor {
             ipv4_socket,
             ipv6_socket,
             action_recv: receiver,
-            awaiting_responses: Mutex::new(HashMap::new()),
+            awaiting_responses: HashMap::new(),
         };
         let handle = DhtHandle { sender };
         Ok((actor, handle))
@@ -129,13 +128,9 @@ impl DhtActor {
         }
     }
 
-    fn handle_rpc_message(&self, msg: BytesMut, sender: SocketAddr) {
+    fn handle_rpc_message(&mut self, msg: BytesMut, sender: SocketAddr) {
         let (in_flight, is_err) = {
-            let mut flying = self
-                .awaiting_responses
-                .lock()
-                .expect("awaiting_responses lock should not be poisoned");
-            let Entry::Occupied(mut expected) = flying.entry(sender) else {
+            let Entry::Occupied(mut expected) = self.awaiting_responses.entry(sender) else {
                 log::debug!("DHT node received unexpected packet from {sender}; discarding");
                 return;
             };
@@ -226,7 +221,7 @@ impl DhtActor {
         }
     }
 
-    async fn ping(&self, node_id: Option<NodeId>, ip: IpAddr, port: u16) {
+    async fn ping(&mut self, node_id: Option<NodeId>, ip: IpAddr, port: u16) {
         let transaction_id = gen_transaction_id();
         let addr = SocketAddr::from((ip, port));
         let query = messages::PingQuery {
@@ -260,8 +255,6 @@ impl DhtActor {
             failures: 0,
         };
         self.awaiting_responses
-            .lock()
-            .expect("awaiting_responses lock should not be poisoned")
             .entry(addr)
             .or_default()
             .insert(transaction_id, in_flight);
