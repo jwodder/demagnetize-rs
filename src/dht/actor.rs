@@ -44,7 +44,7 @@ impl DhtActor {
         // TODO: Use a dedicated error type?
         let ipv4_socket = UdpSocket::bind("0.0.0.0:0").await?;
         match ipv4_socket.local_addr() {
-            Ok(addr) => log::debug!(
+            Ok(addr) => log::trace!(
                 "DHT node using UDP port {} for IPv4 communication",
                 addr.port()
             ),
@@ -54,7 +54,7 @@ impl DhtActor {
         }
         let ipv6_socket = UdpSocket::bind("[::]:0").await?;
         match ipv6_socket.local_addr() {
-            Ok(addr) => log::debug!(
+            Ok(addr) => log::trace!(
                 "DHT node using UDP port {} for IPv6 communication",
                 addr.port()
             ),
@@ -111,12 +111,12 @@ impl DhtActor {
     async fn handle_rpc_message(&mut self, msg: BytesMut, sender: SocketAddr) {
         let (in_flight, is_err) = {
             let Entry::Occupied(mut expected) = self.awaiting_responses.entry(sender) else {
-                log::debug!("DHT node received unexpected packet from {sender}; discarding");
+                log::trace!("DHT node received unexpected packet from {sender}; discarding");
                 return;
             };
             let is_err = match messages::get_message_type(&msg) {
                 Ok(b"q") => {
-                    log::debug!("DHT node received a query from {sender}; ignoring");
+                    log::trace!("DHT node received a query from {sender}; ignoring");
                     return;
                 }
                 Ok(b"r") => false,
@@ -127,7 +127,7 @@ impl DhtActor {
             let transaction_id = match messages::get_transaction_id(&msg) {
                 Ok(t) => t,
                 Err(e) => {
-                    log::debug!(
+                    log::trace!(
                         "DHT node received packet from {sender} without valid transaction ID: {}",
                         ErrorChain(e)
                     );
@@ -135,7 +135,7 @@ impl DhtActor {
                 }
             };
             let Some(in_flight) = expected.get_mut().remove(&transaction_id) else {
-                log::debug!("DHT node received reply from {sender} with unexpected transaction ID");
+                log::trace!("DHT node received reply from {sender} with unexpected transaction ID");
                 return;
             };
             if expected.get().is_empty() {
@@ -155,12 +155,12 @@ impl DhtActor {
                     match decode_bencode::<messages::ErrorResponse>(&msg) {
                         Ok(r) => {
                             let e = messages::RpcError::from(r);
-                            log::debug!(
+                            log::trace!(
                                 "DHT node received error from {sender} in response to ping: {}",
                                 ErrorChain(e)
                             );
                         }
-                        Err(e) => log::debug!(
+                        Err(e) => log::trace!(
                             "DHT node received malformed error message from node at {sender} in response to ping: {}",
                             ErrorChain(e)
                         ),
@@ -175,20 +175,20 @@ impl DhtActor {
                             } else {
                                 String::new()
                             };
-                            log::debug!(
+                            log::trace!(
                                 "DHT node received ping response from node {} at {sender}{}",
                                 r.node_id,
                                 about_client
                             );
                             if let Some(old_id) = node_id {
                                 if old_id == r.node_id {
-                                    log::debug!(
+                                    log::trace!(
                                         "Marking DHT node {} at {sender} as active",
                                         r.node_id
                                     );
                                     self.table.mark_active(r.node_id, ip.is_ipv6());
                                 } else {
-                                    log::debug!(
+                                    log::trace!(
                                         "DHT node at {sender} changed node ID from {old_id} to {}; marking old node as bad",
                                         r.node_id
                                     );
@@ -209,14 +209,14 @@ impl DhtActor {
                             while let Some(n) = insert_queue.pop_front() {
                                 match self.table.insert(n) {
                                     InsertResult::Inserted => {
-                                        log::debug!("Inserted {n} into DHT routing table");
+                                        log::trace!("Inserted {n} into DHT routing table");
                                     }
-                                    InsertResult::Discarded => log::debug!(
+                                    InsertResult::Discarded => log::trace!(
                                         "Tried to insert {n} into DHT routing table, but bucket is full; discarding"
                                     ),
                                     InsertResult::NeedToPing(new_node) => {
                                         insert_queue.push_front(n);
-                                        log::debug!(
+                                        log::trace!(
                                             "Tried to insert {n} into DHT routing table, but bucket is full; pinging {new_node} first"
                                         );
                                         self.ping(
@@ -232,7 +232,7 @@ impl DhtActor {
                             }
                         }
                         Err(e) => {
-                            log::debug!(
+                            log::trace!(
                                 "DHT node received malformed ping response from node at {sender}: {}",
                                 ErrorChain(e)
                             );
