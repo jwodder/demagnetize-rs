@@ -10,9 +10,9 @@
 //   closer nodes until it cannot find any closer."
 
 #![expect(unused_variables)]
-use super::NodeId;
 use super::messages;
-use super::table::DhtTable;
+use super::table::{DhtTable, InsertResult};
+use super::{NodeId, NodeInfo};
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -20,7 +20,7 @@ use crate::util::{ErrorChain, decode_bencode};
 use bendy::encoding::ToBencode;
 use bytes::{Bytes, BytesMut};
 use rand::Rng;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap, VecDeque, hash_map::Entry};
 use std::net::{IpAddr, SocketAddr};
 use tokio::{
     net::UdpSocket,
@@ -86,19 +86,19 @@ impl DhtActor {
                             let _ = response_to.send(data);
                         }
                         ActorMessage::LookupPeers {info_hash, response_to} => todo!(),
-                        ActorMessage::NewNode {ip, port} => self.ping(None, ip, port).await,
+                        ActorMessage::NewNode {ip, port} => self.ping(None, ip, port, VecDeque::new()).await,
                         ActorMessage::Shutdown => return,
                     }
                 }
                 r = self.ipv4_socket.recv_buf_from(&mut ipv4_packet) => {
                     match r {
-                        Ok((_, addr)) => self.handle_rpc_message(ipv6_packet, addr),
+                        Ok((_, addr)) => self.handle_rpc_message(ipv6_packet, addr).await,
                         Err(e) => log::warn!("Error receiving incoming DHT packet on IPv4: {e}"),
                     }
                 }
                 r = self.ipv6_socket.recv_buf_from(&mut ipv6_packet) => {
                     match r {
-                        Ok((_, addr)) => self.handle_rpc_message(ipv6_packet, addr),
+                        Ok((_, addr)) => self.handle_rpc_message(ipv6_packet, addr).await,
                         Err(e) => log::warn!("Error receiving incoming DHT packet on IPv6: {e}"),
                     }
                 }
@@ -108,7 +108,7 @@ impl DhtActor {
         }
     }
 
-    fn handle_rpc_message(&mut self, msg: BytesMut, sender: SocketAddr) {
+    async fn handle_rpc_message(&mut self, msg: BytesMut, sender: SocketAddr) {
         let (in_flight, is_err) = {
             let Entry::Occupied(mut expected) = self.awaiting_responses.entry(sender) else {
                 log::debug!("DHT node received unexpected packet from {sender}; discarding");
@@ -145,7 +145,11 @@ impl DhtActor {
         };
         match in_flight {
             InFlight::Ping {
-                ip, port, node_id, ..
+                ip,
+                port,
+                node_id,
+                mut insert_queue,
+                ..
             } => {
                 if is_err {
                     match decode_bencode::<messages::ErrorResponse>(&msg) {
@@ -178,12 +182,53 @@ impl DhtActor {
                             );
                             if let Some(old_id) = node_id {
                                 if old_id == r.node_id {
-                                    todo!("Mark node as good")
+                                    log::debug!(
+                                        "Marking DHT node {} at {sender} as active",
+                                        r.node_id
+                                    );
+                                    self.table.mark_active(r.node_id, ip.is_ipv6());
                                 } else {
-                                    todo!("Remove old node/mark it bad and insert new one")
+                                    log::debug!(
+                                        "DHT node at {sender} changed node ID from {old_id} to {}; marking old node as bad",
+                                        r.node_id
+                                    );
+                                    self.table.mark_bad(old_id, ip.is_ipv6());
+                                    insert_queue.push_back(NodeInfo {
+                                        id: r.node_id,
+                                        ip,
+                                        port,
+                                    });
                                 }
                             } else {
-                                todo!("Insert node into table")
+                                insert_queue.push_back(NodeInfo {
+                                    id: r.node_id,
+                                    ip,
+                                    port,
+                                });
+                            }
+                            while let Some(n) = insert_queue.pop_front() {
+                                match self.table.insert(n) {
+                                    InsertResult::Inserted => {
+                                        log::debug!("Inserted {n} into DHT routing table");
+                                    }
+                                    InsertResult::Discarded => log::debug!(
+                                        "Tried to insert {n} into DHT routing table, but bucket is full; discarding"
+                                    ),
+                                    InsertResult::NeedToPing(new_node) => {
+                                        insert_queue.push_front(n);
+                                        log::debug!(
+                                            "Tried to insert {n} into DHT routing table, but bucket is full; pinging {new_node} first"
+                                        );
+                                        self.ping(
+                                            Some(new_node.id),
+                                            new_node.ip,
+                                            new_node.port,
+                                            insert_queue,
+                                        )
+                                        .await;
+                                        return;
+                                    }
+                                }
                             }
                         }
                         Err(e) => {
@@ -201,7 +246,15 @@ impl DhtActor {
         }
     }
 
-    async fn ping(&mut self, node_id: Option<NodeId>, ip: IpAddr, port: u16) {
+    async fn ping(
+        &mut self,
+        node_id: Option<NodeId>,
+        ip: IpAddr,
+        port: u16,
+        insert_queue: VecDeque<NodeInfo<IpAddr>>,
+    ) {
+        // TODO: What should happen to the original cause for the ping if
+        // sending the query fails?
         let transaction_id = gen_transaction_id();
         let addr = SocketAddr::from((ip, port));
         let query = messages::PingQuery {
@@ -233,6 +286,7 @@ impl DhtActor {
             port,
             node_id,
             failures: 0,
+            insert_queue,
         };
         self.awaiting_responses
             .entry(addr)
@@ -303,6 +357,12 @@ enum InFlight {
         port: u16,
         node_id: Option<NodeId>,
         failures: usize,
+
+        /// If this ping was issued in response to an attempt to insert a node
+        /// into a full bucket, `insert_queue` contains the original
+        /// to-be-inserted node followed by any insertions similarly delayed
+        /// after it.
+        insert_queue: VecDeque<NodeInfo<IpAddr>>,
     },
     // find_node
     // get_peers

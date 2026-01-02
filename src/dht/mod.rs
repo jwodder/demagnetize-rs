@@ -8,7 +8,7 @@ use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_util::either::Either;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -97,6 +97,13 @@ impl NodeInfo<IpAddr> {
                 port: self.port,
             }),
         }
+    }
+}
+
+impl<T: Into<IpAddr> + Copy> fmt::Display for NodeInfo<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let addr = SocketAddr::from((self.ip, self.port));
+        write!(f, "DHT node {} at {addr}", self.id)
     }
 }
 
