@@ -8,7 +8,8 @@ use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
 use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use tokio_util::either::Either;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct NodeId([u8; 20]);
@@ -80,6 +81,43 @@ struct NodeInfo<T> {
     id: NodeId,
     ip: T,
     port: u16,
+}
+
+impl NodeInfo<IpAddr> {
+    fn discriminate(self) -> Either<NodeInfo<Ipv4Addr>, NodeInfo<Ipv6Addr>> {
+        match self.ip {
+            IpAddr::V4(ip) => Either::Left(NodeInfo {
+                id: self.id,
+                ip,
+                port: self.port,
+            }),
+            IpAddr::V6(ip) => Either::Right(NodeInfo {
+                id: self.id,
+                ip,
+                port: self.port,
+            }),
+        }
+    }
+}
+
+impl From<NodeInfo<Ipv4Addr>> for NodeInfo<IpAddr> {
+    fn from(value: NodeInfo<Ipv4Addr>) -> NodeInfo<IpAddr> {
+        NodeInfo {
+            id: value.id,
+            ip: value.ip.into(),
+            port: value.port,
+        }
+    }
+}
+
+impl From<NodeInfo<Ipv6Addr>> for NodeInfo<IpAddr> {
+    fn from(value: NodeInfo<Ipv6Addr>) -> NodeInfo<IpAddr> {
+        NodeInfo {
+            id: value.id,
+            ip: value.ip.into(),
+            port: value.port,
+        }
+    }
 }
 
 impl FromCompact for NodeInfo<Ipv4Addr> {

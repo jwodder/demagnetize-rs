@@ -1,17 +1,27 @@
 use super::{NodeId, NodeInfo};
 use crate::types::InfoHash;
+use rand::Rng;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::SystemTime;
 use thiserror::Error;
+use tokio_util::either::Either;
 
 // BEP 5's `K` value
 const MAX_BUCKET_SIZE: usize = 8;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct NodeTable<T>(Subtable<T>);
+pub(crate) struct DhtTable {
+    my_id: NodeId,
+    ipv4: NodeTable<Ipv4Addr>,
+    ipv6: NodeTable<Ipv6Addr>,
+}
 
-impl<T> NodeTable<T> {
-    pub(super) fn new() -> Self {
-        NodeTable(Subtable::Bucket(Bucket::new()))
+impl DhtTable {
+    pub(crate) fn new<R: Rng>(mut rng: R) -> DhtTable {
+        let my_id = NodeId(rng.random());
+        let ipv4 = NodeTable::new();
+        let ipv6 = NodeTable::new();
+        DhtTable { my_id, ipv4, ipv6 }
     }
 
     /// Returns the serialized information needed to save the routing table to
@@ -22,8 +32,82 @@ impl<T> NodeTable<T> {
         todo!()
     }
 
-    pub(super) fn deserialize(_bs: &[u8]) -> Result<NodeTable<T>, DeserializeNodeTableError> {
+    pub(crate) fn deserialize(_bs: &[u8]) -> Result<DhtTable, DeserializeDhtError> {
         todo!()
+    }
+
+    pub(super) fn my_id(&self) -> NodeId {
+        self.my_id
+    }
+
+    /// Insert a node into the table
+    // Possible results:
+    //  - New node is inserted (possibly replacing a bad node)
+    //  - New node is discarded
+    //  - Bucket is split and new node is inserted
+    //   - Should this technically be done as soon as the bucket becomes full
+    //     rather than on trying to add to a full bucket?
+    //  - Most questionable node needs to be pinged first
+    pub(super) fn insert(&mut self, node: NodeInfo<IpAddr>) -> InsertResult<IpAddr> {
+        match node.discriminate() {
+            Either::Left(n4) => self.ipv4.insert(n4).into(),
+            Either::Right(n6) => self.ipv6.insert(n6).into(),
+        }
+    }
+
+    /// Return the nodes closest to the given info hash
+    pub(super) fn nearest_nodes(&self, info_hash: InfoHash) -> Vec<NodeInfo<IpAddr>> {
+        self.ipv4
+            .nearest_nodes(info_hash)
+            .into_iter()
+            .map(NodeInfo::<IpAddr>::from)
+            .chain(
+                self.ipv6
+                    .nearest_nodes(info_hash)
+                    .into_iter()
+                    .map(NodeInfo::<IpAddr>::from),
+            )
+            .collect()
+    }
+
+    /// Mark a node as currently active after a successful ping
+    pub(super) fn mark_active(&mut self, id: NodeId, is_ipv6: bool) {
+        if is_ipv6 {
+            self.ipv6.mark_active(id);
+        } else {
+            self.ipv4.mark_active(id);
+        }
+    }
+
+    /// Mark a node as having failed to respond to multiple queries in a row
+    pub(super) fn mark_bad(&mut self, id: NodeId, is_ipv6: bool) {
+        if is_ipv6 {
+            self.ipv6.mark_bad(id);
+        } else {
+            self.ipv4.mark_bad(id);
+        }
+    }
+
+    // For each (nonempty?) bucket whose "last_changed" field is > 15 minutes
+    // old, return a random node ID in the bucket's range (which the caller
+    // will then send "find_nodes" queries for)
+    //
+    // TODO: What should happen to such buckets afterwards?  Could this result
+    // in an old bucket repeatedly generating a new refresh target on every
+    // call?
+    pub(super) fn refresh_targets(&self) -> Vec<NodeId> {
+        let mut targets = self.ipv4.refresh_targets();
+        targets.extend(self.ipv6.refresh_targets());
+        targets
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct NodeTable<T>(Subtable<T>);
+
+impl<T> NodeTable<T> {
+    pub(super) fn new() -> Self {
+        NodeTable(Subtable::Bucket(Bucket::new()))
     }
 
     /// Insert a node into the table
@@ -144,6 +228,26 @@ pub(super) enum InsertResult<T> {
     NeedToPing(NodeInfo<T>),
 }
 
+impl From<InsertResult<Ipv4Addr>> for InsertResult<IpAddr> {
+    fn from(value: InsertResult<Ipv4Addr>) -> InsertResult<IpAddr> {
+        match value {
+            InsertResult::Inserted => InsertResult::Inserted,
+            InsertResult::Discarded => InsertResult::Discarded,
+            InsertResult::NeedToPing(node) => InsertResult::NeedToPing(node.into()),
+        }
+    }
+}
+
+impl From<InsertResult<Ipv6Addr>> for InsertResult<IpAddr> {
+    fn from(value: InsertResult<Ipv6Addr>) -> InsertResult<IpAddr> {
+        match value {
+            InsertResult::Inserted => InsertResult::Inserted,
+            InsertResult::Discarded => InsertResult::Discarded,
+            InsertResult::NeedToPing(node) => InsertResult::NeedToPing(node.into()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[error("TODO")]
-pub(super) struct DeserializeNodeTableError;
+pub(super) struct DeserializeDhtError;

@@ -12,7 +12,7 @@
 #![expect(unused_variables)]
 use super::NodeId;
 use super::messages;
-use super::table::NodeTable;
+use super::table::DhtTable;
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -21,8 +21,7 @@ use bendy::encoding::ToBencode;
 use bytes::{Bytes, BytesMut};
 use rand::Rng;
 use std::collections::{HashMap, hash_map::Entry};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use thiserror::Error;
+use std::net::{IpAddr, SocketAddr};
 use tokio::{
     net::UdpSocket,
     sync::{mpsc, oneshot},
@@ -33,9 +32,7 @@ const TRANSACTION_ID_LENGTH: usize = 2;
 
 #[derive(Debug)]
 pub(crate) struct DhtActor {
-    my_id: NodeId,
-    ipv4: NodeTable<Ipv4Addr>,
-    ipv6: NodeTable<Ipv6Addr>,
+    table: DhtTable,
     ipv4_socket: UdpSocket,
     ipv6_socket: UdpSocket,
     action_recv: mpsc::Receiver<ActorMessage>,
@@ -43,7 +40,7 @@ pub(crate) struct DhtActor {
 }
 
 impl DhtActor {
-    pub(crate) async fn new<R: Rng>(mut rng: R) -> std::io::Result<(DhtActor, DhtHandle)> {
+    pub(crate) async fn new(table: DhtTable) -> std::io::Result<(DhtActor, DhtHandle)> {
         // TODO: Use a dedicated error type?
         let ipv4_socket = UdpSocket::bind("0.0.0.0:0").await?;
         match ipv4_socket.local_addr() {
@@ -65,14 +62,9 @@ impl DhtActor {
                 log::warn!("Could not determine local address for DHT UDP socket on IPv6: {e}");
             }
         }
-        let my_id = NodeId(rng.random());
-        let ipv4 = NodeTable::new();
-        let ipv6 = NodeTable::new();
         let (sender, receiver) = mpsc::channel(ACTION_CHANNEL_SIZE);
         let actor = DhtActor {
-            my_id,
-            ipv4,
-            ipv6,
+            table,
             ipv4_socket,
             ipv6_socket,
             action_recv: receiver,
@@ -82,27 +74,15 @@ impl DhtActor {
         Ok((actor, handle))
     }
 
-    /// Returns the serialized information needed to save the routing table to
-    /// disk
-    fn serialize(&self) -> Vec<u8> {
-        todo!()
-    }
-
-    pub(crate) fn deserialize(_bs: &[u8]) -> Result<(DhtActor, DhtHandle), DeserializeDhtError> {
-        todo!()
-    }
-
     pub(crate) async fn run(mut self) {
         loop {
             let mut ipv4_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
             let mut ipv6_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
             tokio::select! {
-                // TODO: Use async-channel instead of tokio's mpsc so we don't
-                // get into trouble with mutability of the receiver?
                 Some(msg) = self.action_recv.recv() => {
                     match msg {
                         ActorMessage::Serialize {response_to} => {
-                            let data = self.serialize();
+                            let data = self.table.serialize();
                             let _ = response_to.send(data);
                         }
                         ActorMessage::LookupPeers {info_hash, response_to} => todo!(),
@@ -187,7 +167,7 @@ impl DhtActor {
                     match decode_bencode::<messages::PingResponse>(&msg) {
                         Ok(r) => {
                             let about_client = if let Some(ref v) = r.client {
-                                format!(" (client = {v:?})")
+                                format!(" (client: {v:?})")
                             } else {
                                 String::new()
                             };
@@ -227,7 +207,7 @@ impl DhtActor {
         let query = messages::PingQuery {
             transaction_id: transaction_id.clone(),
             client: None, // TODO
-            node_id: self.my_id,
+            node_id: self.table.my_id(),
             read_only: Some(true),
         };
         let msg = match query.to_bencode() {
@@ -327,10 +307,6 @@ enum InFlight {
     // find_node
     // get_peers
 }
-
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-#[error("TODO")]
-pub(crate) struct DeserializeDhtError;
 
 fn gen_transaction_id() -> Bytes {
     let data: [u8; TRANSACTION_ID_LENGTH] = rand::rng().random();
