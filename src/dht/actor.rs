@@ -259,7 +259,7 @@ impl DhtActor {
         let addr = SocketAddr::from((ip, port));
         let query = messages::PingQuery {
             transaction_id: transaction_id.clone(),
-            client: None, // TODO
+            client: Some(messages::gen_client()),
             node_id: self.table.my_id(),
             read_only: Some(true),
         };

@@ -5,14 +5,14 @@ use crate::types::InfoHash;
 use crate::util::{UnbencodeError, decode_bencode};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PingQuery {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) read_only: Option<bool>,
 }
@@ -34,7 +34,7 @@ impl ToBencode for PingQuery {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
             if let Some(ref v) = self.client {
-                e.emit_pair(b"v", v)?;
+                e.emit_pair(b"v", AsString(v))?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
             Ok(())
@@ -45,7 +45,7 @@ impl ToBencode for PingQuery {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PingResponse {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) your_addr: Option<SocketAddr>,
 }
@@ -64,9 +64,8 @@ impl FromBencode for PingResponse {
                     transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    client = Some(
-                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
-                    );
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("v")?;
+                    client = Some(Bytes::from(data.0));
                 }
                 (b"y", val) => {
                     let data = String::decode_bencode_object(val).context("y")?;
@@ -107,7 +106,7 @@ impl FromBencode for PingResponse {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct FindNodeQuery {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) target: NodeId,
     pub(super) read_only: Option<bool>,
@@ -142,7 +141,7 @@ impl ToBencode for FindNodeQuery {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
             if let Some(ref v) = self.client {
-                e.emit_pair(b"v", v)?;
+                e.emit_pair(b"v", AsString(v))?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
             Ok(())
@@ -153,7 +152,7 @@ impl ToBencode for FindNodeQuery {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct FindNodeResponse {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) nodes: Vec<NodeInfo<Ipv4Addr>>,
     pub(super) nodes6: Vec<NodeInfo<Ipv6Addr>>,
@@ -176,9 +175,8 @@ impl FromBencode for FindNodeResponse {
                     transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    client = Some(
-                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
-                    );
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("v")?;
+                    client = Some(Bytes::from(data.0));
                 }
                 (b"y", val) => {
                     let data = String::decode_bencode_object(val).context("y")?;
@@ -241,7 +239,7 @@ impl FromBencode for FindNodeResponse {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct GetPeersQuery {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) info_hash: InfoHash,
     pub(super) read_only: Option<bool>,
@@ -276,7 +274,7 @@ impl ToBencode for GetPeersQuery {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
             if let Some(ref v) = self.client {
-                e.emit_pair(b"v", v)?;
+                e.emit_pair(b"v", AsString(v))?;
             }
             e.emit_pair(b"y", AsString(b"q"))?;
             Ok(())
@@ -287,7 +285,7 @@ impl ToBencode for GetPeersQuery {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct GetPeersResponse {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) values: Vec<Peer>,
     pub(super) nodes: Vec<NodeInfo<Ipv4Addr>>,
@@ -314,9 +312,8 @@ impl FromBencode for GetPeersResponse {
                     transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    client = Some(
-                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
-                    );
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("v")?;
+                    client = Some(Bytes::from(data.0));
                 }
                 (b"y", val) => {
                     let data = String::decode_bencode_object(val).context("y")?;
@@ -395,7 +392,7 @@ impl FromBencode for GetPeersResponse {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ErrorResponse {
     pub(super) transaction_id: Bytes,
-    pub(super) client: Option<String>,
+    pub(super) client: Option<Bytes>,
     pub(super) error_code: u32,
     pub(super) error_message: String,
 }
@@ -428,9 +425,8 @@ impl FromBencode for ErrorResponse {
                     transaction_id = Some(Bytes::from(data.0));
                 }
                 (b"v", val) => {
-                    client = Some(
-                        String::from_utf8_lossy(val.try_into_bytes().context("v")?).into_owned(),
-                    );
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("v")?;
+                    client = Some(Bytes::from(data.0));
                 }
                 (b"y", val) => {
                     let data = String::decode_bencode_object(val).context("y")?;
@@ -538,6 +534,23 @@ pub(super) fn decode_response<T: FromBencode>(msg: &[u8]) -> Result<T, ResponseE
         }
         .into()),
     }
+}
+
+pub(super) fn gen_client() -> Bytes {
+    let mut buf = BytesMut::with_capacity(4);
+    buf.put_u8(b'D');
+    buf.put_u8(b'M');
+    buf.put_u8(
+        env!("CARGO_PKG_VERSION_MAJOR")
+            .parse::<u8>()
+            .unwrap_or(255u8),
+    );
+    buf.put_u8(
+        env!("CARGO_PKG_VERSION_MINOR")
+            .parse::<u8>()
+            .unwrap_or(255u8),
+    );
+    buf.freeze()
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
