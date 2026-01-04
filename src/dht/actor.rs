@@ -22,6 +22,7 @@ use bytes::{Bytes, BytesMut};
 use rand::Rng;
 use std::collections::{HashMap, VecDeque, hash_map::Entry};
 use std::net::{IpAddr, SocketAddr};
+use thiserror::Error;
 use tokio::{
     net::UdpSocket,
     sync::{mpsc, oneshot},
@@ -40,9 +41,10 @@ pub(crate) struct DhtActor {
 }
 
 impl DhtActor {
-    pub(crate) async fn new(table: DhtTable) -> std::io::Result<(DhtActor, DhtHandle)> {
-        // TODO: Use a dedicated error type?
-        let ipv4_socket = UdpSocket::bind("0.0.0.0:0").await?;
+    pub(crate) async fn new(table: DhtTable) -> Result<(DhtActor, DhtHandle), CreateDhtActorError> {
+        let ipv4_socket = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(CreateDhtActorError::BindIPv4)?;
         match ipv4_socket.local_addr() {
             Ok(addr) => log::trace!(
                 "DHT node using UDP port {} for IPv4 communication",
@@ -52,7 +54,9 @@ impl DhtActor {
                 log::warn!("Could not determine local address for DHT UDP socket on IPv4: {e}");
             }
         }
-        let ipv6_socket = UdpSocket::bind("[::]:0").await?;
+        let ipv6_socket = UdpSocket::bind("[::]:0")
+            .await
+            .map_err(CreateDhtActorError::BindIPv6)?;
         match ipv6_socket.local_addr() {
             Ok(addr) => log::trace!(
                 "DHT node using UDP port {} for IPv6 communication",
@@ -348,6 +352,14 @@ pub(crate) enum ActorMessage {
         port: u16,
     },
     Shutdown,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum CreateDhtActorError {
+    #[error("failed to create UDP socket over IPv4")]
+    BindIPv4(#[source] std::io::Error),
+    #[error("failed to create UDP socket over IPv6")]
+    BindIPv6(#[source] std::io::Error),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
