@@ -32,7 +32,7 @@ patharg = { version = "0.4.0", features = ["tokio"] }
 pin-project-lite = "0.2.14"
 rand = "0.9.0"
 rc4 = "0.1.0"
-reqwest = { version = "0.12.4", default-features = false, features = ["http2"] }
+reqwest = { version = "0.13.0", default-features = false, features = ["http2"] }
 serde = { version = "1.0.219", features = ["derive"] }
 sha1 = "0.10.6"
 strum = "0.27.0"
