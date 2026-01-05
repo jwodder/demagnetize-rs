@@ -209,7 +209,7 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-bundle-licenses
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cargo-bundle-licenses
           locked: false  # Ensure we get the latest version of the spdx crate
