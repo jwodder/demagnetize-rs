@@ -57,9 +57,8 @@ default = ["native-tls"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
 rustls = [
-    "reqwest/rustls-tls",
-    "reqwest/rustls-tls-native-roots",
-    "reqwest/rustls-tls-webpki-roots",
+    "reqwest/rustls",
+    "reqwest/rustls-native-certs",
 ]
 
 [profile.dist]
