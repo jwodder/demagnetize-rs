@@ -318,7 +318,7 @@ pub(super) fn prescan(msg: &[u8]) -> Result<Prescan, BendyError> {
     })
 }
 
-pub(super) fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
+fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
     let mut decoder = Decoder::new(msg);
     if let Some(obj) = decoder.next_object()? {
         let mut dd = obj.try_into_dictionary()?;

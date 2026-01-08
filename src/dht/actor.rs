@@ -321,6 +321,12 @@ impl LookupSession {
                     for n in nodes {
                         self.nodes.add(n);
                     }
+                    self.to_query.extend(
+                        self.nodes
+                            .closest_unqueried(CLOSEST)
+                            .into_iter()
+                            .map(|n| n.address()),
+                    );
                 }
                 Err(messages::ResponseError::Rpc(e)) => {
                     log::warn!("{sender} replied with error message: {e}");
