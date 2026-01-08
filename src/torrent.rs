@@ -159,10 +159,10 @@ impl<H: InfoHashProvider> TorrentFile<H> {
                 path
             );
         }
-        if let Some(parent) = path.path_ref().and_then(|p| p.parent()) {
-            if parent != Path::new("") {
-                create_dir_all(parent).await?;
-            }
+        if let Some(parent) = path.path_ref().and_then(|p| p.parent())
+            && parent != Path::new("")
+        {
+            create_dir_all(parent).await?;
         }
         let buf = Bytes::from(self);
         path.async_write(buf).await

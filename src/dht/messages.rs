@@ -184,13 +184,13 @@ impl FromBencode for ErrorResponse {
                     if let Some(item) = elst.next_object().context("e")? {
                         error_code = Some(u32::decode_bencode_object(item).context("e.0")?);
                     }
-                    if error_code.is_some() {
-                        if let Some(item) = elst.next_object().context("e")? {
-                            error_message = Some(
-                                String::from_utf8_lossy(item.try_into_bytes().context("e.1")?)
-                                    .into_owned(),
-                            );
-                        }
+                    if error_code.is_some()
+                        && let Some(item) = elst.next_object().context("e")?
+                    {
+                        error_message = Some(
+                            String::from_utf8_lossy(item.try_into_bytes().context("e.1")?)
+                                .into_owned(),
+                        );
                     }
                 }
                 (b"t", val) => {
@@ -270,18 +270,56 @@ impl Want {
     }
 }
 
-pub(super) fn get_transaction_id(msg: &[u8]) -> Result<Bytes, BendyError> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Prescan {
+    pub(super) transaction_id: Bytes,
+    pub(super) msg_type: MessageType,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum MessageType {
+    Query,
+    Response,
+    Error,
+}
+
+pub(super) fn prescan(msg: &[u8]) -> Result<Prescan, BendyError> {
     let mut decoder = Decoder::new(msg);
+    let mut transaction_id = None;
+    let mut msg_type = None;
     if let Some(obj) = decoder.next_object()? {
         let mut dd = obj.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
-            if let (b"t", val) = kv {
-                let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                return Ok(Bytes::from(data.0));
+            match kv {
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    transaction_id = Some(Bytes::from(data.0));
+                }
+                (b"y", val) => {
+                    let y = String::decode_bencode_object(val).context("y")?;
+                    match y.as_str() {
+                        "q" => msg_type = Some(MessageType::Query),
+                        "r" => msg_type = Some(MessageType::Response),
+                        "e" => msg_type = Some(MessageType::Response),
+                        _ => {
+                            return Err(BendyError::malformed_content(InvalidYField {
+                                expected: "\"q\", \"r\", or \"e\"",
+                                got: y,
+                            })
+                            .context("y"));
+                        }
+                    }
+                }
+                _ => (),
             }
         }
     }
-    Err(BendyError::missing_field("t"))
+    let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
+    let msg_type = msg_type.ok_or_else(|| BendyError::missing_field("y"))?;
+    Ok(Prescan {
+        transaction_id,
+        msg_type,
+    })
 }
 
 pub(super) fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
@@ -525,32 +563,32 @@ mod tests {
         }
     }
 
-    mod get_transaction_id {
+    mod prescan {
         use super::*;
 
         #[test]
-        fn ok() {
-            let t =
-                get_transaction_id(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice())
-                    .unwrap();
-            assert_eq!(t, b"aa".as_slice());
+        fn ok_response() {
+            let ps =
+                prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice()).unwrap();
+            assert_eq!(ps.transaction_id, b"aa".as_slice());
+            assert_eq!(ps.msg_type, MessageType::Response);
         }
 
         #[test]
         fn empty() {
-            let e = get_transaction_id(b"".as_slice()).unwrap_err();
+            let e = prescan(b"".as_slice()).unwrap_err();
             assert_eq!(e.to_string(), "missing field: t");
         }
 
         #[test]
         fn no_t() {
-            let e = get_transaction_id(b"d1:eli201e5:Ouch.e1:y1:ee".as_slice()).unwrap_err();
+            let e = prescan(b"d1:eli201e5:Ouch.e1:y1:ee".as_slice()).unwrap_err();
             assert_eq!(e.to_string(), "missing field: t");
         }
 
         #[test]
         fn not_dict() {
-            let e = get_transaction_id(b"li201e5:Ouch.e".as_slice()).unwrap_err();
+            let e = prescan(b"li201e5:Ouch.e".as_slice()).unwrap_err();
             assert_eq!(e.to_string(), "discovered List but expected Dict");
         }
     }

@@ -2,7 +2,7 @@
 name = "demagnetize"
 version = "0.6.0-dev"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Convert magnet links to .torrent files"
 authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
 repository = "https://github.com/jwodder/demagnetize-rs"

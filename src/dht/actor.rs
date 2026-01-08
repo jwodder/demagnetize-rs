@@ -8,7 +8,7 @@ use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::stream::{self, StreamExt};
 use rand::Rng;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::fmt;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -84,13 +84,24 @@ impl DhtActor {
                                 self.send_query(addr, query).await;
                             }
                         }
-                        ActorMessage::Shutdown => return,
+                        ActorMessage::Shutdown {response_to} => {
+                            let _ = response_to.send(());
+                            return;
+                        }
                     }
                 }
                 r = self.udp.recv() => {
                     match r {
                         Ok((addr, packet)) => self.handle_message(addr, packet).await,
                         Err(e) => log::warn!("Error receiving incoming DHT message: {e}"),
+                    }
+                }
+                Some(((addr, txn), _)) = self.txn_timeouts.join_next() => {
+                    for (&sid, s) in &mut self.sessions {
+                        if s.handle_timeout(addr, txn.clone()) {
+                            self.postprocess_session(sid);
+                            break;
+                        }
                     }
                 }
             }
@@ -111,6 +122,7 @@ impl DhtActor {
         addrs
     }
 
+    // TODO: On error, notify the LookupSession that the sending failed
     async fn send_query(&mut self, addr: SocketAddr, query: messages::GetPeersQuery) {
         let txn = query.transaction_id.clone();
         let msg = match query.to_bencode() {
@@ -118,14 +130,52 @@ impl DhtActor {
             Err(e) => todo!(),
         };
         if let Err(e) = self.udp.send(addr, &msg).await {
-            todo!(); // Include notifying the LookupSession that the sending failed
+            log::warn!("Failed to send DHT message to {addr}: {e}");
+        } else {
+            self.txn_timeouts.spawn((addr, txn), sleep(self.timeout));
         }
-        self.txn_timeouts.spawn((addr, txn), sleep(self.timeout));
     }
 
-    #[expect(clippy::unused_async)]
     async fn handle_message(&mut self, addr: SocketAddr, msg: Bytes) {
-        todo!()
+        let (txn, msg_type) = match messages::prescan(&msg) {
+            Ok(messages::Prescan {
+                transaction_id,
+                msg_type,
+            }) => (transaction_id, msg_type),
+            Err(e) => {
+                log::trace!("Received invalid DHT message from {addr}: {e}; ignoring");
+                return;
+            }
+        };
+        if msg_type == messages::MessageType::Query {
+            log::trace!("Received DHT query message from {addr}; ignoring");
+            return;
+        }
+        let mut found = false;
+        for (&sid, s) in &mut self.sessions {
+            if s.handle_message(addr, txn.clone(), &msg) {
+                for (addr, query) in s.get_outgoing(&mut self.txn_gen) {
+                    self.send_query(addr, query).await;
+                }
+                self.postprocess_session(sid);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            log::trace!("Received unexpected DHT message from {addr}; ignoring");
+        }
+    }
+
+    fn postprocess_session(&mut self, sid: usize) {
+        if let Entry::Occupied(mut entry) = self.sessions.entry(sid)
+            && let Some(r) = entry.get_mut().get_result()
+        {
+            entry.remove();
+            if let Some(sender) = self.lookup_senders.remove(&sid) {
+                let _ = sender.send(r);
+            }
+        }
     }
 }
 
@@ -135,21 +185,27 @@ pub(crate) struct DhtHandle {
 }
 
 impl DhtHandle {
-    pub(crate) async fn lookup_peers(&self, info_hash: InfoHash) -> FoundPeers {
+    pub(crate) async fn lookup_peers(
+        &self,
+        info_hash: InfoHash,
+    ) -> Result<FoundPeers, DhtHandleError> {
         let (sender, receiver) = oneshot::channel();
         let msg = ActorMessage::LookupPeers {
             info_hash,
             response_to: sender,
         };
-        let _ = self.sender.send(msg).await;
-        // TODO: Error handling:
-        receiver.await.expect("Actor killed")
+        self.sender.send(msg).await.map_err(|_| DhtHandleError)?;
+        receiver.await.map_err(|_| DhtHandleError)
     }
 
     pub(crate) async fn shutdown(&self) {
-        // TODO: Should this wait for completion?
-        let msg = ActorMessage::Shutdown;
-        let _ = self.sender.send(msg).await;
+        let (sender, receiver) = oneshot::channel();
+        let msg = ActorMessage::Shutdown {
+            response_to: sender,
+        };
+        if self.sender.send(msg).await.is_ok() {
+            let _ = receiver.await;
+        }
     }
 }
 
@@ -159,7 +215,9 @@ pub(crate) enum ActorMessage {
         info_hash: InfoHash,
         response_to: oneshot::Sender<FoundPeers>,
     },
-    Shutdown,
+    Shutdown {
+        response_to: oneshot::Sender<()>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -173,6 +231,10 @@ pub(crate) enum CreateDhtActorError {
     #[error("failed to create UDP socket over IPv4")]
     BindIPv4(#[source] std::io::Error),
 }
+
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[error("DHT actor is down")] // TODO: Rethink message
+pub(crate) struct DhtHandleError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TransactionGenerator(u32);
@@ -217,8 +279,8 @@ impl LookupSession {
         self.to_query.extend(bootstrap_addrs);
     }
 
-    // TODO: The caller should weed out messages with "y" values other than "r"
-    // and "e" beforehand
+    // The caller should weed out messages with "y" values other than "r" and
+    // "e" beforehand
     fn handle_message(&mut self, sender: SocketAddr, txn: Bytes, msg: &[u8]) -> bool {
         if self.in_flight.remove(&(sender, txn)) {
             let sender = self.nodes.addr2display(sender);
@@ -242,7 +304,7 @@ impl LookupSession {
                 Err(messages::ResponseError::Rpc(e)) => {
                     log::warn!("{sender} replied with error message: {e}");
                 }
-                Err(e) => log::warn!("{sender} sent invalid message: {e}"),
+                Err(e) => log::warn!("{sender} sent invalid reply message: {e}"),
             }
             true
         } else {
@@ -250,8 +312,8 @@ impl LookupSession {
         }
     }
 
-    fn handle_timeout(&mut self, sender: SocketAddr, txn: Bytes) {
-        self.in_flight.remove(&(sender, txn));
+    fn handle_timeout(&mut self, sender: SocketAddr, txn: Bytes) -> bool {
+        self.in_flight.remove(&(sender, txn))
     }
 
     fn get_outgoing(
@@ -425,16 +487,28 @@ impl UdpHandle {
         }
     }
 
-    // TODO: Wrap the error in a type that also stores the address family for
-    // use in the error message
-    #[expect(clippy::unused_async)]
-    async fn send(&self, addr: SocketAddr, buf: &[u8]) -> std::io::Result<()> {
-        todo!()
+    async fn send(&self, addr: SocketAddr, buf: &[u8]) -> Result<(), UdpSendError> {
+        if addr.is_ipv4() {
+            self.ipv4.send_to(buf, addr).await?;
+        } else if let Some(ipv6) = self.ipv6.as_ref() {
+            ipv6.send_to(buf, addr).await?;
+        } else {
+            return Err(UdpSendError::IPv6Disabled);
+        }
+        Ok(())
     }
 
     fn using_ipv6(&self) -> bool {
         self.ipv6.is_some()
     }
+}
+
+#[derive(Debug, Error)]
+enum UdpSendError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("INTERNAL ERROR: attempted to send DHT message over IPv6 while IPv6 was disabled")]
+    IPv6Disabled,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
