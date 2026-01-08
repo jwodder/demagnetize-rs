@@ -4,6 +4,7 @@ use super::{NodeId, NodeInfo};
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
+use crate::util::ErrorChain;
 use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::stream::{self, StreamExt};
@@ -14,7 +15,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::{
-    net::UdpSocket,
+    net::{UdpSocket, lookup_host},
     sync::{mpsc, oneshot},
     time::sleep,
 };
@@ -127,7 +128,13 @@ impl DhtActor {
         let txn = query.transaction_id.clone();
         let msg = match query.to_bencode() {
             Ok(msg) => msg,
-            Err(e) => todo!(),
+            Err(e) => {
+                log::warn!(
+                    "Failed to construct DHT \"get_peers\" query packet for {addr}: {}",
+                    ErrorChain(e)
+                );
+                return;
+            }
         };
         if let Err(e) = self.udp.send(addr, &msg).await {
             log::warn!("Failed to send DHT message to {addr}: {e}");
@@ -233,7 +240,7 @@ pub(crate) enum CreateDhtActorError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
-#[error("DHT actor is down")] // TODO: Rethink message
+#[error("DHT actor is down")]
 pub(crate) struct DhtHandleError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -305,7 +312,7 @@ impl LookupSession {
                 Err(messages::ResponseError::Rpc(e)) => {
                     log::warn!("{sender} replied with error message: {e}");
                 }
-                Err(e) => log::warn!("{sender} sent invalid reply message: {e}"),
+                Err(e) => log::warn!("{sender} sent invalid reply message: {}", ErrorChain(e)),
             }
             true
         } else {
@@ -423,9 +430,28 @@ pub(crate) struct InetAddr {
 }
 
 impl InetAddr {
-    #[expect(clippy::unused_async)]
     async fn resolve(&self, use_ipv6: bool) -> Option<SocketAddr> {
-        todo!()
+        match self.host {
+            url::Host::Domain(ref domain) => {
+                match lookup_host((domain.as_str(), self.port)).await {
+                    Ok(mut iter) => {
+                        if let Some(addr) = iter.find(|a| use_ipv6 || a.is_ipv4()) {
+                            log::debug!("Resolved domain {domain:?} to {}", addr.ip());
+                            Some(addr)
+                        } else {
+                            log::warn!("Failed to resolve domain {domain:?} to any IP addresses");
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to resolve domain {domain:?}: {e}");
+                        None
+                    }
+                }
+            }
+            url::Host::Ipv4(ip) => Some(SocketAddr::from((ip, self.port))),
+            url::Host::Ipv6(ip) => use_ipv6.then(|| SocketAddr::from((ip, self.port))),
+        }
     }
 }
 
