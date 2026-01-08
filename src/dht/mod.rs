@@ -7,8 +7,10 @@ use crate::util::{PacketError, TryBytes, TryFromBuf};
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
+use serde::{Deserialize, Deserializer};
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use thiserror::Error;
 use tokio::net::lookup_host;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -193,6 +195,106 @@ impl InetAddr {
             }
             url::Host::Ipv4(ip) => Some(SocketAddr::from((ip, self.port))),
             url::Host::Ipv6(ip) => use_ipv6.then(|| SocketAddr::from((ip, self.port))),
+        }
+    }
+}
+
+impl std::str::FromStr for InetAddr {
+    type Err = ParseInetAddrError;
+
+    fn from_str(s: &str) -> Result<InetAddr, ParseInetAddrError> {
+        let (host, port) = s.rsplit_once(':').ok_or(ParseInetAddrError)?;
+        let port = port.parse::<u16>().map_err(|_| ParseInetAddrError)?;
+        // Note that url::Host::parse() requires IPv6 addresses to be input
+        // with surrounding brackets, so don't remove them.
+        let host = url::Host::parse(host).map_err(|_| ParseInetAddrError)?;
+        Ok(InetAddr { host, port })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[error("invalid <host>:<port> string")]
+pub(crate) struct ParseInetAddrError;
+
+impl<'de> Deserialize<'de> for InetAddr {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = InetAddr;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a <host>:<port> string")
+            }
+
+            fn visit_str<E>(self, input: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                input
+                    .parse::<InetAddr>()
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Str(input), &self))
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod inet_addr {
+        use super::*;
+        use assert_matches::assert_matches;
+        use rstest::rstest;
+
+        #[rstest]
+        #[case("www.example.com:80", "www.example.com", 80)]
+        fn parse_domain_host(#[case] s: &str, #[case] host: &str, #[case] port: u16) {
+            let addr = s.parse::<InetAddr>().unwrap();
+            assert_matches!(addr.host, url::Host::Domain(domain) => {
+                assert_eq!(domain, host);
+            });
+            assert_eq!(addr.port, port);
+        }
+
+        #[rstest]
+        #[case("127.0.0.1:80", "127.0.0.1", 80)]
+        #[case("80:61", "0.0.0.80", 61)]
+        fn parse_ipv4_host(#[case] s: &str, #[case] host: Ipv4Addr, #[case] port: u16) {
+            let addr = s.parse::<InetAddr>().unwrap();
+            assert_matches!(addr.host, url::Host::Ipv4(ip) => {
+                assert_eq!(ip, host);
+            });
+            assert_eq!(addr.port, port);
+        }
+
+        #[rstest]
+        #[case("[::1]:80", "::1", 80)]
+        #[case("[::ffff:127.0.0.1]:80", "::ffff:127.0.0.1", 80)]
+        #[case("[2001:abcd::1234]:80", "2001:abcd::1234", 80)]
+        fn parse_ipv6_host(#[case] s: &str, #[case] host: Ipv6Addr, #[case] port: u16) {
+            let addr = s.parse::<InetAddr>().unwrap();
+            assert_matches!(addr.host, url::Host::Ipv6(ip) => {
+                assert_eq!(ip, host);
+            });
+            assert_eq!(addr.port, port);
+        }
+
+        #[rstest]
+        #[case("www.example.com")]
+        #[case("www.example.com:80:61")]
+        #[case("[www.example.com]:60069")]
+        #[case("[127.0.0.1]:60069")]
+        #[case("127.0.0.1")]
+        #[case("::1:8000")]
+        #[case("::ffff:127.0.0.1:8000")]
+        #[case("2001:abcd::1234:80")]
+        fn bad_parse(#[case] s: &str) {
+            let r = s.parse::<InetAddr>();
+            assert!(r.is_err());
         }
     }
 }
