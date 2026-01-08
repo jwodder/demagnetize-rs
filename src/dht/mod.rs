@@ -52,7 +52,7 @@ impl std::ops::BitXor<InfoHash> for NodeId {
     fn bitxor(self, info_hash: InfoHash) -> Distance {
         let nid = self.0;
         let ih = info_hash.as_bytes();
-        Distance(std::array::from_fn(|i| nid[i] & ih[i]))
+        Distance(std::array::from_fn(|i| nid[i] ^ ih[i]))
     }
 }
 

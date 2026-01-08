@@ -341,7 +341,13 @@ impl LookupSession {
     }
 
     fn handle_timeout(&mut self, addr: SocketAddr, txn: Bytes) -> bool {
-        self.in_flight.remove(&(addr, txn))
+        if self.in_flight.remove(&(addr, txn)) {
+            let remote = self.nodes.addr2display(addr);
+            log::debug!("Query to {remote} timed out");
+            true
+        } else {
+            false
+        }
     }
 
     fn handle_send_failure(&mut self, addr: SocketAddr, txn: Bytes) {
