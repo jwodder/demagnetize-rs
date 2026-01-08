@@ -20,8 +20,7 @@ const ACTION_CHANNEL_SIZE: usize = 64;
 #[derive(Debug)]
 pub(crate) struct DhtActor {
     my_id: NodeId,
-    ipv4_socket: UdpSocket,
-    ipv6_socket: UdpSocket,
+    udp: UdpHandle,
     action_recv: mpsc::Receiver<ActorMessage>,
     txn_gen: TransactionGenerator,
     sessions: HashMap<usize, LookupSession>,
@@ -37,35 +36,11 @@ impl DhtActor {
         bootstrap_nodes: Vec<InetAddr>,
     ) -> Result<(DhtActor, DhtHandle), CreateDhtActorError> {
         let my_id = NodeId(rng.random());
-        let ipv4_socket = UdpSocket::bind("0.0.0.0:0")
-            .await
-            .map_err(CreateDhtActorError::BindIPv4)?;
-        match ipv4_socket.local_addr() {
-            Ok(addr) => log::trace!(
-                "DHT node using UDP port {} for IPv4 communication",
-                addr.port()
-            ),
-            Err(e) => {
-                log::warn!("Could not determine local address for DHT UDP socket on IPv4: {e}");
-            }
-        }
-        let ipv6_socket = UdpSocket::bind("[::]:0")
-            .await
-            .map_err(CreateDhtActorError::BindIPv6)?;
-        match ipv6_socket.local_addr() {
-            Ok(addr) => log::trace!(
-                "DHT node using UDP port {} for IPv6 communication",
-                addr.port()
-            ),
-            Err(e) => {
-                log::warn!("Could not determine local address for DHT UDP socket on IPv6: {e}");
-            }
-        }
+        let udp = UdpHandle::new().await?;
         let (sender, receiver) = mpsc::channel(ACTION_CHANNEL_SIZE);
         let actor = DhtActor {
             my_id,
-            ipv4_socket,
-            ipv6_socket,
+            udp,
             action_recv: receiver,
             txn_gen: TransactionGenerator::new(),
             sessions: HashMap::new(),
@@ -80,8 +55,6 @@ impl DhtActor {
     pub(crate) async fn run(mut self) {
         // TODO: Resolve bootstrap node addresses
         loop {
-            let mut ipv4_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
-            let mut ipv6_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
             tokio::select! {
                 Some(msg) = self.action_recv.recv() => {
                     match msg {
@@ -89,16 +62,10 @@ impl DhtActor {
                         ActorMessage::Shutdown => return,
                     }
                 }
-                r = self.ipv4_socket.recv_buf_from(&mut ipv4_packet) => {
+                r = self.udp.recv() => {
                     match r {
-                        Ok((_, addr)) => todo!(),
-                        Err(e) => log::warn!("Error receiving incoming DHT packet on IPv4: {e}"),
-                    }
-                }
-                r = self.ipv6_socket.recv_buf_from(&mut ipv6_packet) => {
-                    match r {
-                        Ok((_, addr)) => todo!(),
-                        Err(e) => log::warn!("Error receiving incoming DHT packet on IPv6: {e}"),
+                        Ok((addr, packet)) => todo!(),
+                        Err(e) => todo!(),
                     }
                 }
             }
@@ -143,8 +110,6 @@ pub(crate) enum ActorMessage {
 pub(crate) enum CreateDhtActorError {
     #[error("failed to create UDP socket over IPv4")]
     BindIPv4(#[source] std::io::Error),
-    #[error("failed to create UDP socket over IPv6")]
-    BindIPv6(#[source] std::io::Error),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -167,6 +132,7 @@ impl TransactionGenerator {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct LookupSession {
     info_hash: InfoHash,
+    my_id: NodeId,
     using_ipv6: bool,
     nodes: NodeSpace,
     to_query: Vec<SocketAddr>,
@@ -227,4 +193,89 @@ impl NodeSpace {
 pub(crate) struct InetAddr {
     host: url::Host,
     port: u16,
+}
+
+#[derive(Debug)]
+struct UdpHandle {
+    ipv4: UdpSocket,
+    ipv6: Option<UdpSocket>,
+}
+
+impl UdpHandle {
+    async fn new() -> Result<UdpHandle, CreateDhtActorError> {
+        let ipv4 = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(CreateDhtActorError::BindIPv4)?;
+        match ipv4.local_addr() {
+            Ok(addr) => log::trace!(
+                "DHT node using UDP port {} for IPv4 communication",
+                addr.port()
+            ),
+            Err(e) => {
+                log::warn!("Could not determine local address for DHT UDP socket on IPv4: {e}");
+            }
+        }
+        let ipv6 = match UdpSocket::bind("[::]:0").await {
+            Ok(s) => {
+                match s.local_addr() {
+                    Ok(addr) => log::trace!(
+                        "DHT node using UDP port {} for IPv6 communication",
+                        addr.port()
+                    ),
+                    Err(e) => {
+                        log::warn!(
+                            "Could not determine local address for DHT UDP socket on IPv6: {e}"
+                        );
+                    }
+                }
+                Some(s)
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to create UDP socket over IPv6 for DHT: {e}; proceding without IPv6"
+                );
+                None
+            }
+        };
+        Ok(UdpHandle { ipv4, ipv6 })
+    }
+
+    async fn recv(&self) -> std::io::Result<(SocketAddr, Bytes)> {
+        if let Some(ipv6) = self.ipv6.as_ref() {
+            let mut ipv4_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
+            let mut ipv6_packet = BytesMut::with_capacity(UDP_PACKET_LEN);
+            tokio::select! {
+                r = self.ipv4.recv_buf_from(&mut ipv4_packet) => {
+                    match r {
+                        Ok((_, addr)) => Ok((addr, ipv4_packet.freeze())),
+                        //Err(e) => log::warn!("Error receiving incoming DHT packet on IPv4: {e}"),
+                        Err(e) => Err(e),
+                    }
+                }
+                r = ipv6.recv_buf_from(&mut ipv6_packet) => {
+                    match r {
+                        Ok((_, addr)) => Ok((addr, ipv6_packet.freeze())),
+                        //Err(e) => log::warn!("Error receiving incoming DHT packet on IPv6: {e}"),
+                        Err(e) => Err(e),
+                    }
+                }
+            }
+        } else {
+            let mut packet = BytesMut::with_capacity(UDP_PACKET_LEN);
+            match self.ipv4.recv_buf_from(&mut packet).await {
+                Ok((_, addr)) => Ok((addr, packet.freeze())),
+                //Err(e) => log::warn!("Error receiving incoming DHT packet on IPv4: {e}"),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
+    #[expect(clippy::unused_async)]
+    async fn send(&self, addr: SocketAddr, buf: &[u8]) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn using_ipv6(&self) -> bool {
+        self.ipv6.is_some()
+    }
 }
