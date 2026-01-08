@@ -1,3 +1,4 @@
+use crate::dht::InetAddr;
 use crate::peer::CryptoMode;
 use crate::tracker::TrackerCrypto;
 use rand::Rng;
@@ -19,6 +20,8 @@ pub(crate) struct Config {
     pub(crate) trackers: TrackersConfig,
     #[serde(default)]
     pub(crate) peers: PeersConfig,
+    #[serde(default)]
+    pub(crate) dht: DhtConfig,
 }
 
 impl Config {
@@ -112,6 +115,35 @@ impl Default for PeersConfig {
                 .expect("default peers.jobs-per-magnet should be nonzero"),
             handshake_timeout: Duration::from_secs(60),
             dh_exchange_timeout: crate::peer::msepe::DEFAULT_DH_EXCHANGE_TIMEOUT,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(default, rename_all = "kebab-case")]
+pub(crate) struct DhtConfig {
+    /// DHT nodes to use at the start of a peer search over the DHT
+    pub(crate) bootstrap_nodes: mitsein::vec1::Vec1<InetAddr>,
+
+    /// How long to wait for a reply to a sent DHT query
+    #[serde(deserialize_with = "deserialize_seconds")]
+    pub(crate) query_timeout: Duration,
+}
+
+impl Default for DhtConfig {
+    fn default() -> DhtConfig {
+        let mut nodes = crate::consts::DEFAULT_DHT_BOOTSTRAP_NODES
+            .into_iter()
+            .map(|s| {
+                s.parse::<InetAddr>()
+                    .expect("built-in bootstrap nodes should be valid InetAddrs")
+            });
+        let n1 = nodes
+            .next()
+            .expect("DEFAULT_DHT_BOOTSTRAP_NODES should be nonempty");
+        DhtConfig {
+            bootstrap_nodes: mitsein::vec1::Vec1::from_head_and_tail(n1, nodes),
+            query_timeout: Duration::from_secs(2),
         }
     }
 }
@@ -307,6 +339,14 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(30).unwrap(),
                     handshake_timeout: Duration::from_secs(60),
                     dh_exchange_timeout: Duration::from_secs(30),
+                },
+                dht: DhtConfig {
+                    bootstrap_nodes: mitsein::vec1::vec1![
+                        "dht.transmissionbt.com:6881".parse::<InetAddr>().unwrap(),
+                        "relay.pkarr.org:6881".parse::<InetAddr>().unwrap(),
+                        "router.bittorrent.com:6881".parse::<InetAddr>().unwrap(),
+                    ],
+                    query_timeout: Duration::from_secs(2),
                 }
             }
         );
@@ -415,6 +455,11 @@ mod tests {
     }
 
     #[test]
+    fn empty_bootstrap_nodes() {
+        assert!(load_config("[dht]\nbootstrap-nodes = []\n").is_err());
+    }
+
+    #[test]
     fn zero_duration() {
         let cfg = load_config("[trackers]\nshutdown-timeout = 0\n").unwrap();
         assert_eq!(
@@ -447,6 +492,10 @@ mod tests {
             "dh-exchange-timeout = 10\n",
             "handshake-timeout = 120\n",
             "jobs-per-magnet = 23\n",
+            "\n",
+            "[dht]\n",
+            "bootstrap-nodes = [\"router.example.com:6881\", \"10.0.0.1:8000\"]\n",
+            "query-timeout = 15\n",
         ))
         .unwrap();
         assert_eq!(
@@ -470,6 +519,13 @@ mod tests {
                     jobs_per_magnet: NonZeroUsize::new(23).unwrap(),
                     handshake_timeout: Duration::from_secs(120),
                     dh_exchange_timeout: Duration::from_secs(10),
+                },
+                dht: DhtConfig {
+                    bootstrap_nodes: mitsein::vec1::vec1![
+                        "router.example.com:6881".parse::<InetAddr>().unwrap(),
+                        "10.0.0.1:8000".parse::<InetAddr>().unwrap(),
+                    ],
+                    query_timeout: Duration::from_secs(15),
                 }
             }
         );
