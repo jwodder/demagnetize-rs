@@ -1,7 +1,6 @@
 #![expect(dead_code)]
 mod actor;
 mod messages;
-mod table;
 use crate::compact::{FromCompact, FromCompactError};
 use crate::util::{PacketError, TryBytes, TryFromBuf};
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
@@ -77,7 +76,7 @@ impl ToBencode for NodeId {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct NodeInfo<T> {
+struct NodeInfo<T = IpAddr> {
     id: NodeId,
     ip: T,
     port: u16,
