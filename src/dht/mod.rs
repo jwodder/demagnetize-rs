@@ -10,7 +10,6 @@ use bytes::{Buf, Bytes};
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio::net::lookup_host;
-use tokio_util::either::Either;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct NodeId([u8; 20]);
@@ -91,44 +90,27 @@ impl ToBencode for NodeId {
 pub(crate) struct Distance([u8; 20]);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct NodeInfo<T = IpAddr> {
+struct Node<T = IpAddr> {
     id: NodeId,
     ip: T,
     port: u16,
 }
 
-impl<T: Into<IpAddr> + Copy> NodeInfo<T> {
+impl<T: Into<IpAddr> + Copy> Node<T> {
     fn address(&self) -> SocketAddr {
         SocketAddr::from((self.ip, self.port))
     }
 }
 
-impl NodeInfo<IpAddr> {
-    fn discriminate(self) -> Either<NodeInfo<Ipv4Addr>, NodeInfo<Ipv6Addr>> {
-        match self.ip {
-            IpAddr::V4(ip) => Either::Left(NodeInfo {
-                id: self.id,
-                ip,
-                port: self.port,
-            }),
-            IpAddr::V6(ip) => Either::Right(NodeInfo {
-                id: self.id,
-                ip,
-                port: self.port,
-            }),
-        }
-    }
-}
-
-impl<T: Into<IpAddr> + Copy> fmt::Display for NodeInfo<T> {
+impl<T: Into<IpAddr> + Copy> fmt::Display for Node<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DHT node {} at {}", self.id, self.address())
     }
 }
 
-impl From<NodeInfo<Ipv4Addr>> for NodeInfo<IpAddr> {
-    fn from(value: NodeInfo<Ipv4Addr>) -> NodeInfo<IpAddr> {
-        NodeInfo {
+impl From<Node<Ipv4Addr>> for Node<IpAddr> {
+    fn from(value: Node<Ipv4Addr>) -> Node<IpAddr> {
+        Node {
             id: value.id,
             ip: value.ip.into(),
             port: value.port,
@@ -136,9 +118,9 @@ impl From<NodeInfo<Ipv4Addr>> for NodeInfo<IpAddr> {
     }
 }
 
-impl From<NodeInfo<Ipv6Addr>> for NodeInfo<IpAddr> {
-    fn from(value: NodeInfo<Ipv6Addr>) -> NodeInfo<IpAddr> {
-        NodeInfo {
+impl From<Node<Ipv6Addr>> for Node<IpAddr> {
+    fn from(value: Node<Ipv6Addr>) -> Node<IpAddr> {
+        Node {
             id: value.id,
             ip: value.ip.into(),
             port: value.port,
@@ -146,10 +128,10 @@ impl From<NodeInfo<Ipv6Addr>> for NodeInfo<IpAddr> {
     }
 }
 
-impl FromCompact for NodeInfo<Ipv4Addr> {
+impl FromCompact for Node<Ipv4Addr> {
     type Error = FromCompactError;
 
-    fn from_compact(bs: &[u8]) -> Result<NodeInfo<Ipv4Addr>, FromCompactError> {
+    fn from_compact(bs: &[u8]) -> Result<Node<Ipv4Addr>, FromCompactError> {
         let e = FromCompactError {
             ty: "NodeInfo<Ipv4Addr>",
             length: bs.len(),
@@ -159,14 +141,14 @@ impl FromCompact for NodeInfo<Ipv4Addr> {
         let ip = buf.try_get::<Ipv4Addr>().map_err(|_| e)?;
         let port = buf.try_get::<u16>().map_err(|_| e)?;
         buf.eof().map_err(|_| e)?;
-        Ok(NodeInfo { id, ip, port })
+        Ok(Node { id, ip, port })
     }
 }
 
-impl FromCompact for NodeInfo<Ipv6Addr> {
+impl FromCompact for Node<Ipv6Addr> {
     type Error = FromCompactError;
 
-    fn from_compact(bs: &[u8]) -> Result<NodeInfo<Ipv6Addr>, FromCompactError> {
+    fn from_compact(bs: &[u8]) -> Result<Node<Ipv6Addr>, FromCompactError> {
         let e = FromCompactError {
             ty: "NodeInfo<Ipv6Addr>",
             length: bs.len(),
@@ -176,12 +158,12 @@ impl FromCompact for NodeInfo<Ipv6Addr> {
         let ip = buf.try_get::<Ipv6Addr>().map_err(|_| e)?;
         let port = buf.try_get::<u16>().map_err(|_| e)?;
         buf.eof().map_err(|_| e)?;
-        Ok(NodeInfo { id, ip, port })
+        Ok(Node { id, ip, port })
     }
 }
 
-impl_vec_fromcompact!(NodeInfo<Ipv4Addr>, 26);
-impl_vec_fromcompact!(NodeInfo<Ipv6Addr>, 38);
+impl_vec_fromcompact!(Node<Ipv4Addr>, 26);
+impl_vec_fromcompact!(Node<Ipv6Addr>, 38);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct InetAddr {

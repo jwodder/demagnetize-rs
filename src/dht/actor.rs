@@ -1,6 +1,6 @@
 #![expect(unused_variables)]
 use super::messages;
-use super::{Distance, InetAddr, NodeId, NodeInfo};
+use super::{Distance, InetAddr, Node, NodeId};
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -309,8 +309,8 @@ impl LookupSession {
                     let mut nodes = Vec::with_capacity(
                         response.nodes.len().saturating_add(response.nodes6.len()),
                     );
-                    nodes.extend(response.nodes.into_iter().map(NodeInfo::from));
-                    nodes.extend(response.nodes6.into_iter().map(NodeInfo::from));
+                    nodes.extend(response.nodes.into_iter().map(Node::from));
+                    nodes.extend(response.nodes6.into_iter().map(Node::from));
                     log::debug!(
                         "{sender} replied with {} peer(s) and {} node(s) for info hash {}",
                         response.values.len(),
@@ -400,8 +400,8 @@ impl LookupSession {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct NodeSpace {
     info_hash: InfoHash,
-    nodes: BTreeMap<Distance, VecDeque<NodeMeta>>,
-    addr2node: HashMap<SocketAddr, NodeInfo>,
+    nodes: BTreeMap<Distance, VecDeque<NodeInfo>>,
+    addr2node: HashMap<SocketAddr, Node>,
 }
 
 impl NodeSpace {
@@ -415,11 +415,11 @@ impl NodeSpace {
 
     // TODO once `IpAddr.is_global()` is stabilized: Don't save nodes with
     // non-global IP addresses
-    fn add(&mut self, node: NodeInfo) {
+    fn add(&mut self, node: Node) {
         if let Entry::Vacant(entry) = self.addr2node.entry(node.address()) {
             entry.insert(node);
             let dist = node.id ^ self.info_hash;
-            self.nodes.entry(dist).or_default().push_front(NodeMeta {
+            self.nodes.entry(dist).or_default().push_front(NodeInfo {
                 node,
                 queried: false,
                 responsive: false,
@@ -431,35 +431,35 @@ impl NodeSpace {
         self.info_hash
     }
 
-    fn closest_unqueried(&mut self, k: usize) -> Vec<NodeInfo> {
+    fn closest_unqueried(&mut self, k: usize) -> Vec<Node> {
         // The returned nodes are marked queried as they're returned
         self.nodes
             .values_mut()
             .flatten()
             .take(k)
-            .filter(|nm| !nm.queried)
-            .map(|nm| {
-                nm.queried = true;
-                nm.node
+            .filter(|info| !info.queried)
+            .map(|info| {
+                info.queried = true;
+                info.node
             })
             .collect()
     }
 
-    fn closest_responsive(&self, k: usize) -> Vec<NodeInfo> {
+    fn closest_responsive(&self, k: usize) -> Vec<Node> {
         self.nodes
             .values()
             .flatten()
-            .filter(|nm| nm.responsive)
-            .map(|nm| nm.node)
+            .filter(|info| info.responsive)
+            .map(|info| info.node)
             .collect()
     }
 
     fn mark_responsive(&mut self, id: NodeId) {
         let dist = id ^ self.info_hash;
         if let Some(bucket) = self.nodes.get_mut(&(id ^ self.info_hash)) {
-            for nm in bucket {
-                if nm.node.id == id {
-                    nm.responsive = true;
+            for info in bucket {
+                if info.node.id == id {
+                    info.responsive = true;
                     break;
                 }
             }
@@ -475,8 +475,8 @@ impl NodeSpace {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct NodeMeta {
-    node: NodeInfo,
+struct NodeInfo {
+    node: Node,
     queried: bool,
     responsive: bool,
 }
@@ -579,7 +579,7 @@ enum UdpSendError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum NodeDisplay {
-    WithId(NodeInfo),
+    WithId(Node),
     NoId(SocketAddr),
 }
 

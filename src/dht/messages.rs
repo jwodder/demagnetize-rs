@@ -1,4 +1,4 @@
-use super::{NodeId, NodeInfo};
+use super::{Node, NodeId};
 use crate::compact::AsCompact;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -61,8 +61,8 @@ pub(super) struct GetPeersResponse {
     pub(super) client: Option<Bytes>,
     pub(super) node_id: NodeId,
     pub(super) values: Vec<Peer>,
-    pub(super) nodes: Vec<NodeInfo<Ipv4Addr>>,
-    pub(super) nodes6: Vec<NodeInfo<Ipv6Addr>>,
+    pub(super) nodes: Vec<Node<Ipv4Addr>>,
+    pub(super) nodes6: Vec<Node<Ipv6Addr>>,
     pub(super) token: Bytes,
     pub(super) your_addr: Option<SocketAddr>,
 }
@@ -108,18 +108,14 @@ impl FromBencode for GetPeersResponse {
                             }
                             (b"nodes", rval) => {
                                 let ns =
-                                    AsCompact::<Vec<NodeInfo<Ipv4Addr>>>::decode_bencode_object(
-                                        rval,
-                                    )
-                                    .context("r.nodes")?;
+                                    AsCompact::<Vec<Node<Ipv4Addr>>>::decode_bencode_object(rval)
+                                        .context("r.nodes")?;
                                 nodes.extend(ns.0);
                             }
                             (b"nodes6", rval) => {
                                 let ns =
-                                    AsCompact::<Vec<NodeInfo<Ipv6Addr>>>::decode_bencode_object(
-                                        rval,
-                                    )
-                                    .context("r.nodes6")?;
+                                    AsCompact::<Vec<Node<Ipv6Addr>>>::decode_bencode_object(rval)
+                                        .context("r.nodes6")?;
                                 nodes6.extend(ns.0);
                             }
                             (b"values", rval) => {
@@ -472,7 +468,7 @@ mod tests {
                     client: None,
                     node_id: NodeId::from(b"abcdefghij0123456789"),
                     values: Vec::new(),
-                    nodes: vec![NodeInfo {
+                    nodes: vec![Node {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
                         ip: Ipv4Addr::new(105, 105, 105, 105),
                         port: 28784,
@@ -495,7 +491,7 @@ mod tests {
                     node_id: NodeId::from(b"abcdefghij0123456789"),
                     values: Vec::new(),
                     nodes: Vec::new(),
-                    nodes6: vec![NodeInfo {
+                    nodes6: vec![Node {
                         id: NodeId::from(b"mnopqrstuvwxyz123456"),
                         ip: "6969:6969:6969:6969:6969:6969:6969:6969".parse().unwrap(),
                         port: 28784,
