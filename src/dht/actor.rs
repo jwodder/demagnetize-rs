@@ -243,8 +243,8 @@ enum ActorMessage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FoundPeers {
-    peers: Vec<Peer>,
-    closest_nodes: Vec<SocketAddr>,
+    pub(crate) peers: Vec<Peer>,
+    pub(crate) closest_nodes: Vec<SocketAddr>,
 }
 
 #[derive(Debug, Error)]

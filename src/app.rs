@@ -1,4 +1,3 @@
-#![expect(dead_code)]
 use crate::asyncutil::ShutdownGroup;
 use crate::config::Config;
 use crate::consts::PEER_ID_PREFIX;
