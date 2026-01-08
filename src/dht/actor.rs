@@ -1,6 +1,6 @@
 #![expect(unused_variables)]
 use super::messages;
-use super::{Distance, NodeId, NodeInfo};
+use super::{Distance, InetAddr, NodeId, NodeInfo};
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::{
-    net::{UdpSocket, lookup_host},
+    net::UdpSocket,
     sync::{mpsc, oneshot},
     time::sleep,
 };
@@ -477,38 +477,6 @@ struct NodeMeta {
     node: NodeInfo,
     queried: bool,
     responsive: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct InetAddr {
-    host: url::Host,
-    port: u16,
-}
-
-impl InetAddr {
-    async fn resolve(&self, use_ipv6: bool) -> Option<SocketAddr> {
-        match self.host {
-            url::Host::Domain(ref domain) => {
-                match lookup_host((domain.as_str(), self.port)).await {
-                    Ok(mut iter) => {
-                        if let Some(addr) = iter.find(|a| use_ipv6 || a.is_ipv4()) {
-                            log::debug!("Resolved domain {domain:?} to {}", addr.ip());
-                            Some(addr)
-                        } else {
-                            log::warn!("Failed to resolve domain {domain:?} to any IP addresses");
-                            None
-                        }
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to resolve domain {domain:?}: {e}");
-                        None
-                    }
-                }
-            }
-            url::Host::Ipv4(ip) => Some(SocketAddr::from((ip, self.port))),
-            url::Host::Ipv6(ip) => use_ipv6.then(|| SocketAddr::from((ip, self.port))),
-        }
-    }
 }
 
 #[derive(Debug)]

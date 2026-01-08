@@ -9,6 +9,7 @@ use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{Buf, Bytes};
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use tokio::net::lookup_host;
 use tokio_util::either::Either;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -181,3 +182,35 @@ impl FromCompact for NodeInfo<Ipv6Addr> {
 
 impl_vec_fromcompact!(NodeInfo<Ipv4Addr>, 26);
 impl_vec_fromcompact!(NodeInfo<Ipv6Addr>, 38);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct InetAddr {
+    host: url::Host,
+    port: u16,
+}
+
+impl InetAddr {
+    async fn resolve(&self, use_ipv6: bool) -> Option<SocketAddr> {
+        match self.host {
+            url::Host::Domain(ref domain) => {
+                match lookup_host((domain.as_str(), self.port)).await {
+                    Ok(mut iter) => {
+                        if let Some(addr) = iter.find(|a| use_ipv6 || a.is_ipv4()) {
+                            log::debug!("Resolved domain {domain:?} to {}", addr.ip());
+                            Some(addr)
+                        } else {
+                            log::warn!("Failed to resolve domain {domain:?} to any IP addresses");
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to resolve domain {domain:?}: {e}");
+                        None
+                    }
+                }
+            }
+            url::Host::Ipv4(ip) => Some(SocketAddr::from((ip, self.port))),
+            url::Host::Ipv6(ip) => use_ipv6.then(|| SocketAddr::from((ip, self.port))),
+        }
+    }
+}
