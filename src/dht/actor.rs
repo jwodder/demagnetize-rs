@@ -292,9 +292,10 @@ impl LookupSession {
                     nodes.extend(response.nodes.into_iter().map(NodeInfo::from));
                     nodes.extend(response.nodes6.into_iter().map(NodeInfo::from));
                     log::debug!(
-                        "{sender} replied with {} peer(s) and {} node(s)",
+                        "{sender} replied with {} peer(s) and {} node(s) for info hash {}",
                         response.values.len(),
-                        nodes.len()
+                        nodes.len(),
+                        self.info_hash(),
                     );
                     self.peers.extend(response.values);
                     for n in nodes {
@@ -320,16 +321,22 @@ impl LookupSession {
         &mut self,
         txn_gen: &mut TransactionGenerator,
     ) -> Vec<(SocketAddr, messages::GetPeersQuery)> {
+        let info_hash = self.info_hash();
+        let client = Some(messages::gen_client());
         self.to_query
             .drain(..)
             .map(|addr| {
+                log::debug!(
+                    "Sending \"get_peers\" query to {} for info hash {info_hash}",
+                    self.nodes.addr2display(addr)
+                );
                 let txn_id = txn_gen.generate();
                 self.in_flight.insert((addr, txn_id.clone()));
                 let query = messages::GetPeersQuery {
                     transaction_id: txn_id,
-                    client: Some(messages::gen_client()),
+                    client: client.clone(),
                     node_id: self.my_id,
-                    info_hash: self.nodes.target(),
+                    info_hash,
                     read_only: Some(true),
                     want: self
                         .using_ipv6
@@ -349,11 +356,20 @@ impl LookupSession {
                 .into_iter()
                 .map(|n| n.address())
                 .collect::<Vec<_>>();
+            log::info!(
+                "Found {} peers for {} on the DHT",
+                peers.len(),
+                self.info_hash(),
+            );
             FoundPeers {
                 peers,
                 closest_nodes,
             }
         })
+    }
+
+    fn info_hash(&self) -> InfoHash {
+        self.nodes.target()
     }
 }
 
