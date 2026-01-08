@@ -82,8 +82,11 @@ impl DhtActor {
                             self.sessions.insert(sid, session);
                             self.lookup_senders.insert(sid, response_to);
                             for (addr, query) in outgoing {
-                                self.send_query(addr, query).await;
+                                self.send_query(sid, addr, query).await;
                             }
+                            // Do a postprocess just in case all the sendings
+                            // failed and we're done now:
+                            self.postprocess_session(sid);
                         }
                         ActorMessage::Shutdown {response_to} => {
                             let _ = response_to.send(());
@@ -123,8 +126,10 @@ impl DhtActor {
         addrs
     }
 
-    // TODO: On error, notify the LookupSession that the sending failed
-    async fn send_query(&mut self, addr: SocketAddr, query: messages::GetPeersQuery) {
+    // Calls to this method must be followed by a call to
+    // `postprocess_session(sid)` in case a call to `handle_send_failure()`
+    // removed the last in-flight transaction
+    async fn send_query(&mut self, sid: usize, addr: SocketAddr, query: messages::GetPeersQuery) {
         let txn = query.transaction_id.clone();
         let msg = match query.to_bencode() {
             Ok(msg) => msg,
@@ -133,11 +138,17 @@ impl DhtActor {
                     "Failed to construct DHT \"get_peers\" query packet for {addr}: {}",
                     ErrorChain(e)
                 );
+                if let Some(s) = self.sessions.get_mut(&sid) {
+                    s.handle_send_failure(addr, txn);
+                }
                 return;
             }
         };
         if let Err(e) = self.udp.send(addr, &msg).await {
             log::warn!("Failed to send DHT message to {addr}: {e}");
+            if let Some(s) = self.sessions.get_mut(&sid) {
+                s.handle_send_failure(addr, txn);
+            }
         } else {
             self.txn_timeouts.spawn((addr, txn), sleep(self.timeout));
         }
@@ -162,7 +173,7 @@ impl DhtActor {
         for (&sid, s) in &mut self.sessions {
             if s.handle_message(addr, txn.clone(), &msg) {
                 for (addr, query) in s.get_outgoing(&mut self.txn_gen) {
-                    self.send_query(addr, query).await;
+                    self.send_query(sid, addr, query).await;
                 }
                 self.postprocess_session(sid);
                 found = true;
@@ -320,8 +331,12 @@ impl LookupSession {
         }
     }
 
-    fn handle_timeout(&mut self, sender: SocketAddr, txn: Bytes) -> bool {
-        self.in_flight.remove(&(sender, txn))
+    fn handle_timeout(&mut self, addr: SocketAddr, txn: Bytes) -> bool {
+        self.in_flight.remove(&(addr, txn))
+    }
+
+    fn handle_send_failure(&mut self, addr: SocketAddr, txn: Bytes) {
+        self.in_flight.remove(&(addr, txn));
     }
 
     fn get_outgoing(
