@@ -1,6 +1,6 @@
-#![expect(unused_variables, clippy::needless_pass_by_ref_mut)]
+#![expect(unused_variables)]
 use super::messages;
-use super::{NodeId, NodeInfo};
+use super::{Distance, NodeId, NodeInfo};
 use crate::consts::UDP_PACKET_LEN;
 use crate::peer::Peer;
 use crate::types::InfoHash;
@@ -9,7 +9,7 @@ use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::stream::{self, StreamExt};
 use rand::Rng;
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque, hash_map::Entry};
 use std::fmt;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -383,15 +383,31 @@ impl LookupSession {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct NodeSpace {
     info_hash: InfoHash,
+    nodes: BTreeMap<Distance, VecDeque<NodeMeta>>,
+    addr2node: HashMap<SocketAddr, NodeInfo>,
 }
 
 impl NodeSpace {
     fn new(info_hash: InfoHash) -> NodeSpace {
-        NodeSpace { info_hash }
+        NodeSpace {
+            info_hash,
+            nodes: BTreeMap::new(),
+            addr2node: HashMap::new(),
+        }
     }
 
+    // TODO once `IpAddr.is_global()` is stabilized: Don't save nodes with
+    // non-global IP addresses
     fn add(&mut self, node: NodeInfo) {
-        todo!()
+        if let Entry::Vacant(entry) = self.addr2node.entry(node.address()) {
+            entry.insert(node);
+            let dist = node.id ^ self.info_hash;
+            self.nodes.entry(dist).or_default().push_front(NodeMeta {
+                node,
+                queried: false,
+                responsive: false,
+            });
+        }
     }
 
     fn target(&self) -> InfoHash {
@@ -400,27 +416,52 @@ impl NodeSpace {
 
     fn closest_unqueried(&mut self, k: usize) -> Vec<NodeInfo> {
         // The returned nodes are marked queried as they're returned
-        todo!()
+        self.nodes
+            .values_mut()
+            .flatten()
+            .take(k)
+            .filter(|nm| !nm.queried)
+            .map(|nm| {
+                nm.queried = true;
+                nm.node
+            })
+            .collect()
     }
 
     fn closest_responsive(&self, k: usize) -> Vec<NodeInfo> {
-        todo!()
+        self.nodes
+            .values()
+            .flatten()
+            .filter(|nm| nm.responsive)
+            .map(|nm| nm.node)
+            .collect()
     }
 
     fn mark_responsive(&mut self, id: NodeId) {
-        todo!()
-    }
-
-    fn addr2node(&self, addr: SocketAddr) -> Option<NodeInfo> {
-        todo!()
+        let dist = id ^ self.info_hash;
+        if let Some(bucket) = self.nodes.get_mut(&(id ^ self.info_hash)) {
+            for nm in bucket {
+                if nm.node.id == id {
+                    nm.responsive = true;
+                    break;
+                }
+            }
+        }
     }
 
     fn addr2display(&self, addr: SocketAddr) -> NodeDisplay {
-        match self.addr2node(addr) {
-            Some(n) => NodeDisplay::WithId(n),
+        match self.addr2node.get(&addr) {
+            Some(&n) => NodeDisplay::WithId(n),
             None => NodeDisplay::NoId(addr),
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NodeMeta {
+    node: NodeInfo,
+    queried: bool,
+    responsive: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -500,8 +541,6 @@ impl UdpHandle {
         Ok(UdpHandle { ipv4, ipv6 })
     }
 
-    // TODO: Wrap the error in a type that also stores the address family for
-    // use in the error message
     async fn recv(&self) -> std::io::Result<(SocketAddr, Bytes)> {
         if let Some(ipv6) = self.ipv6.as_ref() {
             let mut ipv4_packet = BytesMut::with_capacity(UDP_PACKET_LEN);

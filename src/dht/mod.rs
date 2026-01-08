@@ -2,6 +2,7 @@
 mod actor;
 mod messages;
 use crate::compact::{FromCompact, FromCompactError};
+use crate::types::InfoHash;
 use crate::util::{PacketError, TryBytes, TryFromBuf};
 use bendy::decoding::{Error as BendyError, FromBencode, Object};
 use bendy::encoding::{SingleItemEncoder, ToBencode};
@@ -40,6 +41,16 @@ impl From<&[u8; 20]> for NodeId {
     }
 }
 
+impl std::ops::BitXor<InfoHash> for NodeId {
+    type Output = Distance;
+
+    fn bitxor(self, info_hash: InfoHash) -> Distance {
+        let nid = self.0;
+        let ih = info_hash.as_bytes();
+        Distance(std::array::from_fn(|i| nid[i] & ih[i]))
+    }
+}
+
 impl TryFromBuf for NodeId {
     fn try_from_buf(buf: &mut Bytes) -> Result<NodeId, PacketError> {
         if buf.len() >= 20 {
@@ -74,6 +85,9 @@ impl ToBencode for NodeId {
         encoder.emit_bytes(&self.0)
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct Distance([u8; 20]);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct NodeInfo<T = IpAddr> {
