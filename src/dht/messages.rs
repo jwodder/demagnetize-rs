@@ -42,10 +42,10 @@ impl ToBencode for GetPeersQuery {
                 })
             })?;
             e.emit_pair(b"q", AsString(b"get_peers"))?;
-            e.emit_pair(b"t", AsString(&self.transaction_id))?;
             if let Some(ro) = self.read_only {
                 e.emit_pair(b"ro", u8::from(ro))?;
             }
+            e.emit_pair(b"t", AsString(&self.transaction_id))?;
             if let Some(ref v) = self.client {
                 e.emit_pair(b"v", AsString(v))?;
             }
@@ -63,7 +63,7 @@ pub(super) struct GetPeersResponse {
     pub(super) values: Vec<Peer>,
     pub(super) nodes: Vec<Node<Ipv4Addr>>,
     pub(super) nodes6: Vec<Node<Ipv6Addr>>,
-    pub(super) token: Bytes,
+    pub(super) token: Option<Bytes>,
     pub(super) your_addr: Option<SocketAddr>,
 }
 
@@ -144,7 +144,6 @@ impl FromBencode for GetPeersResponse {
         }
         let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
         let node_id = node_id.ok_or_else(|| BendyError::missing_field("r.id"))?;
-        let token = token.ok_or_else(|| BendyError::missing_field("r.token"))?;
         Ok(GetPeersResponse {
             transaction_id,
             client,
@@ -429,7 +428,7 @@ mod tests {
                     ],
                     nodes: Vec::new(),
                     nodes6: Vec::new(),
-                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    token: Some(Bytes::from(b"aoeusnth".as_slice())),
                     your_addr: None,
                 }
             );
@@ -452,7 +451,7 @@ mod tests {
                     ],
                     nodes: Vec::new(),
                     nodes6: Vec::new(),
-                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    token: Some(Bytes::from(b"aoeusnth".as_slice())),
                     your_addr: None,
                 }
             );
@@ -474,7 +473,7 @@ mod tests {
                         port: 28784,
                     }],
                     nodes6: Vec::new(),
-                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    token: Some(Bytes::from(b"aoeusnth".as_slice())),
                     your_addr: None,
                 }
             );
@@ -496,7 +495,7 @@ mod tests {
                         ip: "6969:6969:6969:6969:6969:6969:6969:6969".parse().unwrap(),
                         port: 28784,
                     }],
-                    token: Bytes::from(b"aoeusnth".as_slice()),
+                    token: Some(Bytes::from(b"aoeusnth".as_slice())),
                     your_addr: None,
                 }
             );
