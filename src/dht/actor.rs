@@ -65,11 +65,13 @@ impl DhtActor {
     }
 
     pub(crate) async fn run(mut self) {
+        log::info!("Starting up DHT node ...");
         let bootstrap_addrs = self.resolve_bootstrap().await;
         if bootstrap_addrs.is_empty() {
             log::error!("Failed to resolve any addresses for DHT bootstrap nodes");
             return;
         }
+        log::debug!("Finished resolving DHT bootstrap node addresses");
         loop {
             tokio::select! {
                 Some(msg) = self.action_recv.recv() => {
