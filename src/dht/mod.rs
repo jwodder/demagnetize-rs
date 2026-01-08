@@ -82,6 +82,12 @@ struct NodeInfo<T = IpAddr> {
     port: u16,
 }
 
+impl<T: Into<IpAddr> + Copy> NodeInfo<T> {
+    fn address(&self) -> SocketAddr {
+        SocketAddr::from((self.ip, self.port))
+    }
+}
+
 impl NodeInfo<IpAddr> {
     fn discriminate(self) -> Either<NodeInfo<Ipv4Addr>, NodeInfo<Ipv6Addr>> {
         match self.ip {
@@ -101,8 +107,7 @@ impl NodeInfo<IpAddr> {
 
 impl<T: Into<IpAddr> + Copy> fmt::Display for NodeInfo<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let addr = SocketAddr::from((self.ip, self.port));
-        write!(f, "DHT node {} at {addr}", self.id)
+        write!(f, "DHT node {} at {}", self.id, self.address())
     }
 }
 
