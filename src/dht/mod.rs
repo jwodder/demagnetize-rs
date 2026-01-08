@@ -1,6 +1,9 @@
 #![expect(dead_code)]
 mod actor;
 mod messages;
+pub(crate) use self::actor::{
+    CreateDhtActorError, DhtActor, DhtHandle, DhtHandleError, FoundPeers,
+};
 use crate::compact::{FromCompact, FromCompactError};
 use crate::types::InfoHash;
 use crate::util::{PacketError, TryBytes, TryFromBuf};
@@ -174,7 +177,9 @@ pub(crate) struct InetAddr {
 }
 
 impl InetAddr {
-    async fn resolve(&self, use_ipv6: bool) -> Option<SocketAddr> {
+    // This needs to consume self so that the resulting future will be 'static,
+    // thereby allowing DhtActor::run() to be passed to tokio::spawn().
+    async fn resolve(self, use_ipv6: bool) -> Option<SocketAddr> {
         match self.host {
             url::Host::Domain(ref domain) => {
                 match lookup_host((domain.as_str(), self.port)).await {

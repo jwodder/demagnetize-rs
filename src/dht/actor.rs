@@ -119,6 +119,7 @@ impl DhtActor {
         let mut resolutions = stream::iter(
             self.bootstrap_nodes
                 .iter()
+                .cloned()
                 .map(|n| n.resolve(self.udp.using_ipv6())),
         )
         .buffer_unordered(RESOLVE_JOB_LIMIT);
@@ -230,7 +231,7 @@ impl DhtHandle {
 }
 
 #[derive(Debug)]
-pub(crate) enum ActorMessage {
+enum ActorMessage {
     LookupPeers {
         info_hash: InfoHash,
         response_to: oneshot::Sender<FoundPeers>,
