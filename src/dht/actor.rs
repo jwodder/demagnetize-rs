@@ -1,4 +1,3 @@
-#![expect(unused_variables)]
 use super::messages;
 use super::{Distance, InetAddr, Node, NodeId};
 use crate::consts::UDP_PACKET_LEN;
@@ -322,6 +321,9 @@ impl LookupSession {
                     for n in nodes {
                         self.nodes.add(n);
                     }
+                    if let NodeDisplay::WithId(n) = sender {
+                        self.nodes.mark_responsive(n.id);
+                    }
                     self.to_query.extend(
                         self.nodes
                             .closest_unqueried(CLOSEST)
@@ -463,12 +465,12 @@ impl NodeSpace {
             .values()
             .flatten()
             .filter(|info| info.responsive)
+            .take(k)
             .map(|info| info.node)
             .collect()
     }
 
     fn mark_responsive(&mut self, id: NodeId) {
-        let dist = id ^ self.info_hash;
         if let Some(bucket) = self.nodes.get_mut(&(id ^ self.info_hash)) {
             for info in bucket {
                 if info.node.id == id {

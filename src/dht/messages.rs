@@ -295,7 +295,7 @@ pub(super) fn prescan(msg: &[u8]) -> Result<Prescan, BendyError> {
                     match y.as_str() {
                         "q" => msg_type = Some(MessageType::Query),
                         "r" => msg_type = Some(MessageType::Response),
-                        "e" => msg_type = Some(MessageType::Response),
+                        "e" => msg_type = Some(MessageType::Error),
                         _ => {
                             return Err(BendyError::malformed_content(InvalidYField {
                                 expected: "\"q\", \"r\", or \"e\"",
