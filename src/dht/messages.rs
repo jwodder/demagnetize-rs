@@ -272,83 +272,6 @@ impl Want {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct Prescan {
-    pub(super) transaction_id: Bytes,
-    pub(super) msg_type: MessageType,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum MessageType {
-    Query,
-    Response,
-    Error,
-}
-
-pub(super) fn prescan(msg: &[u8]) -> Result<Prescan, BendyError> {
-    let mut decoder = Decoder::new(msg);
-    let mut transaction_id = None;
-    let mut msg_type = None;
-    if let Some(obj) = decoder.next_object()? {
-        let mut dd = obj.try_into_dictionary()?;
-        while let Some(kv) = dd.next_pair()? {
-            match kv {
-                (b"t", val) => {
-                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
-                    transaction_id = Some(Bytes::from(data.0));
-                }
-                (b"y", val) => {
-                    let y = String::decode_bencode_object(val).context("y")?;
-                    match y.as_str() {
-                        "q" => msg_type = Some(MessageType::Query),
-                        "r" => msg_type = Some(MessageType::Response),
-                        "e" => msg_type = Some(MessageType::Error),
-                        _ => {
-                            return Err(BendyError::malformed_content(InvalidYField {
-                                expected: "\"q\", \"r\", or \"e\"",
-                                got: y,
-                            })
-                            .context("y"));
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-    let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
-    let msg_type = msg_type.ok_or_else(|| BendyError::missing_field("y"))?;
-    Ok(Prescan {
-        transaction_id,
-        msg_type,
-    })
-}
-
-fn get_message_type(msg: &[u8]) -> Result<&[u8], BendyError> {
-    let mut decoder = Decoder::new(msg);
-    if let Some(obj) = decoder.next_object()? {
-        let mut dd = obj.try_into_dictionary()?;
-        while let Some(kv) = dd.next_pair()? {
-            if let (b"y", val) = kv {
-                return val.try_into_bytes();
-            }
-        }
-    }
-    Err(BendyError::missing_field("y"))
-}
-
-pub(super) fn decode_response<T: FromBencode>(msg: &[u8]) -> Result<T, ResponseError> {
-    match get_message_type(msg)? {
-        b"r" => decode_bencode::<T>(msg).map_err(Into::into),
-        b"e" => Err(decode_bencode::<ErrorResponse>(msg)?.into()),
-        other => Err(InvalidYField {
-            expected: "\"e\" or \"r\"",
-            got: String::from_utf8_lossy(other).into_owned(),
-        }
-        .into()),
-    }
-}
-
 pub(super) fn gen_client() -> Bytes {
     let mut buf = BytesMut::with_capacity(4);
     buf.put_u8(b'D');
@@ -366,6 +289,80 @@ pub(super) fn gen_client() -> Bytes {
     buf.freeze()
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Prescan {
+    pub(super) transaction_id: Bytes,
+    pub(super) msg_type: MessageType,
+}
+
+pub(super) fn prescan(msg: &[u8]) -> Result<Prescan, BendyError> {
+    let mut decoder = Decoder::new(msg);
+    let mut transaction_id = None;
+    let mut msg_type = None;
+    if let Some(obj) = decoder.next_object()? {
+        let mut dd = obj.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            match kv {
+                (b"t", val) => {
+                    let data = AsString::<Vec<u8>>::decode_bencode_object(val).context("t")?;
+                    transaction_id = Some(Bytes::from(data.0));
+                }
+                (b"y", val) => {
+                    msg_type = Some(MessageType::decode_bencode_object(val).context("y")?);
+                }
+                _ => (),
+            }
+        }
+    }
+    let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
+    let msg_type = msg_type.ok_or_else(|| BendyError::missing_field("y"))?;
+    Ok(Prescan {
+        transaction_id,
+        msg_type,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum MessageType {
+    Query,
+    Response,
+    Error,
+}
+
+impl FromBencode for MessageType {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<MessageType, BendyError> {
+        let mt = String::decode_bencode_object(object)?;
+        match mt.as_str() {
+            "q" => Ok(MessageType::Query),
+            "r" => Ok(MessageType::Response),
+            "e" => Ok(MessageType::Error),
+            _ => Err(BendyError::malformed_content(InvalidYField {
+                expected: "\"r\", \"q\", or \"e\"",
+                got: mt,
+            })),
+        }
+    }
+}
+
+pub(super) fn decode_response<T: FromBencode>(msg: &[u8]) -> Result<T, ResponseError> {
+    let mut msg_type = None;
+    let mut decoder = Decoder::new(msg);
+    if let Some(obj) = decoder.next_object()? {
+        let mut dd = obj.try_into_dictionary()?;
+        while let Some(kv) = dd.next_pair()? {
+            if let (b"y", val) = kv {
+                msg_type = Some(MessageType::decode_bencode_object(val).context("y")?);
+                break;
+            }
+        }
+    }
+    match msg_type.ok_or_else(|| BendyError::missing_field("y"))? {
+        MessageType::Response => decode_bencode::<T>(msg).map_err(Into::into),
+        MessageType::Error => Err(decode_bencode::<ErrorResponse>(msg)?.into()),
+        MessageType::Query => Err(ResponseError::Query),
+    }
+}
+
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[error("invalid \"y\" field in DHT RPC packet; expected {expected}, got {got:?}")]
 pub(super) struct InvalidYField {
@@ -379,8 +376,8 @@ pub(super) enum ResponseError {
     Bencode(#[from] UnbencodeError),
     #[error("remote DHT node replied with error")]
     Rpc(#[from] RpcError),
-    #[error(transparent)]
-    MsgType(#[from] InvalidYField),
+    #[error("failed to decode response from packet: is actually a query")]
+    Query,
 }
 
 impl From<BendyError> for ResponseError {
