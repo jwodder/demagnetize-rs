@@ -163,6 +163,7 @@ pub(super) struct ErrorResponse {
     pub(super) client: Option<Bytes>,
     pub(super) error_code: u32,
     pub(super) error_message: String,
+    pub(super) your_addr: Option<SocketAddr>,
 }
 
 impl FromBencode for ErrorResponse {
@@ -171,6 +172,7 @@ impl FromBencode for ErrorResponse {
         let mut client = None;
         let mut error_code = None;
         let mut error_message = None;
+        let mut your_addr = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
             match kv {
@@ -206,6 +208,10 @@ impl FromBencode for ErrorResponse {
                         .context("y"));
                     }
                 }
+                (b"ip", val) => {
+                    let addr = AsCompact::<SocketAddr>::decode_bencode_object(val).context("ip")?;
+                    your_addr = Some(addr.0);
+                }
                 _ => (),
             }
         }
@@ -217,6 +223,7 @@ impl FromBencode for ErrorResponse {
             client,
             error_code,
             error_message,
+            your_addr,
         })
     }
 }
@@ -409,6 +416,7 @@ mod tests {
                     client: None,
                     error_code: 201,
                     error_message: "A Generic Error Ocurred".into(),
+                    your_addr: None,
                 }
             );
         }
