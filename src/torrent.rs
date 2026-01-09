@@ -2,13 +2,14 @@ use crate::consts::{CLIENT, MAX_INFO_LENGTH};
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, InfoHashProvider};
 use bendy::decoding::{Decoder, Object};
-use bendy::encoding::ToBencode;
+use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{BufMut, Bytes, BytesMut};
 use patharg::OutputArg;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::iter::Peekable;
+use std::net::SocketAddr;
 use std::ops::Range;
 use std::path::Path;
 use std::str::FromStr;
@@ -130,14 +131,20 @@ impl<H: InfoHashProvider> TorrentInfoBuilder<H> {
 pub(crate) struct TorrentFile<H> {
     info: TorrentInfo<H>,
     trackers: Vec<Arc<Tracker>>,
+    nodes: Vec<SocketAddr>,
     creation_date: i64,
     created_by: String,
 }
 
 impl<H: InfoHashProvider> TorrentFile<H> {
-    pub(crate) fn new(info: TorrentInfo<H>, trackers: Vec<Arc<Tracker>>) -> TorrentFile<H> {
+    pub(crate) fn new(
+        info: TorrentInfo<H>,
+        trackers: Vec<Arc<Tracker>>,
+        nodes: Vec<SocketAddr>,
+    ) -> TorrentFile<H> {
         TorrentFile {
             trackers,
+            nodes,
             created_by: CLIENT.into(),
             creation_date: unix_now(),
             info,
@@ -209,6 +216,13 @@ impl<H> From<TorrentFile<H>> for Bytes {
                 .as_slice(),
         );
         buf.put(Bytes::from(torrent.info));
+        if !torrent.nodes.is_empty() {
+            put_kv!(
+                buf,
+                "nodes",
+                torrent.nodes.into_iter().map(NodeAddr).collect::<Vec<_>>()
+            );
+        }
         buf.put_u8(b'e');
         buf.freeze()
     }
@@ -296,6 +310,21 @@ pub(crate) enum PathTemplateError {
     InvalidField(usize),
     #[error("unknown placeholder {0:?}")]
     UnknownField(String),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NodeAddr(SocketAddr);
+
+impl ToBencode for NodeAddr {
+    const MAX_DEPTH: usize = 1;
+
+    fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
+        encoder.emit_list(|lst| {
+            lst.emit_str(&self.0.ip().to_string())?;
+            lst.emit_int(self.0.port())?;
+            Ok(())
+        })
+    }
 }
 
 fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
@@ -454,6 +483,7 @@ mod tests {
                     .unwrap()
                     .into(),
             ],
+            nodes: Vec::new(),
             creation_date: 1686939764,
             created_by: "demagnetize vDEV".into(),
         };

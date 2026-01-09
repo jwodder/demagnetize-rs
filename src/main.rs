@@ -359,7 +359,7 @@ impl Command {
                     .await
                 {
                     Ok(info) => {
-                        let tf = TorrentFile::new(info, Vec::new());
+                        let tf = TorrentFile::new(info, Vec::new(), Vec::new());
                         if let Err(e) = tf.save(&outfile).await {
                             log::error!("Failed to write to file: {}", ErrorChain(e));
                             ExitCode::FAILURE
