@@ -143,9 +143,6 @@ impl FromStr for Magnet {
         let Some(info_hash) = info_hash else {
             return Err(MagnetError::NoXt);
         };
-        if trackers.is_empty() {
-            return Err(MagnetError::NoTrackers);
-        }
         Ok(Magnet {
             info_hash,
             display_name: dn.map(String::from),
@@ -188,8 +185,6 @@ pub(crate) enum MagnetError {
     InvalidXt(#[from] XtError),
     #[error("magnet URI has multiple \"xt\" parameters")]
     MultipleXt,
-    #[error("no trackers given in magnet URI")]
-    NoTrackers,
     #[error("invalid \"tr\" parameter")]
     InvalidTracker(#[from] TrackerUrlError),
 }
@@ -271,7 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_magnet() {
+    fn parse_magnet() {
         let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb&dn=debian-11.2.0-amd64-netinst.iso&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce".parse::<Magnet>().unwrap();
         assert_eq!(
             magnet.info_hash.as_bytes(),
@@ -289,5 +284,18 @@ mod tests {
                     .unwrap()
             )]
         );
+    }
+
+    #[test]
+    fn parse_magnet_no_trackers() {
+        let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb"
+            .parse::<Magnet>()
+            .unwrap();
+        assert_eq!(
+            magnet.info_hash.as_bytes(),
+            b"\x28\xC5\x51\x96\xF5\x77\x53\xC4\x0A\xCE\xB6\xFB\x58\x61\x7E\x69\x95\xA7\xED\xDB"
+        );
+        assert_eq!(magnet.display_name(), None);
+        assert!(magnet.trackers().is_empty());
     }
 }
