@@ -80,6 +80,7 @@ impl DhtActor {
                             session.bootstrap(bootstrap_addrs.clone());
                             let outgoing = session.get_outgoing(&mut self.txn_gen);
                             let sid = self.next_session_id;
+                            self.next_session_id += 1;
                             self.sessions.insert(sid, session);
                             self.lookup_senders.insert(sid, response_to);
                             for (addr, query) in outgoing {
