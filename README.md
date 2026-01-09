@@ -20,14 +20,8 @@ protocol.  The following notable features are supported:
 - UDP tracker protocol extensions ([BEP
   41](https://www.bittorrent.org/beps/bep_0041.html))
 - MSE/PE Encryption
-
-The following features are not currently supported but are planned, in no
-particular order:
-
-- Distributed hash tables
-- BitTorrent protocol v2
-- `x.pe` parameters in magnet links
-- uTP
+- Querying the BitTorrent Mainline DHT for peers ([BEP
+  5](https://www.bittorrent.org/beps/bep_0005.html))
 
 `demagnetize` is a translation of a Python program by the same author; you can
 find the Python version at <https://github.com/jwodder/demagnetize>.
@@ -88,9 +82,10 @@ Usage
 
 The `demagnetize` command has two main general-purpose subcommands, `get` (for
 converting a single magnet link) and `batch` (for converting a file of magnet
-links).  There are also two low-level commands, `query-tracker` (for getting a
-list of peers from a single tracker) and `query-peer` (for getting torrent
-metadata from a single peer).
+links).  There are also three low-level commands, `query-tracker` (for getting
+a list of peers from a single tracker), `query-dht` (for getting a list of
+peers from the DHT), and `query-peer` (for getting torrent metadata from a
+single peer).
 
 Global Options
 --------------
@@ -173,6 +168,21 @@ in the form "IP:PORT".
   protocol.  Overrides the `general.encrypt` configuration setting.
 
 
+`demagnetize query-dht`
+-----------------------
+
+    demagnetize [<global options>] query-dht [<options>] <info-hash>
+
+Query the BitTorrent Mainline DHT for peers downloading the torrent with the
+given info hash (specified as a 40-character hex string or 32-character base32
+string), and print out the the retrieved peers' addresses in the form
+"IP:PORT".
+
+### Options
+
+- `-J`, `--json` — Print out the peers as JSON objects, one per line
+
+
 `demagnetize query-peer`
 ------------------------
 
@@ -242,6 +252,17 @@ This file may contain the following tables & keys, all of which are optional:
         - `"never"` — Do not use encryption; do not attempt to connect to peers
           that require encryption; do not include any crypto parameters in
           announcements to HTTP trackers
+
+- `[dht]` — settings for interacting with the DHT
+    - `bootstrap-nodes` (nonempty list of strings) — Start all searches on the
+      DHT by querying the given nodes.  Nodes are given as internet addresses
+      in the form `"DOMAIN:PORT"`, `"IPv4:PORT"`, or `"[IPv6]:PORT"`.
+        - The default bootstrap nodes are:
+            - `dht.transmissionbt.com:6881`
+            - `relay.pkarr.org:6881`
+            - `router.bittorrent.com:6881`
+    - `query-timeout` (nonnegative integer; default 2) — The maximum number of
+      seconds to wait for a reply to a sent DHT query
 
 - `[peers]` — settings for interacting with peers
     - `dh-exchange-timeout` (nonnegative integer; default 30) — When performing
