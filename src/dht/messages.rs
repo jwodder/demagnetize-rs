@@ -6,6 +6,7 @@ use crate::util::{UnbencodeError, decode_bencode};
 use bendy::decoding::{Decoder, Error as BendyError, FromBencode, Object, ResultExt};
 use bendy::encoding::{AsString, SingleItemEncoder, ToBencode};
 use bytes::{BufMut, Bytes, BytesMut};
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use thiserror::Error;
 
@@ -161,17 +162,25 @@ impl FromBencode for GetPeersResponse {
 pub(super) struct ErrorResponse {
     pub(super) transaction_id: Bytes,
     pub(super) client: Option<Bytes>,
-    pub(super) error_code: u32,
-    pub(super) error_message: String,
+    pub(super) code: ErrorCode,
+    pub(super) message: String,
     pub(super) your_addr: Option<SocketAddr>,
 }
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {:?}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for ErrorResponse {}
 
 impl FromBencode for ErrorResponse {
     fn decode_bencode_object(object: Object<'_, '_>) -> Result<ErrorResponse, BendyError> {
         let mut transaction_id = None;
         let mut client = None;
-        let mut error_code = None;
-        let mut error_message = None;
+        let mut code = None;
+        let mut message = None;
         let mut your_addr = None;
         let mut dd = object.try_into_dictionary()?;
         while let Some(kv) = dd.next_pair()? {
@@ -179,12 +188,12 @@ impl FromBencode for ErrorResponse {
                 (b"e", val) => {
                     let mut elst = val.try_into_list().context("e")?;
                     if let Some(item) = elst.next_object().context("e")? {
-                        error_code = Some(u32::decode_bencode_object(item).context("e.0")?);
+                        code = Some(ErrorCode::decode_bencode_object(item).context("e.0")?);
                     }
-                    if error_code.is_some()
+                    if code.is_some()
                         && let Some(item) = elst.next_object().context("e")?
                     {
-                        error_message = Some(
+                        message = Some(
                             String::from_utf8_lossy(item.try_into_bytes().context("e.1")?)
                                 .into_owned(),
                         );
@@ -216,43 +225,47 @@ impl FromBencode for ErrorResponse {
             }
         }
         let transaction_id = transaction_id.ok_or_else(|| BendyError::missing_field("t"))?;
-        let error_code = error_code.ok_or_else(|| BendyError::missing_field("e.0"))?;
-        let error_message = error_message.ok_or_else(|| BendyError::missing_field("e.1"))?;
+        let code = code.ok_or_else(|| BendyError::missing_field("e.0"))?;
+        let message = message.ok_or_else(|| BendyError::missing_field("e.1"))?;
         Ok(ErrorResponse {
             transaction_id,
             client,
-            error_code,
-            error_message,
+            code,
+            message,
             your_addr,
         })
     }
 }
 
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub(super) enum RpcError {
-    #[error("generic error: {0:?}")]
-    Generic(String),
-    #[error("server error: {0:?}")]
-    Server(String),
-    #[error("protocol error: {0:?}")]
-    Protocol(String),
-    #[error("method unknown error: {0:?}")]
-    MethodUnknown(String),
-    #[error("other error: code {code}: {message:?}")]
-    Other { code: u32, message: String },
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ErrorCode {
+    Generic,
+    Server,
+    Protocol,
+    MethodUnknown,
+    Other(u32),
 }
 
-impl From<ErrorResponse> for RpcError {
-    fn from(value: ErrorResponse) -> RpcError {
-        match value.error_code {
-            201 => RpcError::Generic(value.error_message),
-            202 => RpcError::Server(value.error_message),
-            203 => RpcError::Protocol(value.error_message),
-            204 => RpcError::MethodUnknown(value.error_message),
-            code => RpcError::Other {
-                code,
-                message: value.error_message,
-            },
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorCode::Generic => write!(f, "generic error"),
+            ErrorCode::Server => write!(f, "server error"),
+            ErrorCode::Protocol => write!(f, "protocol error"),
+            ErrorCode::MethodUnknown => write!(f, "method unknown error"),
+            ErrorCode::Other(code) => write!(f, "other error: code {code}"),
+        }
+    }
+}
+
+impl FromBencode for ErrorCode {
+    fn decode_bencode_object(object: Object<'_, '_>) -> Result<ErrorCode, BendyError> {
+        match u32::decode_bencode_object(object)? {
+            201 => Ok(ErrorCode::Generic),
+            202 => Ok(ErrorCode::Server),
+            203 => Ok(ErrorCode::Protocol),
+            204 => Ok(ErrorCode::MethodUnknown),
+            code => Ok(ErrorCode::Other(code)),
         }
     }
 }
@@ -358,16 +371,12 @@ pub(super) fn decode_response<T: FromBencode>(msg: &[u8]) -> Result<T, ResponseE
     }
     match msg_type.ok_or_else(|| BendyError::missing_field("y"))? {
         MessageType::Response => decode_bencode::<T>(msg).map_err(Into::into),
-        MessageType::Error => Err(decode_bencode::<ErrorResponse>(msg)?.into()),
+        MessageType::Error => {
+            let err = decode_bencode::<ErrorResponse>(msg)?;
+            Err(ResponseError::Rpc(Box::new(err)))
+        }
         MessageType::Query => Err(ResponseError::Query),
     }
-}
-
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-#[error("invalid \"y\" field in DHT RPC packet; expected {expected}, got {got:?}")]
-pub(super) struct InvalidYField {
-    expected: &'static str,
-    got: String,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -375,7 +384,7 @@ pub(super) enum ResponseError {
     #[error("failed to decode DHT RPC packet")]
     Bencode(#[from] UnbencodeError),
     #[error("remote DHT node replied with error")]
-    Rpc(#[from] RpcError),
+    Rpc(#[from] Box<ErrorResponse>),
     #[error("failed to decode response from packet: is actually a query")]
     Query,
 }
@@ -386,10 +395,11 @@ impl From<BendyError> for ResponseError {
     }
 }
 
-impl From<ErrorResponse> for ResponseError {
-    fn from(value: ErrorResponse) -> ResponseError {
-        ResponseError::from(RpcError::from(value))
-    }
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[error("invalid \"y\" field in DHT RPC packet; expected {expected}, got {got:?}")]
+pub(super) struct InvalidYField {
+    expected: &'static str,
+    got: String,
 }
 
 #[cfg(test)]
@@ -411,8 +421,8 @@ mod tests {
                 ErrorResponse {
                     transaction_id: Bytes::from(b"aa".as_slice()),
                     client: None,
-                    error_code: 201,
-                    error_message: "A Generic Error Ocurred".into(),
+                    code: ErrorCode::Generic,
+                    message: "A Generic Error Ocurred".into(),
                     your_addr: None,
                 }
             );
