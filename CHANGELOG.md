@@ -1,5 +1,5 @@
-v0.6.0 (in development)
------------------------
+v0.6.0 (2026-01-10)
+-------------------
 - Add URL of GitHub repository to `--help` output
 - Increased MSRV to 1.88
 - Show magnet display name next to info hash in more log messages
