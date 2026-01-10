@@ -647,4 +647,59 @@ mod tests {
             );
         }
     }
+
+    mod decode_response {
+        use super::*;
+        use assert_matches::assert_matches;
+
+        #[test]
+        fn get_peers_response() {
+            let msg = decode_response::<GetPeersResponse>(b"d1:rd2:id20:abcdefghij01234567895:token8:aoeusnth6:valuesl6:axje.u6:idhtnmee1:t2:aa1:y1:re").unwrap();
+            assert_eq!(
+                msg,
+                GetPeersResponse {
+                    transaction_id: Bytes::from(b"aa".as_slice()),
+                    client: None,
+                    node_id: NodeId::from(b"abcdefghij0123456789"),
+                    values: vec![
+                        "97.120.106.101:11893".parse().unwrap(),
+                        "105.100.104.116:28269".parse().unwrap(),
+                    ],
+                    nodes: Vec::new(),
+                    nodes6: Vec::new(),
+                    token: Some(Bytes::from(b"aoeusnth".as_slice())),
+                    your_addr: None,
+                }
+            );
+        }
+
+        #[test]
+        fn error() {
+            let e = decode_response::<GetPeersResponse>(
+                b"d1:eli201e23:A Generic Error Ocurrede1:t2:aa1:y1:ee",
+            )
+            .unwrap_err();
+            assert_matches!(e, ResponseError::Rpc(ebox) => {
+                assert_eq!(
+                    *ebox,
+                    ErrorResponse {
+                        transaction_id: Bytes::from(b"aa".as_slice()),
+                        client: None,
+                        code: ErrorCode::Generic,
+                        message: "A Generic Error Ocurred".into(),
+                        your_addr: None,
+                    }
+                );
+            });
+        }
+
+        #[test]
+        fn query() {
+            let e = decode_response::<GetPeersResponse>(
+                b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe"
+            )
+            .unwrap_err();
+            assert_matches!(e, ResponseError::Query);
+        }
+    }
 }
