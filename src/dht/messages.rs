@@ -571,10 +571,31 @@ mod tests {
             };
             assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz1234564:wantl2:n42:n6ee1:q9:get_peers1:t2:aa1:y1:qe");
         }
+
+        #[test]
+        fn get_peers_query_all_fields() {
+            let msg = GetPeersQuery {
+                transaction_id: Bytes::from(b"xx".as_slice()),
+                client: Some(Bytes::from(b"TEST".as_slice())),
+                node_id: NodeId::from(b"abcdefghij0123456789"),
+                info_hash: InfoHash::from(b"mnopqrstuvwxyz123456"),
+                read_only: Some(true),
+                want: Some(vec![Want::N4, Want::N6]),
+            };
+            assert_eq!(msg.to_bencode().unwrap(), b"d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz1234564:wantl2:n42:n6ee1:q9:get_peers2:roi1e1:t2:xx1:v4:TEST1:y1:qe");
+        }
     }
 
     mod prescan {
         use super::*;
+
+        #[test]
+        fn ok_query() {
+            let ps =
+                prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:qe".as_slice()).unwrap();
+            assert_eq!(ps.transaction_id, b"aa".as_slice());
+            assert_eq!(ps.msg_type, MessageType::Query);
+        }
 
         #[test]
         fn ok_response() {
@@ -582,6 +603,14 @@ mod tests {
                 prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:re".as_slice()).unwrap();
             assert_eq!(ps.transaction_id, b"aa".as_slice());
             assert_eq!(ps.msg_type, MessageType::Response);
+        }
+
+        #[test]
+        fn ok_error() {
+            let ps =
+                prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:ee".as_slice()).unwrap();
+            assert_eq!(ps.transaction_id, b"aa".as_slice());
+            assert_eq!(ps.msg_type, MessageType::Error);
         }
 
         #[test]
@@ -600,6 +629,22 @@ mod tests {
         fn not_dict() {
             let e = prescan(b"li201e5:Ouch.e".as_slice()).unwrap_err();
             assert_eq!(e.to_string(), "discovered List but expected Dict");
+        }
+
+        #[test]
+        fn no_y() {
+            let e = prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aae".as_slice()).unwrap_err();
+            assert_eq!(e.to_string(), "missing field: y");
+        }
+
+        #[test]
+        fn bad_y() {
+            let e =
+                prescan(b"d1:rd2:id20:mnopqrstuvwxyz123456e1:t2:aa1:y1:xe".as_slice()).unwrap_err();
+            assert_eq!(
+                e.to_string(),
+                "malformed content discovered: invalid \"y\" field in DHT RPC packet; expected \"r\", \"q\", or \"e\", got \"x\"\nin context:\n\ty"
+            );
         }
     }
 }
