@@ -6,7 +6,8 @@
 
 [GitHub](https://github.com/jwodder/demagnetize-rs) | [crates.io](https://crates.io/crates/demagnetize) | [Issues](https://github.com/jwodder/demagnetize-rs/issues) | [Changelog](https://github.com/jwodder/demagnetize-rs/blob/master/CHANGELOG.md)
 
-`demagnetize` is a Rust program for converting one or more BitTorrent [magnet
+`demagnetize` is a Rust program for converting one or more
+[BitTorrent](https://en.wikipedia.org/wiki/BitTorrent) [magnet
 links](https://en.wikipedia.org/wiki/Magnet_URI_scheme) into `.torrent` files
 by downloading the torrent info from active peers.
 
@@ -20,7 +21,8 @@ protocol.  The following notable features are supported:
 - UDP tracker protocol extensions ([BEP
   41](https://www.bittorrent.org/beps/bep_0041.html))
 - MSE/PE Encryption
-- Querying the BitTorrent Mainline DHT for peers ([BEP
+- Querying the BitTorrent [Mainline
+  DHT](https://en.wikipedia.org/wiki/Mainline_DHT) for peers ([BEP
   5](https://www.bittorrent.org/beps/bep_0005.html))
 
 `demagnetize` is a translation of a Python program by the same author; you can
