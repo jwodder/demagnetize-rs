@@ -1,5 +1,6 @@
 #![cfg(test)]
 use assert_cmd::cargo::cargo_bin_cmd;
+use assert_matches::assert_matches;
 use bendy::decoding::{Decoder, FromBencode};
 use bendy::encoding::Encoder;
 use bendy::value::Value;
@@ -7,7 +8,7 @@ use bytes::Bytes;
 use sha1::{Digest, Sha1};
 use tempfile::tempdir;
 
-fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
+fn test_get(magnet: &str, hash: &str, trackers: &[&str], nodes: bool) {
     let tmp_path = tempdir().unwrap();
     cargo_bin_cmd!("demagnetize")
         .arg("--log-level=TRACE")
@@ -43,22 +44,33 @@ fn test_get(magnet: &str, hash: &str, trackers: &[&str]) {
     };
     let created_by = std::str::from_utf8(&created_by).unwrap();
     assert!(created_by.starts_with("demagnetize "));
-    let announce_list = d.remove(b"announce-list".as_slice()).unwrap();
-    let Value::List(lst) = announce_list else {
-        panic!("announce-list is not a list");
-    };
-    let mut announced = Vec::new();
-    for vals in lst {
-        let Value::List(sublist) = vals else {
-            panic!("Element of announce-list is not a list");
+    if trackers.is_empty() {
+        assert!(!d.contains_key(b"announce-list".as_slice()));
+    } else {
+        let announce_list = d.remove(b"announce-list".as_slice()).unwrap();
+        let Value::List(lst) = announce_list else {
+            panic!("announce-list is not a list");
         };
-        let Value::Bytes(bs) = sublist.into_iter().next().unwrap() else {
-            panic!("Element of element of announce-list is not a string");
-        };
-        let tr = String::from_utf8(bs.into_owned()).unwrap();
-        announced.push(tr);
+        let mut announced = Vec::new();
+        for vals in lst {
+            let Value::List(sublist) = vals else {
+                panic!("Element of announce-list is not a list");
+            };
+            let Value::Bytes(bs) = sublist.into_iter().next().unwrap() else {
+                panic!("Element of element of announce-list is not a string");
+            };
+            let tr = String::from_utf8(bs.into_owned()).unwrap();
+            announced.push(tr);
+        }
+        assert_eq!(announced, trackers);
     }
-    assert_eq!(announced, trackers);
+    if nodes {
+        assert_matches!(d.remove(b"nodes".as_slice()).unwrap(), Value::List(ns) => {
+            assert!(!ns.is_empty());
+        });
+    } else {
+        assert!(!d.contains_key(b"nodes".as_slice()));
+    }
     assert!(d.is_empty());
 }
 
@@ -83,6 +95,7 @@ fn get_magnet_udp_trackers() {
             "udp://tracker.coppersurfer.tk:6969/announce",
         ]
         .as_slice(),
+        false,
     );
 }
 
@@ -98,5 +111,20 @@ fn get_magnet_http_trackers_multipiece_info() {
         ),
         "b851474b74f65cd19f981c723590e3e520242b97",
         ["http://bttracker.debian.org:6969/announce"].as_slice(),
+        false,
+    );
+}
+
+#[test]
+fn get_magnet_dht() {
+    test_get(
+        // <https://archlinux.org/download/>
+        concat!(
+            "magnet:?xt=urn:btih:1e873cd33f55737aaaefc0c282c428593c16e106",
+            "&dn=archlinux-2026.01.01-x86_64.iso",
+        ),
+        "1e873cd33f55737aaaefc0c282c428593c16e106",
+        &[],
+        true,
     );
 }

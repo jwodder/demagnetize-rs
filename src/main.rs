@@ -1,7 +1,11 @@
+#[macro_use]
+mod compact;
+
 mod app;
 mod asyncutil;
 mod config;
 mod consts;
+mod dht;
 mod magnet;
 mod peer;
 mod torrent;
@@ -163,6 +167,18 @@ enum Command {
         /// base32 string.
         info_hash: InfoHash,
     },
+    /// Fetch peers for an info hash from the DHT
+    QueryDht {
+        /// Output peers as JSON objects, one per line
+        #[arg(short = 'J', long)]
+        json: bool,
+
+        /// The info hash of the torrent to get peers for.
+        ///
+        /// This must be either a 40-character hex string or a 32-character
+        /// base32 string.
+        info_hash: InfoHash,
+    },
     /// Fetch torrent metadata for an info hash from a specific peer
     ///
     /// Note that the resulting .torrent file will not contain any trackers.
@@ -300,6 +316,28 @@ impl Command {
                     }
                 }
             }
+            Command::QueryDht { json, info_hash } => {
+                match app.get_peers_from_dht(info_hash).await {
+                    Ok(found) if found.peers.is_empty() => {
+                        log::error!("No peers found on DHT");
+                        ExitCode::FAILURE
+                    }
+                    Ok(found) => {
+                        for p in found.peers {
+                            if json {
+                                println!("{}", p.display_json());
+                            } else {
+                                println!("{}", p.address);
+                            }
+                        }
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        log::error!("Failed to get peers from DHT: {}", ErrorChain(e));
+                        ExitCode::FAILURE
+                    }
+                }
+            }
             Command::QueryPeer {
                 outfile,
                 peer,
@@ -321,7 +359,7 @@ impl Command {
                     .await
                 {
                     Ok(info) => {
-                        let tf = TorrentFile::new(info, Vec::new());
+                        let tf = TorrentFile::new(info, Vec::new(), Vec::new());
                         if let Err(e) = tf.save(&outfile).await {
                             log::error!("Failed to write to file: {}", ErrorChain(e));
                             ExitCode::FAILURE

@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, DhtError};
 use crate::asyncutil::{UniqueByExt, WorkerNursery};
 use crate::torrent::{PathTemplate, TorrentFile};
 use crate::tracker::{Tracker, TrackerUrlError};
@@ -10,6 +10,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio_util::either::Either;
 use url::Url;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -34,30 +35,39 @@ impl Magnet {
     ) -> Result<TorrentFile<Arc<Magnet>>, GetInfoError> {
         log::info!("Fetching metadata info for {self}");
         let this = Arc::new(self.clone());
-        let (tracker_nursery, peer_stream) = WorkerNursery::new(app.cfg.trackers.jobs_per_magnet);
-        for tracker in self.trackers() {
-            let this = Arc::clone(&this);
-            let tracker = Arc::clone(tracker);
-            let app = Arc::clone(&app);
-            tracker_nursery
-                .spawn(async move {
-                    match tracker.peer_getter(Arc::clone(&this), app).run().await {
-                        Ok(peers) => iter(peers),
-                        Err(e) => {
-                            log::warn!(
-                                "Error communicating with {tracker} for {this}: {}",
-                                ErrorChain(e)
-                            );
-                            iter(Vec::new())
+        let mut peer_stream;
+        let mut nodes = Vec::new();
+        if self.trackers.is_empty() {
+            let found = app.get_peers_from_dht(self.info_hash).await?;
+            peer_stream = Either::Left(iter(found.peers));
+            nodes = found.closest_nodes;
+        } else {
+            let (tracker_nursery, peer_stream1) =
+                WorkerNursery::new(app.cfg.trackers.jobs_per_magnet);
+            for tracker in self.trackers() {
+                let this = Arc::clone(&this);
+                let tracker = Arc::clone(tracker);
+                let app = Arc::clone(&app);
+                tracker_nursery
+                    .spawn(async move {
+                        match tracker.peer_getter(Arc::clone(&this), app).run().await {
+                            Ok(peers) => iter(peers),
+                            Err(e) => {
+                                log::warn!(
+                                    "Error communicating with {tracker} for {this}: {}",
+                                    ErrorChain(e)
+                                );
+                                iter(Vec::new())
+                            }
                         }
-                    }
-                })
-                .expect("tracker nursery should not be closed");
+                    })
+                    .expect("tracker nursery should not be closed");
+            }
+            drop(tracker_nursery);
+            // Weed out duplicate peers, ignoring differences in peer IDs and
+            // requires_crypto fields … for now:
+            peer_stream = Either::Right(peer_stream1.flatten().unique_by(|peer| peer.address));
         }
-        drop(tracker_nursery);
-        // Weed out duplicate peers, ignoring differences in peer IDs and
-        // requires_crypto fields … for now:
-        let mut peer_stream = peer_stream.flatten().unique_by(|peer| peer.address);
         let (peer_tasks, mut receiver) = WorkerNursery::new(app.cfg.peers.jobs_per_magnet);
         let peer_job = tokio::spawn(async move {
             while let Some(peer) = peer_stream.next().await {
@@ -77,7 +87,7 @@ impl Magnet {
         while let Some((peer, r)) = receiver.next().await {
             match r {
                 Ok(info) => {
-                    let tf = TorrentFile::new(info, self.trackers.clone());
+                    let tf = TorrentFile::new(info, self.trackers.clone(), nodes);
                     peer_job.abort();
                     return Ok(tf);
                 }
@@ -89,7 +99,7 @@ impl Magnet {
                 ),
             }
         }
-        Err(GetInfoError)
+        Err(GetInfoError::NothingFromPeers)
     }
 
     pub(crate) async fn download_torrent_file(
@@ -133,9 +143,6 @@ impl FromStr for Magnet {
         let Some(info_hash) = info_hash else {
             return Err(MagnetError::NoXt);
         };
-        if trackers.is_empty() {
-            return Err(MagnetError::NoTrackers);
-        }
         Ok(Magnet {
             info_hash,
             display_name: dn.map(String::from),
@@ -178,8 +185,6 @@ pub(crate) enum MagnetError {
     InvalidXt(#[from] XtError),
     #[error("magnet URI has multiple \"xt\" parameters")]
     MultipleXt,
-    #[error("no trackers given in magnet URI")]
-    NoTrackers,
     #[error("invalid \"tr\" parameter")]
     InvalidTracker(#[from] TrackerUrlError),
 }
@@ -204,9 +209,13 @@ pub(crate) enum XtError {
     InfoHash(#[from] InfoHashError),
 }
 
-#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
-#[error("no peer returned metadata info")]
-pub(crate) struct GetInfoError;
+#[derive(Debug, Error)]
+pub(crate) enum GetInfoError {
+    #[error("no peer returned metadata info")]
+    NothingFromPeers,
+    #[error("failed to get peers from DHT")]
+    Dht(#[from] DhtError),
+}
 
 #[derive(Debug, Error)]
 pub(crate) enum DownloadInfoError {
@@ -257,7 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_magnet() {
+    fn parse_magnet() {
         let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb&dn=debian-11.2.0-amd64-netinst.iso&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce".parse::<Magnet>().unwrap();
         assert_eq!(
             magnet.info_hash.as_bytes(),
@@ -275,5 +284,18 @@ mod tests {
                     .unwrap()
             )]
         );
+    }
+
+    #[test]
+    fn parse_magnet_no_trackers() {
+        let magnet = "magnet:?xt=urn:btih:28c55196f57753c40aceb6fb58617e6995a7eddb"
+            .parse::<Magnet>()
+            .unwrap();
+        assert_eq!(
+            magnet.info_hash.as_bytes(),
+            b"\x28\xC5\x51\x96\xF5\x77\x53\xC4\x0A\xCE\xB6\xFB\x58\x61\x7E\x69\x95\xA7\xED\xDB"
+        );
+        assert_eq!(magnet.display_name(), None);
+        assert!(magnet.trackers().is_empty());
     }
 }

@@ -2,7 +2,7 @@
 name = "demagnetize"
 version = "0.6.0-dev"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Convert magnet links to .torrent files"
 authors = ["John Thorvald Wodder II <demagnetize-rs@varonathe.org>"]
 repository = "https://github.com/jwodder/demagnetize-rs"
@@ -26,6 +26,7 @@ fern = "0.7.0"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink"] }
 generic-array = "0.14.7"
 log = "0.4.21"
+mitsein = { version = "0.9.0", features = ["serde"] }
 num-bigint = "0.4.6"
 num_enum = "0.7.3"
 patharg = { version = "0.4.0", features = ["tokio"] }
@@ -33,13 +34,13 @@ pin-project-lite = "0.2.14"
 rand = "0.9.0"
 rc4 = "0.1.0"
 reqwest = { version = "0.13.0", default-features = false, features = ["http2"] }
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { version = "1.0.220", features = ["derive"] }
 sha1 = "0.10.6"
 strum = "0.27.0"
 strum_macros = "0.27.0"
 thiserror = "2.0.14"
-tokio = { version = "1.38.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
-tokio-util = { version = "0.7.11", features = ["codec", "rt"] }
+tokio = { version = "1.44.0", features = ["fs", "io-util", "macros", "sync", "rt", "rt-multi-thread", "time", "net"] }
+tokio-util = { version = "0.7.16", features = ["codec", "join-map", "rt"] }
 toml = "0.9.0"
 url = "2.5.0"
 
@@ -48,6 +49,7 @@ thiserror = "2.0.14"
 
 [dev-dependencies]
 assert_cmd = "2.1.0"
+assert_matches = "1.5.0"
 rand_chacha = "0.9.0"
 rstest = { version = "0.26.0", default-features = false }
 tempfile = "3.10.1"

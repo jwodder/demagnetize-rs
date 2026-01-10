@@ -14,7 +14,9 @@ pub(crate) const UDP_PACKET_LEN: usize = 65535;
 /// Maximum metadata size to accept
 pub(crate) const MAX_INFO_LENGTH: usize = 20 << 20; // 20 MiB
 
-/// BitTorrent protocol extensions supported by demagnetize
+/// BitTorrent protocol extensions supported by demagnetize.
+///
+/// Note that DHT is not included as we don't care about PORT messages.
 pub(crate) const SUPPORTED_EXTENSIONS: [Extension; 2] = [Extension::Bep10, Extension::Fast];
 
 /// Extended message ID to declare for receiving BEP 9 messages
@@ -26,3 +28,10 @@ pub(crate) static CLIENT: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARG
 
 /// Maximum length of a message to accept from a peer
 pub(crate) const MAX_PEER_MSG_LEN: usize = 65535;
+
+/// Default DHT nodes to use at the start of a peer search over the DHT
+pub(crate) const DEFAULT_DHT_BOOTSTRAP_NODES: [&str; 3] = [
+    "dht.transmissionbt.com:6881",
+    "relay.pkarr.org:6881",
+    "router.bittorrent.com:6881",
+];

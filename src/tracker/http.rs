@@ -1,6 +1,7 @@
 use super::{AnnounceResponse, Announcement, TrackerError, TrackerUrlError};
+use crate::compact::AsCompact;
 use crate::peer::Peer;
-use crate::util::{TryBytes, UnbencodeError, decode_bencode};
+use crate::util::{UnbencodeError, decode_bencode};
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use reqwest::Client;
 use std::fmt;
@@ -155,14 +156,9 @@ impl FromBencode for HttpAnnounceResponse {
                         peers.extend(Vec::<Peer>::decode_bencode_object(v).context("peers")?);
                     } else {
                         // Compact format (BEP 23)
-                        let buf = TryBytes::from(v.try_into_bytes().context("peers")?);
-                        let addrs = match buf.try_get_all::<SocketAddrV4>() {
-                            Ok(addrs) => addrs,
-                            Err(e) => {
-                                return Err(BendyError::malformed_content(e).context("peers"));
-                            }
-                        };
-                        peers.extend(addrs.into_iter().map(Peer::from));
+                        let addrs = AsCompact::<Vec<SocketAddrV4>>::decode_bencode_object(v)
+                            .context("peers")?;
+                        peers.extend(addrs.0.into_iter().map(Peer::from));
                     }
                     if let Some(ref flags) = crypto_flags {
                         for (pr, &flag) in std::iter::zip(&mut peers, flags) {
@@ -174,14 +170,9 @@ impl FromBencode for HttpAnnounceResponse {
                 }
                 (b"peers6", v) => {
                     // Compact format (BEP 7)
-                    let buf = TryBytes::from(v.try_into_bytes().context("peers6")?);
-                    let addrs = match buf.try_get_all::<SocketAddrV6>() {
-                        Ok(addrs) => addrs,
-                        Err(e) => {
-                            return Err(BendyError::malformed_content(e).context("peers6"));
-                        }
-                    };
-                    peers.extend(addrs.into_iter().map(Peer::from));
+                    let addrs = AsCompact::<Vec<SocketAddrV6>>::decode_bencode_object(v)
+                        .context("peers6")?;
+                    peers.extend(addrs.0.into_iter().map(Peer::from));
                 }
                 (b"warning message", v) => {
                     warning_message = Some(
@@ -373,7 +364,7 @@ mod tests {
         };
         assert_eq!(
             e.to_string(),
-            "malformed content discovered: unexpected end of packet\nin context:\n\tpeers6"
+            "malformed content discovered: compact representation of SocketAddrV6 had invalid length 6\nin context:\n\tpeers6"
         );
     }
 

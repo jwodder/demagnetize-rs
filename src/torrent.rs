@@ -2,13 +2,14 @@ use crate::consts::{CLIENT, MAX_INFO_LENGTH};
 use crate::tracker::Tracker;
 use crate::types::{InfoHash, InfoHashProvider};
 use bendy::decoding::{Decoder, Object};
-use bendy::encoding::ToBencode;
+use bendy::encoding::{SingleItemEncoder, ToBencode};
 use bytes::{BufMut, Bytes, BytesMut};
 use patharg::OutputArg;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::iter::Peekable;
+use std::net::SocketAddr;
 use std::ops::Range;
 use std::path::Path;
 use std::str::FromStr;
@@ -130,14 +131,20 @@ impl<H: InfoHashProvider> TorrentInfoBuilder<H> {
 pub(crate) struct TorrentFile<H> {
     info: TorrentInfo<H>,
     trackers: Vec<Arc<Tracker>>,
+    nodes: Vec<SocketAddr>,
     creation_date: i64,
     created_by: String,
 }
 
 impl<H: InfoHashProvider> TorrentFile<H> {
-    pub(crate) fn new(info: TorrentInfo<H>, trackers: Vec<Arc<Tracker>>) -> TorrentFile<H> {
+    pub(crate) fn new(
+        info: TorrentInfo<H>,
+        trackers: Vec<Arc<Tracker>>,
+        nodes: Vec<SocketAddr>,
+    ) -> TorrentFile<H> {
         TorrentFile {
             trackers,
+            nodes,
             created_by: CLIENT.into(),
             creation_date: unix_now(),
             info,
@@ -159,10 +166,10 @@ impl<H: InfoHashProvider> TorrentFile<H> {
                 path
             );
         }
-        if let Some(parent) = path.path_ref().and_then(|p| p.parent()) {
-            if parent != Path::new("") {
-                create_dir_all(parent).await?;
-            }
+        if let Some(parent) = path.path_ref().and_then(|p| p.parent())
+            && parent != Path::new("")
+        {
+            create_dir_all(parent).await?;
         }
         let buf = Bytes::from(self);
         path.async_write(buf).await
@@ -209,6 +216,13 @@ impl<H> From<TorrentFile<H>> for Bytes {
                 .as_slice(),
         );
         buf.put(Bytes::from(torrent.info));
+        if !torrent.nodes.is_empty() {
+            put_kv!(
+                buf,
+                "nodes",
+                torrent.nodes.into_iter().map(NodeAddr).collect::<Vec<_>>()
+            );
+        }
         buf.put_u8(b'e');
         buf.freeze()
     }
@@ -298,6 +312,21 @@ pub(crate) enum PathTemplateError {
     UnknownField(String),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NodeAddr(SocketAddr);
+
+impl ToBencode for NodeAddr {
+    const MAX_DEPTH: usize = 1;
+
+    fn encode(&self, encoder: SingleItemEncoder<'_>) -> Result<(), bendy::encoding::Error> {
+        encoder.emit_list(|lst| {
+            lst.emit_str(&self.0.ip().to_string())?;
+            lst.emit_int(self.0.port())?;
+            Ok(())
+        })
+    }
+}
+
 fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
     let mut decoder = Decoder::new(buf);
     match decoder.next_object() {
@@ -382,34 +411,38 @@ pub(crate) enum BencodeDictError {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_check_good_bencode_dict() {
-        let buf = Bytes::from(b"d3:foo3:bar3:keyi42ee".as_slice());
-        assert_eq!(check_bencode_dict(&buf), Ok(()));
-    }
+    mod check_bencode_dict {
+        use super::*;
 
-    #[test]
-    fn test_check_invalid_bencode() {
-        let buf = Bytes::from(b"d3:keyi42e8:no valuee".as_slice());
-        assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Syntax));
-    }
+        #[test]
+        fn good() {
+            let buf = Bytes::from(b"d3:foo3:bar3:keyi42ee".as_slice());
+            assert_eq!(check_bencode_dict(&buf), Ok(()));
+        }
 
-    #[test]
-    fn test_check_bencode_non_dict() {
-        let buf = Bytes::from(b"l3:keyi42e8:no valuee".as_slice());
-        assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::NotADict));
-    }
+        #[test]
+        fn invalid_bencode() {
+            let buf = Bytes::from(b"d3:keyi42e8:no valuee".as_slice());
+            assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Syntax));
+        }
 
-    #[test]
-    fn test_check_empty_bencode() {
-        let buf = Bytes::new();
-        assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Empty));
-    }
+        #[test]
+        fn non_dict() {
+            let buf = Bytes::from(b"l3:keyi42e8:no valuee".as_slice());
+            assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::NotADict));
+        }
 
-    #[test]
-    fn test_check_trailing_bencode() {
-        let buf = Bytes::from(b"d3:foo3:bar3:keyi42ee5:extra".as_slice());
-        assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Trailing));
+        #[test]
+        fn empty() {
+            let buf = Bytes::new();
+            assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Empty));
+        }
+
+        #[test]
+        fn trailing_bencode() {
+            let buf = Bytes::from(b"d3:foo3:bar3:keyi42ee5:extra".as_slice());
+            assert_eq!(check_bencode_dict(&buf), Err(BencodeDictError::Trailing));
+        }
     }
 
     #[test]
@@ -437,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn test_torrent_file_into_bytes() {
+    fn torrent_file_into_bytes() {
         let info = TorrentInfo {
             info_hash: "ddbf90f0d41c8f91a555192279845bc45e530ec9".parse::<InfoHash>().unwrap(),
             data: Bytes::from(b"d6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000e".as_slice()),
@@ -454,6 +487,7 @@ mod tests {
                     .unwrap()
                     .into(),
             ],
+            nodes: Vec::new(),
             creation_date: 1686939764,
             created_by: "demagnetize vDEV".into(),
         };
@@ -463,72 +497,98 @@ mod tests {
     }
 
     #[test]
-    fn test_path_template() {
-        let template = "Torrent-{name}-{hash}.torrent"
-            .parse::<PathTemplate>()
-            .unwrap();
-        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
-            .parse::<InfoHash>()
-            .unwrap();
-        assert_eq!(
-            template.format("My Test Torrent", info_hash),
-            "Torrent-My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
-        );
+    fn torrent_file_with_nodes_into_bytes() {
+        let info = TorrentInfo {
+            info_hash: "ddbf90f0d41c8f91a555192279845bc45e530ec9".parse::<InfoHash>().unwrap(),
+            data: Bytes::from(b"d6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000e".as_slice()),
+        };
+        let torrent = TorrentFile {
+            info,
+            trackers: Vec::new(),
+            nodes: vec![
+                "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+                "10.1.2.3:60069".parse::<SocketAddr>().unwrap(),
+                "[2001::ffff:c0a8:ff]:65535".parse::<SocketAddr>().unwrap(),
+            ],
+            creation_date: 1686939764,
+            created_by: "demagnetize vDEV".into(),
+        };
+        let buf = Bytes::from(torrent);
+        assert_eq!(buf, b"d10:created by16:demagnetize vDEV13:creation datei1686939764e4:infod6:lengthi42e4:name8:blob.dat12:piece lengthi65535e6:pieces20:00000000000000000000e5:nodesll9:127.0.0.1i8080eel8:10.1.2.3i60069eel18:2001::ffff:c0a8:ffi65535eeee".as_slice());
+        check_bencode_dict(&buf).unwrap();
     }
 
-    #[test]
-    fn test_path_template_escaped_braces() {
-        let template = "Torrent-{{{name}}}-{hash}.torrent"
-            .parse::<PathTemplate>()
-            .unwrap();
-        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
-            .parse::<InfoHash>()
-            .unwrap();
-        assert_eq!(
-            template.format("My Test Torrent", info_hash),
-            "Torrent-{My Test Torrent}-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
-        );
-    }
+    mod path_template {
+        use super::*;
 
-    #[test]
-    fn test_path_template_no_leading_or_trailing_literals() {
-        let template = "{name}-{hash}".parse::<PathTemplate>().unwrap();
-        let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
-            .parse::<InfoHash>()
-            .unwrap();
-        assert_eq!(
-            template.format("My Test Torrent", info_hash),
-            "My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9"
-        );
-    }
+        #[test]
+        fn basic() {
+            let template = "Torrent-{name}-{hash}.torrent"
+                .parse::<PathTemplate>()
+                .unwrap();
+            let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+                .parse::<InfoHash>()
+                .unwrap();
+            assert_eq!(
+                template.format("My Test Torrent", info_hash),
+                "Torrent-My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
+            );
+        }
 
-    #[test]
-    fn test_path_template_unmatched() {
-        let e = "torrent={name".parse::<PathTemplate>().unwrap_err();
-        assert_eq!(e, PathTemplateError::Unmatched(8));
-        assert_eq!(e.to_string(), "unmatched brace at byte index 8");
-    }
+        #[test]
+        fn escaped_braces() {
+            let template = "Torrent-{{{name}}}-{hash}.torrent"
+                .parse::<PathTemplate>()
+                .unwrap();
+            let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+                .parse::<InfoHash>()
+                .unwrap();
+            assert_eq!(
+                template.format("My Test Torrent", info_hash),
+                "Torrent-{My Test Torrent}-ddbf90f0d41c8f91a555192279845bc45e530ec9.torrent"
+            );
+        }
 
-    #[test]
-    fn test_path_template_nested_field() {
-        let e = "{name{hash}torrent}".parse::<PathTemplate>().unwrap_err();
-        assert_eq!(e, PathTemplateError::InvalidField(0));
-        assert_eq!(e.to_string(), "malformed placeholder at byte index 0");
-    }
+        #[test]
+        fn no_leading_or_trailing_literals() {
+            let template = "{name}-{hash}".parse::<PathTemplate>().unwrap();
+            let info_hash = "ddbf90f0d41c8f91a555192279845bc45e530ec9"
+                .parse::<InfoHash>()
+                .unwrap();
+            assert_eq!(
+                template.format("My Test Torrent", info_hash),
+                "My Test Torrent-ddbf90f0d41c8f91a555192279845bc45e530ec9"
+            );
+        }
 
-    #[test]
-    fn test_path_template_invalid_field() {
-        let e = "torrent={name+hash}".parse::<PathTemplate>().unwrap_err();
-        assert_eq!(e, PathTemplateError::InvalidField(8));
-        assert_eq!(e.to_string(), "malformed placeholder at byte index 8");
-    }
+        #[test]
+        fn unmatched() {
+            let e = "torrent={name".parse::<PathTemplate>().unwrap_err();
+            assert_eq!(e, PathTemplateError::Unmatched(8));
+            assert_eq!(e.to_string(), "unmatched brace at byte index 8");
+        }
 
-    #[test]
-    fn test_path_template_unknown_field() {
-        let e = "torrent={tracker}.torrent"
-            .parse::<PathTemplate>()
-            .unwrap_err();
-        assert_eq!(e, PathTemplateError::UnknownField("tracker".into()));
-        assert_eq!(e.to_string(), "unknown placeholder \"tracker\"");
+        #[test]
+        fn nested_field() {
+            let e = "{name{hash}torrent}".parse::<PathTemplate>().unwrap_err();
+            assert_eq!(e, PathTemplateError::InvalidField(0));
+            assert_eq!(e.to_string(), "malformed placeholder at byte index 0");
+        }
+
+        #[test]
+        fn invalid_field() {
+            let e = "torrent={name+hash}".parse::<PathTemplate>().unwrap_err();
+            assert_eq!(e, PathTemplateError::InvalidField(8));
+            assert_eq!(e.to_string(), "malformed placeholder at byte index 8");
+        }
+
+        #[test]
+        fn unknown_field() {
+            let e = "torrent={tracker}.torrent"
+                .parse::<PathTemplate>()
+                .unwrap_err();
+            assert_eq!(e, PathTemplateError::UnknownField("tracker".into()));
+            assert_eq!(e.to_string(), "unknown placeholder \"tracker\"");
+        }
     }
 }

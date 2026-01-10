@@ -1,8 +1,9 @@
 v0.6.0 (in development)
 -----------------------
 - Add URL of GitHub repository to `--help` output
-- Increased MSRV to 1.85
-- Always show magnet display name next to info hash in log messages
+- Increased MSRV to 1.88
+- Show magnet display name next to info hash in more log messages
+- Magnets without trackers are now demagnetized by querying the DHT for peers
 
 v0.5.0 (2025-05-20)
 -------------------
