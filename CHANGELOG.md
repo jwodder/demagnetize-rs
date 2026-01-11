@@ -1,5 +1,5 @@
-v0.6.1 (in development)
------------------------
+v0.6.1 (2026-01-11)
+-------------------
 - Fix handling of UDP tracker URLs that use an IPv6 address as the host
 
 v0.6.0 (2026-01-10)
