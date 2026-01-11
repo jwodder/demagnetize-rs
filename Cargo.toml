@@ -1,6 +1,6 @@
 [package]
 name = "demagnetize"
-version = "0.6.0"
+version = "0.6.1-dev"
 edition = "2024"
 rust-version = "1.88"
 description = "Convert magnet links to .torrent files"

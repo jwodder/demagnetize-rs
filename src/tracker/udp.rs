@@ -73,8 +73,11 @@ impl TryFrom<Url> for UdpUrl {
         if sch != "udp" {
             return Err(TrackerUrlError::UnsupportedScheme(sch.into()));
         }
-        let Some(host) = url.host_str().map(ToOwned::to_owned) else {
-            return Err(TrackerUrlError::NoHost);
+        let host = match url.host() {
+            Some(url::Host::Domain(s)) => s.to_owned(),
+            Some(url::Host::Ipv4(ip)) => ip.to_string(),
+            Some(url::Host::Ipv6(ip)) => ip.to_string(),
+            None => return Err(TrackerUrlError::NoHost),
         };
         let Some(port) = url.port() else {
             return Err(TrackerUrlError::NoUdpPort);
@@ -467,8 +470,74 @@ mod tests {
     use crate::tracker::{AnnounceEvent, TrackerCrypto};
     use crate::types::{InfoHash, Key, PeerId};
 
+    mod udp_url {
+        use super::*;
+
+        #[test]
+        fn from_url() {
+            let url = "udp://tracker.opentrackr.org:1337/announce"
+                .parse::<Url>()
+                .unwrap();
+            let uu = UdpUrl::try_from(url).unwrap();
+            assert_eq!(
+                uu,
+                UdpUrl {
+                    host: "tracker.opentrackr.org".into(),
+                    port: 1337,
+                    urldata: "/announce".into(),
+                }
+            );
+            assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337/announce");
+        }
+
+        #[test]
+        fn from_url_no_urldata() {
+            let url = "udp://tracker.opentrackr.org:1337".parse::<Url>().unwrap();
+            let uu = UdpUrl::try_from(url).unwrap();
+            assert_eq!(
+                uu,
+                UdpUrl {
+                    host: "tracker.opentrackr.org".into(),
+                    port: 1337,
+                    urldata: String::new(),
+                }
+            );
+            assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337");
+        }
+
+        #[test]
+        fn from_url_ipv4() {
+            let url = "udp://192.168.1.2:1337/announce".parse::<Url>().unwrap();
+            let uu = UdpUrl::try_from(url).unwrap();
+            assert_eq!(
+                uu,
+                UdpUrl {
+                    host: "192.168.1.2".into(),
+                    port: 1337,
+                    urldata: "/announce".into(),
+                }
+            );
+            assert_eq!(uu.to_string(), "udp://192.168.1.2:1337/announce");
+        }
+
+        #[test]
+        fn from_url_ipv6() {
+            let url = "udp://[3fff::abcd]:1337/announce".parse::<Url>().unwrap();
+            let uu = UdpUrl::try_from(url).unwrap();
+            assert_eq!(
+                uu,
+                UdpUrl {
+                    host: "3fff::abcd".into(),
+                    port: 1337,
+                    urldata: "/announce".into(),
+                }
+            );
+            assert_eq!(uu.to_string(), "udp://[3fff::abcd]:1337/announce");
+        }
+    }
+
     #[test]
-    fn test_make_connection_request() {
+    fn build_connection_request() {
         let req = UdpConnectionRequest {
             transaction_id: 0x5C310D73,
         };
@@ -480,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_connection_response() {
+    fn parse_connection_response() {
         let buf = Bytes::from(b"\x00\x00\x00\x00\\1\rs\\\xcb\xdf\xdb\x15|%\xba".as_slice());
         let res = UdpConnectionResponse::try_from(buf).unwrap();
         assert_eq!(res.transaction_id, 0x5C310D73);
@@ -488,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_announce_request() {
+    fn build_announce_request() {
         let req = UdpAnnounceRequest {
             connection_id: 0x5CCBDFDB157C25BA,
             transaction_id: 0xA537EEE7,
@@ -515,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_announce_request_urldata() {
+    fn build_announce_request_urldata() {
         let req = UdpAnnounceRequest {
             connection_id: 0x5CCBDFDB157C25BA,
             transaction_id: 0xA537EEE7,
@@ -542,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_announce_response_ipv4() {
+    fn parse_announce_response_ipv4() {
         let buf = Bytes::from(b"\x00\x00\x00\x01\xa57\xee\xe7\x00\x00\x07\x08\x00\x00\x00\x03\x00\x00\x00\x1a\x17Qr\xeb\xc9,\xbfe\xfe\xe0`\x07\xb9\x15\xd8\x95\t\x84\x9a\x15rd\x8f\xfe\xd5\x98\xbb\xebH\xda\xb2\x9b\x8b\xa8\x88\xb7\xc3N6\xd3\x7f\xa4\xacbGNV\xe1\xb0\x7f\xe6\xc6)\xaa\xd4f%\xba\xca\x7f\xa0\xb2\xbc\xcb\x1a\xe1\xb9\x15\xd8\x86\x80\x163\x0fh\xca8L]#\x92\xd4CB.\xf6\x03\xcd\xe3\xaa\xb9\x15\xd9M\xe1\x06V`\\\xe5\xc8\xd5Q\x06'\x9b\xc8\xd5\xb9A\x87\xb1\xe7\xb7N\x89\x17\x16M\xfc\xc1\x13\xce/\x1a\xe1\xb9&\x0e\xbf\xc64_\xf5l\xfd\xe1w\xb9\x99\xb3<\xf20\x99\xa2D\x9b\xea\xa5W\xf9\x86\x13\xd8\xb2\x9a\r\x01\x87\xc8\xd5\xb9\x9f\x9e9\x82\x1a\x8a\xc77%\x97S".as_slice());
         let res = UdpAnnounceResponse::from_bytes(buf, false).unwrap();
         assert_eq!(res.transaction_id, 0xA537EEE7);
@@ -591,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_announce_response_ipv6_not_all_peers() {
+    fn parse_announce_response_ipv6_not_all_peers() {
         let mut buf = BytesMut::new();
         buf.put(b"\x00\x00\x00\x01\r\rY\x00\x00\x00\x077\x00\x00\x00\x06\x00".as_slice());
         buf.put(b"\x00\x00\x8f&\x07\xfe\xa8t\x97\x18\x00\x00\x00\x00\x00\x00".as_slice());
@@ -631,7 +700,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_announce_response_ipv4_no_peers() {
+    fn parse_announce_response_ipv4_no_peers() {
         let buf = Bytes::from(
             b"\x00\x00\x00\x01\x13Tg\xd1\x00\x00\x07O\x00\x00\x00\x01\x00\x00\x00\x1d".as_slice(),
         );
@@ -646,37 +715,5 @@ mod tests {
         assert_eq!(res.response.tracker_id, None);
         assert_eq!(res.response.complete, None);
         assert_eq!(res.response.incomplete, None);
-    }
-
-    #[test]
-    fn test_udp_url_from_url() {
-        let url = "udp://tracker.opentrackr.org:1337/announce"
-            .parse::<Url>()
-            .unwrap();
-        let uu = UdpUrl::try_from(url).unwrap();
-        assert_eq!(
-            uu,
-            UdpUrl {
-                host: "tracker.opentrackr.org".into(),
-                port: 1337,
-                urldata: "/announce".into(),
-            }
-        );
-        assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337/announce");
-    }
-
-    #[test]
-    fn test_udp_url_from_url_no_urldata() {
-        let url = "udp://tracker.opentrackr.org:1337".parse::<Url>().unwrap();
-        let uu = UdpUrl::try_from(url).unwrap();
-        assert_eq!(
-            uu,
-            UdpUrl {
-                host: "tracker.opentrackr.org".into(),
-                port: 1337,
-                urldata: String::new(),
-            }
-        );
-        assert_eq!(uu.to_string(), "udp://tracker.opentrackr.org:1337");
     }
 }
