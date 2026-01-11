@@ -1,3 +1,7 @@
+v0.6.1 (in development)
+-----------------------
+- Fix handling of UDP tracker URLs that use an IPv6 address as the host
+
 v0.6.0 (2026-01-10)
 -------------------
 - Add URL of GitHub repository to `--help` output
