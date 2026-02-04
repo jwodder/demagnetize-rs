@@ -1958,7 +1958,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "aws-lc-rs"
-package_version = "1.15.2"
+package_version = "1.15.4"
 repository = "https://github.com/aws/aws-lc-rs"
 license = "ISC AND (Apache-2.0 OR ISC)"
 
@@ -2378,7 +2378,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "aws-lc-sys"
-package_version = "0.35.0"
+package_version = "0.37.0"
 repository = "https://github.com/aws/aws-lc-rs"
 license = "ISC AND (Apache-2.0 OR ISC) AND OpenSSL"
 
@@ -4930,7 +4930,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "bytes"
-package_version = "1.11.0"
+package_version = "1.11.1"
 repository = "https://github.com/tokio-rs/bytes"
 license = "MIT"
 
@@ -5222,7 +5222,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "chrono"
-package_version = "0.4.42"
+package_version = "0.4.43"
 repository = "https://github.com/chronotope/chrono"
 license = "MIT OR Apache-2.0"
 
@@ -5230,7 +5230,7 @@ license = "MIT OR Apache-2.0"
 license = "MIT"
 text = """
 Rust-chrono is dual-licensed under The MIT License [1] and
-Apache 2.0 License [2]. Copyright (c) 2014--2025, Kang Seonghoon and
+Apache 2.0 License [2]. Copyright (c) 2014--2026, Kang Seonghoon and
 contributors.
 
 Nota Bene: This is same as the Rust Project's own license.
@@ -5475,7 +5475,7 @@ limitations under the License.
 license = "Apache-2.0"
 text = """
 Rust-chrono is dual-licensed under The MIT License [1] and
-Apache 2.0 License [2]. Copyright (c) 2014--2025, Kang Seonghoon and
+Apache 2.0 License [2]. Copyright (c) 2014--2026, Kang Seonghoon and
 contributors.
 
 Nota Bene: This is same as the Rust Project's own license.
@@ -5960,7 +5960,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "clap"
-package_version = "4.5.54"
+package_version = "4.5.57"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -6197,7 +6197,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "clap_builder"
-package_version = "4.5.54"
+package_version = "4.5.57"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -6434,7 +6434,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "clap_derive"
-package_version = "4.5.49"
+package_version = "4.5.55"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -6671,7 +6671,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "clap_lex"
-package_version = "0.7.6"
+package_version = "0.7.7"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -13937,7 +13937,7 @@ SOFTWARE."""
 
 [[third_party_libraries]]
 package_name = "getrandom"
-package_version = "0.2.16"
+package_version = "0.2.17"
 repository = "https://github.com/rust-random/getrandom"
 license = "MIT OR Apache-2.0"
 
@@ -16749,7 +16749,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "hyper-util"
-package_version = "0.1.19"
+package_version = "0.1.20"
 repository = "https://github.com/hyperium/hyper-util"
 license = "MIT"
 
@@ -16779,7 +16779,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "iana-time-zone"
-package_version = "0.1.64"
+package_version = "0.1.65"
 repository = "https://github.com/strawlab/iana-time-zone"
 license = "MIT OR Apache-2.0"
 
@@ -20267,7 +20267,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "js-sys"
-package_version = "0.3.83"
+package_version = "0.3.85"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys"
 license = "MIT OR Apache-2.0"
 
@@ -24518,9 +24518,9 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "openssl-probe"
-package_version = "0.2.0"
-repository = "https://github.com/alexcrichton/openssl-probe"
-license = "MIT/Apache-2.0"
+package_version = "0.2.1"
+repository = "https://github.com/rustls/openssl-probe"
+license = "MIT OR Apache-2.0"
 
 [[third_party_libraries.licenses]]
 license = "MIT"
@@ -26691,7 +26691,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "proc-macro2"
-package_version = "1.0.105"
+package_version = "1.0.106"
 repository = "https://github.com/dtolnay/proc-macro2"
 license = "MIT OR Apache-2.0"
 
@@ -27578,7 +27578,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "quote"
-package_version = "1.0.43"
+package_version = "1.0.44"
 repository = "https://github.com/dtolnay/quote"
 license = "MIT OR Apache-2.0"
 
@@ -28247,7 +28247,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "rand_core"
-package_version = "0.9.3"
+package_version = "0.9.5"
 repository = "https://github.com/rust-random/rand"
 license = "MIT OR Apache-2.0"
 
@@ -30655,7 +30655,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "rustls-pki-types"
-package_version = "1.13.2"
+package_version = "1.14.0"
 repository = "https://github.com/rustls/pki-types"
 license = "MIT OR Apache-2.0"
 
@@ -31373,7 +31373,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "rustls-webpki"
-package_version = "0.103.8"
+package_version = "0.103.9"
 repository = "https://github.com/rustls/webpki"
 license = "ISC"
 
@@ -31636,7 +31636,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 [[third_party_libraries]]
 package_name = "schemars"
-package_version = "1.2.0"
+package_version = "1.2.1"
 repository = "https://github.com/GREsau/schemars"
 license = "MIT"
 
@@ -33720,7 +33720,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "slab"
-package_version = "0.4.11"
+package_version = "0.4.12"
 repository = "https://github.com/tokio-rs/slab"
 license = "MIT"
 
@@ -33998,7 +33998,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "socket2"
-package_version = "0.6.1"
+package_version = "0.6.2"
 repository = "https://github.com/rust-lang/socket2"
 license = "MIT OR Apache-2.0"
 
@@ -35734,7 +35734,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "thiserror"
-package_version = "2.0.17"
+package_version = "2.0.18"
 repository = "https://github.com/dtolnay/thiserror"
 license = "MIT OR Apache-2.0"
 
@@ -36164,7 +36164,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "thiserror-impl"
-package_version = "2.0.17"
+package_version = "2.0.18"
 repository = "https://github.com/dtolnay/thiserror"
 license = "MIT OR Apache-2.0"
 
@@ -38531,7 +38531,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "tower"
-package_version = "0.5.2"
+package_version = "0.5.3"
 repository = "https://github.com/tower-rs/tower"
 license = "MIT"
 
@@ -40497,7 +40497,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "wasip2"
-package_version = "1.0.1+wasi-0.2.4"
+package_version = "1.0.2+wasi-0.2.9"
 repository = "https://github.com/bytecodealliance/wasi-rs"
 license = "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
 
@@ -40961,7 +40961,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen"
-package_version = "0.2.106"
+package_version = "0.2.108"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen"
 license = "MIT OR Apache-2.0"
 
@@ -41203,7 +41203,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-futures"
-package_version = "0.4.56"
+package_version = "0.4.58"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures"
 license = "MIT OR Apache-2.0"
 
@@ -41445,7 +41445,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-macro"
-package_version = "0.2.106"
+package_version = "0.2.108"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro"
 license = "MIT OR Apache-2.0"
 
@@ -41687,7 +41687,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-macro-support"
-package_version = "0.2.106"
+package_version = "0.2.108"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support"
 license = "MIT OR Apache-2.0"
 
@@ -41929,7 +41929,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-shared"
-package_version = "0.2.106"
+package_version = "0.2.108"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared"
 license = "MIT OR Apache-2.0"
 
@@ -42171,7 +42171,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "web-sys"
-package_version = "0.3.83"
+package_version = "0.3.85"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys"
 license = "MIT OR Apache-2.0"
 
@@ -42651,7 +42651,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "webpki-root-certs"
-package_version = "1.0.5"
+package_version = "1.0.6"
 repository = "https://github.com/rustls/webpki-roots"
 license = "CDLA-Permissive-2.0"
 
@@ -51320,7 +51320,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "wit-bindgen"
-package_version = "0.46.0"
+package_version = "0.51.0"
 repository = "https://github.com/bytecodealliance/wit-bindgen"
 license = "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
 
@@ -51956,7 +51956,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "zerocopy"
-package_version = "0.8.33"
+package_version = "0.8.38"
 repository = "https://github.com/google/zerocopy"
 license = "BSD-2-Clause OR Apache-2.0 OR MIT"
 
@@ -52229,7 +52229,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "zerocopy-derive"
-package_version = "0.8.33"
+package_version = "0.8.38"
 repository = "https://github.com/google/zerocopy"
 license = "BSD-2-Clause OR Apache-2.0 OR MIT"
 
@@ -53026,7 +53026,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "zmij"
-package_version = "1.0.12"
+package_version = "1.0.19"
 repository = "https://github.com/dtolnay/zmij"
 license = "MIT"
 
