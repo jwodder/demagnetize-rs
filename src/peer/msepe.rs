@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use generic_array::GenericArray;
 use num_bigint::BigUint;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use rand::Rng;
+use rand::RngExt;
 use rc4::{KeyInit, Rc4, StreamCipher, consts::U20};
 use sha1::{Digest, Sha1};
 use std::pin::Pin;
@@ -67,7 +67,7 @@ pub(super) struct HandshakeBuilder<R> {
     timeout: Duration,
 }
 
-impl<R: Rng> HandshakeBuilder<R> {
+impl<R: RngExt> HandshakeBuilder<R> {
     pub(super) fn new(peer: Peer, skey: InfoHash, rng: R) -> Self {
         HandshakeBuilder {
             peer,
@@ -410,7 +410,7 @@ pin_project_lite::pin_project! {
 }
 
 impl EncryptedStream {
-    pub(super) async fn handshake<R: Rng>(
+    pub(super) async fn handshake<R: RngExt>(
         mut conn: TcpStream,
         config: HandshakeBuilder<R>,
     ) -> Result<Self, HandshakeError> {
@@ -522,7 +522,7 @@ fn hash<S: AsRef<[u8]>>(bs: S) -> GenericArray<u8, U20> {
     Sha1::digest(bs)
 }
 
-fn gen_private_key<R: Rng>(rng: &mut R) -> BigUint {
+fn gen_private_key<R: RngExt>(rng: &mut R) -> BigUint {
     /*
         // Post-<https://github.com/rust-num/num-bigint/pull/322>:
         // Requires "rand" feature of num_bigint

@@ -11,7 +11,7 @@ use crate::util::ErrorChain;
 use bendy::decoding::{Error as BendyError, FromBencode, Object, ResultExt};
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
-use rand::{SeedableRng, rngs::StdRng};
+use rand::rngs::StdRng;
 use std::fmt::{self, Write};
 use std::net::{AddrParseError, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::str::FromStr;
@@ -225,7 +225,7 @@ impl<'a, H: InfoHashProvider> InfoGetter<'a, H> {
                     msepe::HandshakeBuilder::new(
                         *self.peer,
                         self.info_hash.get_info_hash(),
-                        StdRng::from_os_rng(),
+                        rand::make_rng::<StdRng>(),
                     )
                     .dh_exchange_timeout(self.app.cfg.peers.dh_exchange_timeout),
                 )
