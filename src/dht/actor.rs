@@ -7,7 +7,7 @@ use crate::util::ErrorChain;
 use bendy::encoding::ToBencode;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::stream::{self, StreamExt};
-use rand::Rng;
+use rand::RngExt;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque, hash_map::Entry};
 use std::fmt;
 use std::net::SocketAddr;
@@ -91,7 +91,7 @@ impl DhtActor {
     /// # Errors
     ///
     /// Returns an error if creating a bound IPv4 UDP socket fails
-    pub(crate) async fn new<R: Rng>(
+    pub(crate) async fn new<R: RngExt>(
         mut rng: R,
         timeout: Duration,
         bootstrap_nodes: Vec<InetAddr>,

@@ -4,7 +4,7 @@ use crate::consts::PEER_ID_PREFIX;
 use crate::dht::{CreateDhtActorError, DhtActor, DhtHandle, DhtHandleError, FoundPeers};
 use crate::peer::CryptoMode;
 use crate::types::{InfoHash, Key, PeerId};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, rngs::StdRng};
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -18,7 +18,7 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn new<R: Rng>(cfg: Config, mut rng: R) -> App {
+    pub(crate) fn new<R: RngExt>(cfg: Config, mut rng: R) -> App {
         let id = PeerId::generate(PEER_ID_PREFIX, &mut rng);
         let key = rng.random::<Key>();
         let port = cfg.trackers.local_port.generate(&mut rng);
@@ -40,7 +40,7 @@ impl App {
         if let Some(handle) = guard.as_ref() {
             Ok(handle.clone())
         } else {
-            let rng = StdRng::from_os_rng();
+            let rng = rand::make_rng::<StdRng>();
             let timeout = self.cfg.dht.query_timeout;
             let bootstrap_nodes = self.cfg.dht.bootstrap_nodes.as_vec().clone();
             let (actor, handle) = DhtActor::new(rng, timeout, bootstrap_nodes).await?;

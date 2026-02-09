@@ -1,7 +1,7 @@
 use crate::dht::InetAddr;
 use crate::peer::CryptoMode;
 use crate::tracker::TrackerCrypto;
-use rand::Rng;
+use rand::RngExt;
 use serde::{
     Deserialize,
     de::{Deserializer, Unexpected},
@@ -155,7 +155,7 @@ pub(crate) enum LocalPort {
 }
 
 impl LocalPort {
-    pub(crate) fn generate<R: Rng>(&self, mut rng: R) -> u16 {
+    pub(crate) fn generate<R: RngExt>(&self, mut rng: R) -> u16 {
         match *self {
             LocalPort::Constant(p) => p,
             LocalPort::Range { low, high } => rng.random_range(low..=high),
