@@ -81,7 +81,7 @@ jobs:
             --each-feature \
             --exclude-no-default-features \
             --exclude-all-features ${{ matrix.exclude }} \
-            test --verbose
+            test --bins --verbose
 
   minimal-versions:
     runs-on: ubuntu-latest
@@ -121,7 +121,7 @@ jobs:
             --each-feature \
             --exclude-no-default-features \
             --exclude-all-features \
-            test --verbose
+            test --bins --verbose
 
   coverage:
     # This is separate from the main tests because cargo-llvm-cov doesn't run
