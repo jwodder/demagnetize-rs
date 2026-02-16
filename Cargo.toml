@@ -13,7 +13,7 @@ categories = ["command-line-utilities", "network-programming"]
 exclude = ["/.*"]
 
 [dependencies]
-anstream = "0.6.14"
+anstream = "1.0.0"
 anstyle = "1.0.7"
 async-channel = "2.3.1"
 bendy = "0.6.0"
