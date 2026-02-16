@@ -51,7 +51,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "anstream"
-package_version = "0.6.21"
+package_version = "1.0.0"
 repository = "https://github.com/rust-cli/anstyle.git"
 license = "MIT OR Apache-2.0"
 
@@ -525,7 +525,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "anstyle-parse"
-package_version = "0.2.7"
+package_version = "1.0.0"
 repository = "https://github.com/rust-cli/anstyle.git"
 license = "MIT OR Apache-2.0"
 
