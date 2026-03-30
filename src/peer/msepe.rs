@@ -1,12 +1,14 @@
 use super::Peer;
 use crate::types::InfoHash;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use generic_array::GenericArray;
 use num_bigint::BigUint;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rand::RngExt;
-use rc4::{KeyInit, Rc4, StreamCipher, consts::U20};
-use sha1::{Digest, Sha1};
+use rc4::{KeyInit, Rc4, StreamCipher};
+use sha1::{
+    Digest, Sha1,
+    digest::array::{Array, sizes::U20},
+};
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
@@ -242,8 +244,10 @@ impl Handshaker {
             key_b.extend_from_slice(self.skey.as_bytes());
             let hash_b = hash(key_b);
 
-            let mut rc4_outgoing = Rc4::new(&hash_a);
-            let mut rc4_incoming = Rc4::new(&hash_b);
+            let mut rc4_outgoing = Rc4::new_from_slice(&hash_a)
+                .expect("sha1 digest length should be valid for RC4 key");
+            let mut rc4_incoming = Rc4::new_from_slice(&hash_b)
+                .expect("sha1 digest length should be valid for RC4 key");
             let mut deadhead = vec![0u8; 1024];
             // Discard first 1024 bytes of each keystream:
             rc4_outgoing.apply_keystream(&mut deadhead);
@@ -374,8 +378,8 @@ enum Keystream {
     #[default]
     Plaintext,
     Rc4 {
-        outgoing: Rc4<U20>,
-        incoming: Rc4<U20>,
+        outgoing: Rc4,
+        incoming: Rc4,
     },
 }
 
@@ -518,7 +522,7 @@ impl AsyncWrite for EncryptedStream {
     }
 }
 
-fn hash<S: AsRef<[u8]>>(bs: S) -> GenericArray<u8, U20> {
+fn hash<S: AsRef<[u8]>>(bs: S) -> Array<u8, U20> {
     Sha1::digest(bs)
 }
 
