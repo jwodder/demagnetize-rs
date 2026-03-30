@@ -120,10 +120,10 @@ fn get_magnet_dht() {
     test_get(
         // <https://archlinux.org/download/>
         concat!(
-            "magnet:?xt=urn:btih:1e873cd33f55737aaaefc0c282c428593c16e106",
-            "&dn=archlinux-2026.01.01-x86_64.iso",
+            "magnet:?xt=urn:btih:a4373c326657898d0c588c3ff892a0fac97ffa20",
+            "&dn=archlinux-2026.03.01-x86_64.iso",
         ),
-        "1e873cd33f55737aaaefc0c282c428593c16e106",
+        "a4373c326657898d0c588c3ff892a0fac97ffa20",
         &[],
         true,
     );
