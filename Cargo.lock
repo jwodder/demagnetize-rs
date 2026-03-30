@@ -437,7 +437,6 @@ dependencies = [
  "dirs",
  "fern",
  "futures-util",
- "generic-array",
  "log",
  "mitsein",
  "num-bigint",

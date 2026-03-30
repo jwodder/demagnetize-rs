@@ -1,12 +1,11 @@
 use super::Peer;
 use crate::types::InfoHash;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use generic_array::GenericArray;
 use num_bigint::BigUint;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rand::RngExt;
 use rc4::{KeyInit, Rc4, StreamCipher, consts::U20};
-use sha1::{Digest, Sha1};
+use sha1::{Digest, Sha1, digest::array::Array};
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
@@ -518,7 +517,7 @@ impl AsyncWrite for EncryptedStream {
     }
 }
 
-fn hash<S: AsRef<[u8]>>(bs: S) -> GenericArray<u8, U20> {
+fn hash<S: AsRef<[u8]>>(bs: S) -> Array<u8, U20> {
     Sha1::digest(bs)
 }
 
