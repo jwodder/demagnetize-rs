@@ -1,6 +1,6 @@
 [package]
 name = "demagnetize"
-version = "0.6.1"
+version = "0.7.0-dev"
 edition = "2024"
 rust-version = "1.88"
 description = "Convert magnet links to .torrent files"
@@ -32,7 +32,7 @@ patharg = { version = "0.4.0", features = ["tokio"] }
 pin-project-lite = "0.2.14"
 rand = "0.10.0"
 rc4 = "0.2.0"
-reqwest = { version = "0.13.0", default-features = false, features = ["http2"] }
+reqwest = { version = "0.13.0", default-features = false, features = ["http2", "rustls", "rustls-native-certs"] }
 serde = { version = "1.0.225", features = ["derive"] }
 sha1 = "0.11.0"
 strum = "0.28.0"
@@ -52,15 +52,6 @@ assert_matches = "1.5.0"
 rand_chacha = "0.10.0"
 rstest = { version = "0.26.0", default-features = false }
 tempfile = "3.10.1"
-
-[features]
-default = ["native-tls"]
-native-tls = ["reqwest/native-tls"]
-native-tls-vendored = ["reqwest/native-tls-vendored"]
-rustls = [
-    "reqwest/rustls",
-    "reqwest/rustls-native-certs",
-]
 
 [profile.dist]
 inherits = "release"

@@ -1,3 +1,7 @@
+v0.7.0 (in development)
+-----------------------
+- Removed TLS implementation features.  The program now always uses rustls.
+
 v0.6.1 (2026-01-11)
 -------------------
 - Fix handling of UDP tracker URLs that use an IPv6 address as the host
