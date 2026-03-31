@@ -33,10 +33,8 @@ jobs:
         include:
           - os: macos-latest
             toolchain: stable
-            exclude: --exclude-features native-tls-vendored
           - os: windows-latest
             toolchain: stable
-            exclude: --exclude-features native-tls-vendored
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -68,20 +66,10 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
 
       - name: Build crate
-        run: |
-          cargo hack \
-            --each-feature \
-            --exclude-no-default-features \
-            --exclude-all-features ${{ matrix.exclude }} \
-            build --all-targets --verbose
+        run: cargo hack --feature-powerset build --all-targets --verbose
 
       - name: Test crate
-        run: |
-          cargo hack \
-            --each-feature \
-            --exclude-no-default-features \
-            --exclude-all-features ${{ matrix.exclude }} \
-            test --bins --verbose
+        run: cargo hack --feature-powerset test --bins --verbose
 
   minimal-versions:
     runs-on: ubuntu-latest
@@ -108,20 +96,10 @@ jobs:
           tool: cargo-hack,cargo-minimal-versions
 
       - name: Build crate
-        run: |
-          cargo minimal-versions --direct \
-            --each-feature \
-            --exclude-no-default-features \
-            --exclude-all-features \
-            build --all-targets --verbose
+        run: cargo minimal-versions --direct --feature-powerset build --all-targets --verbose
 
       - name: Test crate
-        run: |
-          cargo minimal-versions --direct \
-            --each-feature \
-            --exclude-no-default-features \
-            --exclude-all-features \
-            test --bins --verbose
+        run: cargo minimal-versions --direct --feature-powerset test --bins --verbose
 
   coverage:
     # This is separate from the main tests because cargo-llvm-cov doesn't run
@@ -217,7 +195,6 @@ jobs:
       - name: Check that third party licenses haven't changed
         run: |
           cargo bundle-licenses --check-previous \
-            --features rustls \
             -f toml -o CI.toml -p THIRDPARTY.toml
 
 # vim:set et sts=2:
