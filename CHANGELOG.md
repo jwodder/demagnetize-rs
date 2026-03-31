@@ -1,5 +1,5 @@
-v0.7.0 (in development)
------------------------
+v0.7.0 (2026-03-31)
+-------------------
 - Removed TLS implementation features.  The program now always uses rustls.
 
 v0.6.1 (2026-01-11)
