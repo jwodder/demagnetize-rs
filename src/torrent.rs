@@ -348,9 +348,7 @@ fn check_bencode_dict(buf: &Bytes) -> Result<(), BencodeDictError> {
 fn unix_now() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(d) => i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
-        Err(e) => i64::try_from(e.duration().as_secs())
-            .map(|i| -i)
-            .unwrap_or(i64::MIN),
+        Err(e) => i64::try_from(e.duration().as_secs()).map_or(i64::MIN, |i| -i),
     }
 }
 
