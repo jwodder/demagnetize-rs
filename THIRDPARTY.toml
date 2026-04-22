@@ -31690,7 +31690,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "rustls-webpki"
-package_version = "0.103.12"
+package_version = "0.103.13"
 repository = "https://github.com/rustls/webpki"
 license = "ISC"
 
