@@ -73,10 +73,10 @@ single peer).
 Global Options
 --------------
 
-- `-c <file>`, `--config <file>` — Specify the configuration file to use.  See
+- `-c FILE`, `--config FILE` — Specify the configuration file to use.  See
   "Configuration" below for the default config file location.
 
-- `-l <level>`, `--log-level <level>` — Set the log level to the given value.
+- `-l LEVEL`, `--log-level LEVEL` — Set the log level to the given value.
   Possible values are "`OFF`", "`ERROR`", "`WARN`", "`INFO`", "`DEBUG`", and
   "`TRACE`" (all case-insensitive).  [default value: `INFO`]
 
