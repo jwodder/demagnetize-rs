@@ -527,12 +527,6 @@ fn hash<S: AsRef<[u8]>>(bs: S) -> Array<u8, U20> {
 }
 
 fn gen_private_key<R: RngExt>(rng: &mut R) -> BigUint {
-    /*
-        // Post-<https://github.com/rust-num/num-bigint/pull/322>:
-        // Requires "rand" feature of num_bigint
-        use num_bigint::RandBigInt;
-        rng.random_biguint(160)
-    */
     let bytes = rng.random_iter::<u8>().take(20).collect::<Vec<_>>();
     BigUint::from_bytes_be(&bytes)
 }
