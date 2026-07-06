@@ -21991,7 +21991,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "num-bigint"
-package_version = "0.4.6"
+package_version = "0.5.1"
 repository = "https://github.com/rust-num/num-bigint"
 license = "MIT OR Apache-2.0"
 
