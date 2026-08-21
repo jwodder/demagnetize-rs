@@ -14044,7 +14044,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "h2"
-package_version = "0.4.15"
+package_version = "0.4.18"
 repository = "https://github.com/hyperium/h2"
 license = "MIT"
 
