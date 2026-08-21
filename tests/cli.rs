@@ -116,6 +116,7 @@ fn get_magnet_http_trackers_multipiece_info() {
 }
 
 #[test]
+#[ignore] // Unreliable on GitHub Actions
 fn get_magnet_dht() {
     test_get(
         // <https://archlinux.org/download/>
