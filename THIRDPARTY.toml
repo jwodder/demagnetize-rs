@@ -5345,7 +5345,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "chacha20"
-package_version = "0.10.1"
+package_version = "0.10.2"
 repository = "https://github.com/RustCrypto/stream-ciphers"
 license = "MIT OR Apache-2.0"
 
