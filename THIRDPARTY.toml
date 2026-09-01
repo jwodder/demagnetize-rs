@@ -2,9 +2,9 @@ root_name = "demagnetize"
 
 [[third_party_libraries]]
 package_name = "android_system_properties"
-package_version = "0.1.5"
+package_version = "0.1.6"
 repository = "https://github.com/nical/android_system_properties"
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 
 [[third_party_libraries.licenses]]
 license = "MIT"
@@ -1958,7 +1958,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "aws-lc-rs"
-package_version = "1.17.3"
+package_version = "1.18.0"
 repository = "https://github.com/aws/aws-lc-rs"
 license = "ISC AND (Apache-2.0 OR ISC)"
 
@@ -2378,7 +2378,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "aws-lc-sys"
-package_version = "0.43.0"
+package_version = "0.44.0"
 repository = "https://github.com/aws/aws-lc-rs"
 license = "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)"
 
@@ -6325,7 +6325,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "clap"
-package_version = "4.6.5"
+package_version = "4.6.6"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -6562,7 +6562,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "clap_builder"
-package_version = "4.6.5"
+package_version = "4.6.6"
 repository = "https://github.com/clap-rs/clap"
 license = "MIT OR Apache-2.0"
 
@@ -7510,7 +7510,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "combine"
-package_version = "4.6.7"
+package_version = "4.6.8"
 repository = "https://github.com/Marwes/combine"
 license = "MIT"
 
@@ -8509,14 +8509,14 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "cpufeatures"
-package_version = "0.3.0"
+package_version = "0.3.1"
 repository = "https://github.com/RustCrypto/utils"
 license = "MIT OR Apache-2.0"
 
 [[third_party_libraries.licenses]]
 license = "MIT"
 text = """
-Copyright (c) 2020-2025 The RustCrypto Project Developers
+Copyright (c) 2020-2026 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -9237,7 +9237,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "data-encoding"
-package_version = "2.11.0"
+package_version = "2.11.1"
 repository = "https://github.com/ia0/data-encoding"
 license = "MIT"
 
@@ -10386,7 +10386,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "either"
-package_version = "1.17.0"
+package_version = "1.18.0"
 repository = "https://github.com/rayon-rs/either"
 license = "MIT OR Apache-2.0"
 
@@ -12094,7 +12094,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-channel"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -12338,7 +12338,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-core"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -12582,7 +12582,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-macro"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -12826,7 +12826,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-sink"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -13070,7 +13070,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-task"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -13314,7 +13314,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "futures-util"
-package_version = "0.3.33"
+package_version = "0.3.34"
 repository = "https://github.com/rust-lang/futures-rs"
 license = "MIT OR Apache-2.0"
 
@@ -14044,7 +14044,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "h2"
-package_version = "0.4.18"
+package_version = "0.4.19"
 repository = "https://github.com/hyperium/h2"
 license = "MIT"
 
@@ -15568,7 +15568,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "http-body-util"
-package_version = "0.1.4"
+package_version = "0.1.5"
 repository = "https://github.com/hyperium/http-body"
 license = "MIT"
 
@@ -16083,7 +16083,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "hyper"
-package_version = "1.11.0"
+package_version = "1.11.1"
 repository = "https://github.com/hyperium/hyper"
 license = "MIT"
 
@@ -16889,7 +16889,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "icu_collections"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -16946,7 +16946,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_locale_core"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17003,7 +17003,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_normalizer"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17060,7 +17060,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_normalizer_data"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17117,7 +17117,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_properties"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17174,7 +17174,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_properties_data"
-package_version = "2.2.0"
+package_version = "2.3.0"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17231,7 +17231,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "icu_provider"
-package_version = "2.2.0"
+package_version = "2.3.1"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -17772,7 +17772,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "indexmap"
-package_version = "2.14.0"
+package_version = "2.14.1"
 repository = "https://github.com/indexmap-rs/indexmap"
 license = "Apache-2.0 OR MIT"
 
@@ -18257,7 +18257,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "ipnet"
-package_version = "2.12.0"
+package_version = "2.12.1"
 repository = "https://github.com/krisprice/ipnet"
 license = "MIT OR Apache-2.0"
 
@@ -20123,7 +20123,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "js-sys"
-package_version = "0.3.103"
+package_version = "0.3.104"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys"
 license = "MIT OR Apache-2.0"
 
@@ -20582,7 +20582,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "libredox"
-package_version = "0.1.18"
+package_version = "0.1.21"
 repository = "https://gitlab.redox-os.org/redox-os/libredox.git"
 license = "MIT"
 
@@ -21079,7 +21079,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "litemap"
-package_version = "0.8.2"
+package_version = "0.8.3"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -21136,7 +21136,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "log"
-package_version = "0.4.33"
+package_version = "0.4.34"
 repository = "https://github.com/rust-lang/log"
 license = "MIT OR Apache-2.0"
 
@@ -21990,7 +21990,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "num-integer"
-package_version = "0.1.46"
+package_version = "0.1.47"
 repository = "https://github.com/rust-num/num-integer"
 license = "MIT OR Apache-2.0"
 
@@ -24801,7 +24801,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "potential_utf"
-package_version = "0.1.5"
+package_version = "0.1.6"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -25537,7 +25537,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "quinn-proto"
-package_version = "0.11.16"
+package_version = "0.11.17"
 repository = "https://github.com/quinn-rs/quinn"
 license = "MIT OR Apache-2.0"
 
@@ -27168,7 +27168,7 @@ SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "ref-cast"
-package_version = "1.0.26"
+package_version = "1.0.27"
 repository = "https://github.com/dtolnay/ref-cast"
 license = "MIT OR Apache-2.0"
 
@@ -27383,7 +27383,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "ref-cast-impl"
-package_version = "1.0.26"
+package_version = "1.0.27"
 repository = "https://github.com/dtolnay/ref-cast"
 license = "MIT OR Apache-2.0"
 
@@ -29789,7 +29789,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "rustls-webpki"
-package_version = "0.103.13"
+package_version = "0.103.15"
 repository = "https://github.com/rustls/webpki"
 license = "ISC"
 
@@ -33014,7 +33014,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "syn"
-package_version = "3.0.3"
+package_version = "3.0.4"
 repository = "https://github.com/dtolnay/syn"
 license = "MIT OR Apache-2.0"
 
@@ -33887,7 +33887,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "thiserror"
-package_version = "2.0.19"
+package_version = "2.0.20"
 repository = "https://github.com/dtolnay/thiserror"
 license = "MIT OR Apache-2.0"
 
@@ -34317,7 +34317,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "thiserror-impl"
-package_version = "2.0.19"
+package_version = "2.0.20"
 repository = "https://github.com/dtolnay/thiserror"
 license = "MIT OR Apache-2.0"
 
@@ -34532,7 +34532,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "tinystr"
-package_version = "0.8.3"
+package_version = "0.8.4"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -38614,7 +38614,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen"
-package_version = "0.2.126"
+package_version = "0.2.127"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen"
 license = "MIT OR Apache-2.0"
 
@@ -38856,7 +38856,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-futures"
-package_version = "0.4.76"
+package_version = "0.4.77"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures"
 license = "MIT OR Apache-2.0"
 
@@ -39098,7 +39098,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-macro"
-package_version = "0.2.126"
+package_version = "0.2.127"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro"
 license = "MIT OR Apache-2.0"
 
@@ -39340,7 +39340,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-macro-support"
-package_version = "0.2.126"
+package_version = "0.2.127"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support"
 license = "MIT OR Apache-2.0"
 
@@ -39582,7 +39582,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "wasm-bindgen-shared"
-package_version = "0.2.126"
+package_version = "0.2.127"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared"
 license = "MIT OR Apache-2.0"
 
@@ -39824,7 +39824,7 @@ limitations under the License.
 
 [[third_party_libraries]]
 package_name = "web-sys"
-package_version = "0.3.103"
+package_version = "0.3.104"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys"
 license = "MIT OR Apache-2.0"
 
@@ -46593,7 +46593,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "writeable"
-package_version = "0.6.3"
+package_version = "0.6.4"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -47121,7 +47121,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "zerotrie"
-package_version = "0.2.4"
+package_version = "0.2.5"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -47178,7 +47178,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "zerovec"
-package_version = "0.11.6"
+package_version = "0.11.8"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
@@ -47235,7 +47235,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 [[third_party_libraries]]
 package_name = "zerovec-derive"
-package_version = "0.11.3"
+package_version = "0.11.6"
 repository = "https://github.com/unicode-org/icu4x"
 license = "Unicode-3.0"
 
