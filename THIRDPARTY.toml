@@ -20582,7 +20582,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "libredox"
-package_version = "0.1.21"
+package_version = "0.1.23"
 repository = "https://gitlab.redox-os.org/redox-os/libredox.git"
 license = "MIT"
 
@@ -31936,7 +31936,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "smallvec"
-package_version = "1.15.2"
+package_version = "1.16.0"
 repository = "https://github.com/servo/rust-smallvec"
 license = "MIT OR Apache-2.0"
 
