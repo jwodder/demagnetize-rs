@@ -50,7 +50,7 @@ thiserror = "2.0.14"
 assert_cmd = "2.1.0"
 assert_matches = "1.5.0"
 rand_chacha = "0.10.0"
-rstest = { version = "0.26.0", default-features = false }
+rstest = { version = "0.27.0", default-features = false }
 tempfile = "3.10.1"
 
 [profile.dist]
