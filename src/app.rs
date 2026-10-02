@@ -1,6 +1,5 @@
 use crate::asyncutil::ShutdownGroup;
 use crate::config::Config;
-use crate::consts::PEER_ID_PREFIX;
 use crate::dht::{CreateDhtActorError, DhtActor, DhtHandle, DhtHandleError, FoundPeers};
 use crate::peer::CryptoMode;
 use crate::types::{InfoHash, Key, PeerId};
@@ -19,7 +18,7 @@ pub(crate) struct App {
 
 impl App {
     pub(crate) fn new<R: RngExt>(cfg: Config, mut rng: R) -> App {
-        let id = PeerId::generate(PEER_ID_PREFIX, &mut rng);
+        let id = PeerId::generate(&peer_id_prefix(), &mut rng);
         let key = rng.random::<Key>();
         let port = cfg.trackers.local_port.generate(&mut rng);
         let local = LocalPeer { id, key, port };
@@ -94,4 +93,20 @@ pub(crate) enum DhtError {
     Create(#[from] CreateDhtActorError),
     #[error(transparent)]
     Handle(#[from] DhtHandleError),
+}
+
+/// Return the prefix for our generated peer IDs, based on the package version
+fn peer_id_prefix() -> String {
+    let major = env!("CARGO_PKG_VERSION_MAJOR");
+    let minor = env!("CARGO_PKG_VERSION_MINOR");
+    let patch = env!("CARGO_PKG_VERSION_PATCH");
+    let mut prefix = String::from("-DM-");
+    prefix.push_str(major);
+    if minor.len() < 2 {
+        prefix.push('0');
+    }
+    prefix.push_str(minor);
+    prefix.push_str(patch);
+    prefix.push('-');
+    prefix
 }
