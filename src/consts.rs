@@ -4,9 +4,6 @@ use crate::peer::extensions::Extension;
 /// the magnet link of
 pub(crate) const LEFT: u64 = 65535;
 
-/// Prefix for generated peer IDs (calculated from package version by `build.rs` script)
-pub(crate) static PEER_ID_PREFIX: &str = env!("PEER_ID_PREFIX");
-
 /// Size of buffer for receiving incoming UDP packets.  Any packets longer than
 /// this are truncated.
 pub(crate) const UDP_PACKET_LEN: usize = 65535;
