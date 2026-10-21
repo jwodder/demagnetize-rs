@@ -1,5 +1,5 @@
-v0.8.0 (in development)
------------------------
+v0.7.1 (2026-10-21)
+-------------------
 - Remove build script
 - Update webpki packages to avoid [eMudhra issue](https://emudhra.we-have-a-problem.com)
 
