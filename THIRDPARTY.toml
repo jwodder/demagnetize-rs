@@ -30027,7 +30027,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "rustls-webpki"
-package_version = "0.103.15"
+package_version = "0.103.16"
 repository = "https://github.com/rustls/webpki"
 license = "ISC"
 
@@ -40278,7 +40278,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "webpki-root-certs"
-package_version = "1.0.9"
+package_version = "1.0.10"
 repository = "https://github.com/rustls/webpki-roots"
 license = "CDLA-Permissive-2.0"
 
