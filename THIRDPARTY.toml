@@ -35066,7 +35066,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 [[third_party_libraries]]
 package_name = "tokio"
-package_version = "1.53.1"
+package_version = "1.54.1"
 repository = "https://github.com/tokio-rs/tokio"
 license = "MIT"
 
