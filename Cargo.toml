@@ -18,12 +18,12 @@ anstyle = "1.0.7"
 async-channel = "2.3.1"
 bendy = "0.6.0"
 bytes = "1.7.1"
-chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 data-encoding = "2.6.0"
 dirs = "7.0.0"
 fern = "0.7.0"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink"] }
+jiff = "0.2.40"
 log = "0.4.21"
 mitsein = { version = "0.9.0", features = ["serde"] }
 num-bigint = "0.5.0"
