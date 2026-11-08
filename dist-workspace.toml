@@ -2,7 +2,7 @@
 members = ["cargo:."]
 
 [dist]
-cargo-dist-version = "0.30.2"
+cargo-dist-version = "0.34.0"
 ci = "github"
 default-features = false
 include = ["THIRDPARTY.toml"]
