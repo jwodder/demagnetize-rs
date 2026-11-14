@@ -1144,9 +1144,9 @@ dependencies = [
 
 [[package]]
 name = "mitsein"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a49aef75c004fb496a23f175395415ecfe2a630e4c6175ae6f7d9cc1a19332e"
+checksum = "fca1513fc8e63b5dada6179657bfd3d60f13bbd3a4e71ca8c0c2c8967f045c92"
 dependencies = [
  "arrayvec",
  "either",
