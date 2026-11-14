@@ -21232,7 +21232,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "mitsein"
-package_version = "0.9.0"
+package_version = "0.9.1"
 repository = "https://github.com/olson-sean-k/mitsein"
 license = "MIT"
 
