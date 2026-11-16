@@ -1,3 +1,7 @@
+v0.8.0 (in development)
+-----------------------
+- Increased MSRV to 1.96
+
 v0.7.1 (2026-10-21)
 -------------------
 - Remove build script
