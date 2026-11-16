@@ -397,7 +397,7 @@ fn init_logging(log_level: LevelFilter) {
             out.finish(format_args!(
                 "{}{} [{:<5}] {}{}",
                 style.render(),
-                jiff::Zoned::now().strftime("%H:%M:%S"),
+                jiff::ZonedDateTime::now().strftime("%H:%M:%S"),
                 record.level(),
                 message,
                 style.render_reset(),
