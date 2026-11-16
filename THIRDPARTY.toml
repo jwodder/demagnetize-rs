@@ -18384,7 +18384,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "jiff"
-package_version = "0.2.40"
+package_version = "1.0.0"
 repository = "https://github.com/BurntSushi/jiff"
 license = "Unlicense OR MIT"
 
@@ -18445,7 +18445,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "jiff-core"
-package_version = "0.1.3"
+package_version = "1.0.0"
 repository = "https://github.com/BurntSushi/jiff"
 license = "Unlicense OR MIT"
 
@@ -18506,7 +18506,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "jiff-static"
-package_version = "0.2.40"
+package_version = "1.0.0"
 repository = "https://github.com/BurntSushi/jiff"
 license = "Unlicense OR MIT"
 
@@ -18567,7 +18567,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "jiff-tzdb"
-package_version = "0.1.9"
+package_version = "1.0.0"
 repository = "https://github.com/BurntSushi/jiff"
 license = "Unlicense OR MIT"
 
@@ -18628,7 +18628,7 @@ THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "jiff-tzdb-platform"
-package_version = "0.1.3"
+package_version = "1.0.0"
 repository = "https://github.com/BurntSushi/jiff"
 license = "Unlicense OR MIT"
 
