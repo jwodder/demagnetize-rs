@@ -11545,7 +11545,7 @@ DEALINGS IN THE SOFTWARE.
 
 [[third_party_libraries]]
 package_name = "form_urlencoded"
-package_version = "1.2.2"
+package_version = "1.2.3"
 repository = "https://github.com/servo/rust-url"
 license = "MIT OR Apache-2.0"
 
@@ -37098,7 +37098,7 @@ text = """
 
 [[third_party_libraries]]
 package_name = "url"
-package_version = "2.5.8"
+package_version = "2.5.9"
 repository = "https://github.com/servo/rust-url"
 license = "MIT OR Apache-2.0"
 
