@@ -32960,7 +32960,7 @@ END OF TERMS AND CONDITIONS
 
 [[third_party_libraries]]
 package_name = "syn"
-package_version = "3.0.6"
+package_version = "3.0.10"
 repository = "https://github.com/dtolnay/syn"
 license = "MIT OR Apache-2.0"
 
